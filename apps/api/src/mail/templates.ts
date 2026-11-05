@@ -63,3 +63,27 @@ export function passwordResetEmail(
     ),
   };
 }
+
+export function invitationEmail(params: {
+  to: string;
+  workspaceName: string;
+  inviterName: string;
+  role: 'ADMIN' | 'MEMBER';
+  webOrigin: string;
+  token: string;
+}): MailMessage {
+  const url = `${params.webOrigin}/invitations/accept#token=${encodeURIComponent(params.token)}`;
+  const roleLabel = params.role === 'ADMIN' ? 'an admin' : 'a member';
+  return {
+    to: params.to,
+    subject: `${params.inviterName} invited you to ${params.workspaceName} on DevTrack`,
+    ...layout(
+      `Join ${params.workspaceName} on DevTrack`,
+      [
+        `${params.inviterName} invited you to join ${params.workspaceName} as ${roleLabel}.`,
+        `Sign in or create an account with ${params.to} to accept. This invitation expires in 7 days and can be used once.`,
+      ],
+      { label: 'Accept invitation', url },
+    ),
+  };
+}

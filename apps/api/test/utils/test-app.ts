@@ -167,3 +167,14 @@ export async function registerUser(
     password: input.password ?? VALID_PASSWORD,
   });
 }
+
+/** Registers, verifies, and returns a signed-in browser for a new user. */
+export async function verifiedUser(t: TestApp, username: string) {
+  const email = `${username}@example.com`;
+  const browser = t.browser();
+  const res = await registerUser(browser, { email, username });
+  if (res.status !== 201) throw new Error(`register ${username} failed: ${res.status}`);
+  const token = t.mailer.lastToken(email, 'Verify');
+  await browser.post('/api/v1/auth/verify-email').send({ token }).expect(200);
+  return { browser, email, username, id: res.body.data.user.id as string };
+}

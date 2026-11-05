@@ -1,7 +1,7 @@
 # DevTrack — MVP Architecture & Engineering Overview
 
 **Document status:** Architecture baseline for MVP implementation  
-**Version:** 1.1 (M1 decisions recorded; see `Docs/decisions/0001-authentication-and-sessions.md`)  
+**Version:** 1.2 (M1 and M2 decisions recorded; see `Docs/decisions/`)  
 **Last updated:** 2026-11-06  
 **Purpose:** Give Claude and other engineering agents a self-contained overview of the DevTrack product, architecture, constraints, and implementation plan.
 
@@ -288,6 +288,10 @@ Project membership further scopes access to project resources.
 - Socket.IO room joins must be authorized server-side.
 - GitHub installation administration is restricted to authorized workspace administrators/owners.
 
+### Approved M2 role rules
+
+The full permission matrix is in `Docs/decisions/0002-workspaces-membership-invitations.md`. In summary: exactly one Owner, who cannot be removed, demoted or leave (no ownership transfer in the MVP); Admins can invite Admins or Members but can only change or remove Members; non-members get 404 for every workspace resource.
+
 ### Invitations
 
 Invitation properties:
@@ -508,6 +512,8 @@ Use PostgreSQL with Drizzle ORM. The list below is the logical model; exact Driz
 - `name`
 - `slug` unique
 - `owner_id` FK to users
+- `archived_at` nullable (M2: DELETE archives)
+- One OWNER membership per workspace, enforced by a partial unique index (M2)
 - timestamps
 
 **workspace_members**
@@ -528,6 +534,7 @@ Use PostgreSQL with Drizzle ORM. The list below is the logical model; exact Driz
 - `expires_at`
 - `accepted_at` nullable
 - `revoked_at` nullable
+- `role` can never be OWNER (CHECK constraint); at most one open invitation per (workspace, email) (M2)
 
 **projects**
 - `id`
@@ -784,7 +791,7 @@ Base path:
 | GET | `/workspaces` | List user's workspaces |
 | GET | `/workspaces/:id` | Workspace details |
 | PATCH | `/workspaces/:id` | Update workspace |
-| DELETE | `/workspaces/:id` | Archive/delete workspace according to policy |
+| DELETE | `/workspaces/:id` | Archive workspace (owner only; M2 policy, see decision record 0002) |
 | GET | `/workspaces/:id/members` | List members |
 | PATCH | `/workspaces/:id/members/:userId` | Change role |
 | DELETE | `/workspaces/:id/members/:userId` | Remove member |

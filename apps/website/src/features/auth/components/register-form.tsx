@@ -1,20 +1,21 @@
 'use client';
 
-import { PASSWORD_MIN_LENGTH, registerSchema } from '@devtrack/validators';
+import { PASSWORD_MIN_LENGTH, registerSchema, safeRedirectPath } from '@devtrack/validators';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useAuthForm } from '../use-auth-form';
 import { Alert, AuthCard, Divider, Field, GithubButton, SubmitButton } from './ui';
 
 export function RegisterForm() {
   const router = useRouter();
+  const next = safeRedirectPath(useSearchParams().get('next'));
   const form = useAuthForm(
     registerSchema,
     { email: '', username: '', password: '' },
     async (values) => {
       await api('/auth/register', { body: values });
-      router.replace('/');
+      router.replace(next);
       router.refresh();
     },
   );
@@ -27,7 +28,7 @@ export function RegisterForm() {
         <>
           Already have an account?{' '}
           <Link
-            href="/login"
+            href={`/login?next=${encodeURIComponent(next)}`}
             className="font-medium text-neutral-900 underline-offset-4 hover:underline"
           >
             Sign in
@@ -35,7 +36,7 @@ export function RegisterForm() {
         </>
       }
     >
-      <GithubButton redirectTo="/" />
+      <GithubButton redirectTo={next} />
       <Divider label="or with email" />
       <form onSubmit={form.onSubmit} noValidate className="space-y-4">
         {form.formError ? <Alert>{form.formError}</Alert> : null}

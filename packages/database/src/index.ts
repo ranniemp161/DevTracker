@@ -43,6 +43,12 @@ export const migrationsFolder = fileURLToPath(new URL('../migrations', import.me
 export interface CreateDatabaseOptions {
   /** Maximum pooled connections per process. Keep low on serverless. */
   maxConnections?: number;
+  /**
+   * Called when an *idle* pooled connection fails (e.g. Neon closes it during compute
+   * auto-suspend). The pool discards that connection and opens a new one on demand.
+   * Defaults to `console.warn`.
+   */
+  onIdleConnectionError?: (error: Error) => void;
 }
 
 /**
@@ -58,6 +64,12 @@ export function createDatabase(connectionString: string, options: CreateDatabase
     idleTimeoutMillis: 10_000,
     connectionTimeoutMillis: 10_000,
   });
+  // Without a listener, Node treats the pool's 'error' event as fatal and the process
+  // crashes the first time the server closes an idle connection.
+  const onError =
+    options.onIdleConnectionError ??
+    ((error: Error) => console.warn(`[database] idle connection error: ${error.message}`));
+  pool.on('error', onError);
   const db: Database = drizzle({ client: pool, schema });
   return { db, pool };
 }
