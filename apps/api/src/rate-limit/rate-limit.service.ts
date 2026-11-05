@@ -21,6 +21,15 @@ export const RATE_LIMITS = {
   forgotPasswordPerIp: { name: 'forgot:ip', limit: 20, windowSeconds: 3600 },
   resendVerificationPerUser: { name: 'resend-verify:user', limit: 5, windowSeconds: 3600 },
   tokenRedeemPerIp: { name: 'token-redeem:ip', limit: 30, windowSeconds: 900 },
+  // M2: workspaces and invitations (§6: rate-limit invitation creation and acceptance).
+  workspaceCreatePerUser: { name: 'workspace-create:user', limit: 20, windowSeconds: 3600 },
+  invitationCreatePerUser: { name: 'invite-create:user', limit: 30, windowSeconds: 3600 },
+  invitationCreatePerWorkspace: {
+    name: 'invite-create:workspace',
+    limit: 200,
+    windowSeconds: 86400,
+  },
+  invitationAcceptPerUser: { name: 'invite-accept:user', limit: 20, windowSeconds: 900 },
 } as const satisfies Record<string, RateLimitRule>;
 
 /**

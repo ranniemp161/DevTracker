@@ -8,10 +8,21 @@ import { ResponseEnvelopeInterceptor } from './common/interceptors/response-enve
 import { ConfigModule } from './config/config.module';
 import { DatabaseModule } from './database/database.module';
 import { HealthController } from './health/health.controller';
+import { InvitationsModule } from './invitations/invitations.module';
 import { MailModule } from './mail/mail.module';
+import { MembersModule } from './members/members.module';
+import { WorkspacesModule } from './workspaces/workspaces.module';
 
 @Module({
-  imports: [ConfigModule, DatabaseModule, MailModule, AuthModule],
+  imports: [
+    ConfigModule,
+    DatabaseModule,
+    MailModule,
+    AuthModule,
+    WorkspacesModule,
+    MembersModule,
+    InvitationsModule,
+  ],
   controllers: [HealthController],
   providers: [
     // Global guards run in this order: CSRF origin check, then authentication.

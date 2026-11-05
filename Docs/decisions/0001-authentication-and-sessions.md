@@ -64,6 +64,7 @@ The website rewrites `/api/v1/*` to the NestJS API (`API_INTERNAL_URL`), and the
   - raw in an HTTP-only `SameSite=Lax` cookie, which binds the flow to the browser that started it (login-CSRF protection).
 
   On callback, the query value must match the cookie, and the database row is deleted as it is used, which makes it single-use.
+
 - **PKCE (S256)** is used in addition to `state`. The verifier is stored on the `oauth_states` row and deleted with it.
 - `redirectTo` must be a same-site relative path (`safeRedirectPath`), which prevents open redirects.
 - **Account-linking policy** (§5, "prevent account-linking vulnerabilities"):
@@ -77,13 +78,13 @@ The website rewrites `/api/v1/*` to the NestJS API (`API_INTERNAL_URL`), and the
 
 Serverless instances share no memory, so counters live in the `rate_limit_buckets` table. Each check is a fixed-window counter updated with one atomic upsert. Keys are SHA-256 hashed, so emails and IP addresses are not stored in plaintext. Limits are defined centrally in `apps/api/src/rate-limit/rate-limit.service.ts`:
 
-| Action | Limit |
-|---|---|
-| Register | 20/hour per IP |
-| Login | 100/15 min per IP and 10/15 min per IP+email |
-| Forgot password | 3/hour per email and 20/hour per IP |
-| Resend verification | 5/hour per user |
-| Redeem a token (verify/reset) | 30/15 min per IP |
+| Action                        | Limit                                        |
+| ----------------------------- | -------------------------------------------- |
+| Register                      | 20/hour per IP                               |
+| Login                         | 100/15 min per IP and 10/15 min per IP+email |
+| Forgot password               | 3/hour per email and 20/hour per IP          |
+| Resend verification           | 5/hour per user                              |
+| Redeem a token (verify/reset) | 30/15 min per IP                             |
 
 The per-IP limits are generous because a team may share one office IP address. Redis was the alternative (§3 allows "justified short-lived coordination"). Postgres avoids adding a dependency in M1; this can be revisited when Redis arrives in M7.
 
@@ -91,19 +92,19 @@ The per-IP limits are generous because a team may share one office IP address. R
 
 **Tables:**
 
-| Table | Purpose |
-|---|---|
-| `email_verification_tokens` | Email verification tokens |
-| `password_reset_tokens` | Password reset tokens |
-| `oauth_states` | OAuth state and PKCE verifier |
-| `rate_limit_buckets` | Rate-limit counters |
+| Table                       | Purpose                       |
+| --------------------------- | ----------------------------- |
+| `email_verification_tokens` | Email verification tokens     |
+| `password_reset_tokens`     | Password reset tokens         |
+| `oauth_states`              | OAuth state and PKCE verifier |
+| `rate_limit_buckets`        | Rate-limit counters           |
 
 **Endpoints:**
 
-| Endpoint | Purpose |
-|---|---|
+| Endpoint                         | Purpose                                                       |
+| -------------------------------- | ------------------------------------------------------------- |
 | `POST /auth/resend-verification` | Without it, an expired verification link would be a dead end. |
-| `GET /health` | Database-backed health check for deployments. |
+| `GET /health`                    | Database-backed health check for deployments.                 |
 
 **Error envelope:** `error.details[]` (`{ path, message }`) is added as an optional field, present only for `VALIDATION_ERROR`. Framework and parser errors return a fixed generic message per status so internals never leak.
 

@@ -18,7 +18,7 @@ export function useAuthForm<S extends z.ZodObject>(
   const [formError, setFormError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  function onChange(e: ChangeEvent<HTMLInputElement>) {
+  function onChange(e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
     const { name, value } = e.target;
     setValues((v) => ({ ...v, [name]: value }));
     setFieldErrors((errs) => {

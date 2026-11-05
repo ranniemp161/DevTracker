@@ -28,7 +28,7 @@ export function LoginForm() {
         <>
           New to DevTrack?{' '}
           <Link
-            href="/register"
+            href={`/register?next=${encodeURIComponent(next)}`}
             className="font-medium text-neutral-900 underline-offset-4 hover:underline"
           >
             Create an account

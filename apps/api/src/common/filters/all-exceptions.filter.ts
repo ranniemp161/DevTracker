@@ -84,13 +84,43 @@ export class AllExceptionsFilter implements ExceptionFilter {
       // Log the error itself, never the request body (it may contain passwords/tokens).
       this.logger.error(
         { requestId, method: req.method, path: req.path, status },
-        exception instanceof Error ? exception.stack : String(exception),
+        describeError(exception),
       );
     }
 
     if (res.headersSent) return;
     res.status(status).json({ error: body } satisfies ApiErrorBody);
   }
+}
+
+/**
+ * Stack trace plus the `cause` chain (Drizzle wraps driver errors, hiding e.g. a connection
+ * timeout behind "Failed query"). Query parameters are stripped: they can contain emails,
+ * password hashes and token hashes, which must never reach logs (architecture §14).
+ */
+export function describeError(exception: unknown): string {
+  const parts: string[] = [];
+  let current: unknown = exception;
+  for (let depth = 0; depth < 5 && current; depth++) {
+    if (current instanceof Error) {
+      const code = (current as { code?: unknown }).code;
+      const text = redactQueryParams(
+        depth === 0 ? (current.stack ?? current.message) : current.message,
+      );
+      parts.push(
+        depth === 0 ? text : `Caused by${typeof code === 'string' ? ` [${code}]` : ''}: ${text}`,
+      );
+      current = current.cause;
+    } else {
+      parts.push(depth === 0 ? String(current) : `Caused by: ${String(current)}`);
+      break;
+    }
+  }
+  return parts.join('\n');
+}
+
+function redactQueryParams(text: string): string {
+  return text.replace(/^params: .*$/gm, 'params: [redacted]');
 }
 
 function isClientHttpError(e: unknown): e is { status: number } {

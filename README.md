@@ -5,7 +5,7 @@ DevTrack is an internal engineering project management platform with first-class
 - **Architecture reference:** [DEVTRACK_ARCHITECTURE.md](DEVTRACK_ARCHITECTURE.md)
 - **Decision records:** [Docs/decisions/](Docs/decisions/)
 
-**Status:** M1 (Foundation) is complete. It covers the monorepo, database, migrations and authentication.
+**Status:** M1 (Foundation) is complete. M2 (workspaces, membership, roles and invitations) is implemented on the `m2-workspaces` branch.
 
 ## Repository layout
 
@@ -68,30 +68,49 @@ The DevTrack GitHub App, which grants repository access, is set up separately in
 
 ## Common commands
 
-| Command | Purpose |
-|---|---|
-| `pnpm build` | Build all packages and apps |
-| `pnpm test` | Unit and integration tests. They use in-memory Postgres (PGlite), so no external database is needed. |
-| `pnpm lint` / `pnpm typecheck` | Static checks |
-| `pnpm db:generate --name <name>` | Generate a migration after changing `packages/database/src/schema` |
-| `pnpm db:migrate` | Apply migrations to `DATABASE_URL` |
+| Command                          | Purpose                                                                                              |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `pnpm build`                     | Build all packages and apps                                                                          |
+| `pnpm test`                      | Unit and integration tests. They use in-memory Postgres (PGlite), so no external database is needed. |
+| `pnpm lint` / `pnpm typecheck`   | Static checks                                                                                        |
+| `pnpm db:generate --name <name>` | Generate a migration after changing `packages/database/src/schema`                                   |
+| `pnpm db:migrate`                | Apply migrations to `DATABASE_URL`                                                                   |
 
 ## Authentication API (M1)
 
 All paths are under `/api/v1`. Full rationale: [Docs/decisions/0001-authentication-and-sessions.md](Docs/decisions/0001-authentication-and-sessions.md).
 
-| Method | Endpoint | Auth | Notes |
-|---|---|---|---|
-| POST | `/auth/register` | public | Creates the account, starts a session and emails a verification link |
-| POST | `/auth/login` | public | Email and password; rate-limited |
-| POST | `/auth/logout` | public | Revokes the current session and clears the cookie |
-| GET | `/auth/me` | session | Current user, verified or not |
-| POST | `/auth/verify-email` | public | `{ token }` from the emailed link |
-| POST | `/auth/resend-verification` | session | Only while the email is unverified |
-| POST | `/auth/forgot-password` | public | Always `202` |
-| POST | `/auth/reset-password` | public | `{ token, password }`; revokes all sessions |
-| GET | `/auth/github` | public | Browser redirect to GitHub (`?redirectTo=/path`) |
-| GET | `/auth/github/callback` | public | Redirect target registered with GitHub |
-| GET | `/health` | public | Checks database connectivity |
+| Method | Endpoint                    | Auth    | Notes                                                                |
+| ------ | --------------------------- | ------- | -------------------------------------------------------------------- |
+| POST   | `/auth/register`            | public  | Creates the account, starts a session and emails a verification link |
+| POST   | `/auth/login`               | public  | Email and password; rate-limited                                     |
+| POST   | `/auth/logout`              | public  | Revokes the current session and clears the cookie                    |
+| GET    | `/auth/me`                  | session | Current user, verified or not                                        |
+| POST   | `/auth/verify-email`        | public  | `{ token }` from the emailed link                                    |
+| POST   | `/auth/resend-verification` | session | Only while the email is unverified                                   |
+| POST   | `/auth/forgot-password`     | public  | Always `202`                                                         |
+| POST   | `/auth/reset-password`      | public  | `{ token, password }`; revokes all sessions                          |
+| GET    | `/auth/github`              | public  | Browser redirect to GitHub (`?redirectTo=/path`)                     |
+| GET    | `/auth/github/callback`     | public  | Redirect target registered with GitHub                               |
+| GET    | `/health`                   | public  | Checks database connectivity                                         |
 
 Responses use the envelope from §9 of the architecture doc: `{ data, meta: { requestId } }` on success and `{ error: { code, message, requestId, details? } }` on failure. Unless a route is marked public, it needs a session and a **verified email**.
+
+## Workspaces API (M2)
+
+All routes need a session and a verified email. Non-members get `404` for every workspace resource. Rules: [Docs/decisions/0002-workspaces-membership-invitations.md](Docs/decisions/0002-workspaces-membership-invitations.md).
+
+| Method | Endpoint                          | Who                                                                       |
+| ------ | --------------------------------- | ------------------------------------------------------------------------- |
+| POST   | `/workspaces`                     | Any verified user (becomes Owner)                                         |
+| GET    | `/workspaces`                     | Your active workspaces, with your role                                    |
+| GET    | `/workspaces/:id`                 | Members                                                                   |
+| PATCH  | `/workspaces/:id`                 | Admin, Owner (rename)                                                     |
+| DELETE | `/workspaces/:id`                 | Owner (archives)                                                          |
+| GET    | `/workspaces/:id/members`         | Members                                                                   |
+| PATCH  | `/workspaces/:id/members/:userId` | Owner; Admin for Members only                                             |
+| DELETE | `/workspaces/:id/members/:userId` | Owner; Admin for Members only; anyone but the Owner can remove themselves |
+| POST   | `/workspaces/:id/invitations`     | Admin, Owner                                                              |
+| GET    | `/workspaces/:id/invitations`     | Admin, Owner (open invitations)                                           |
+| POST   | `/invitations/accept`             | The invited email's account                                               |
+| POST   | `/invitations/:id/revoke`         | Admin, Owner of that workspace                                            |

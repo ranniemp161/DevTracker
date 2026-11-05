@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import type { InputHTMLAttributes, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 export function AuthCard({
   title,
@@ -29,87 +29,7 @@ export function AuthCard({
   );
 }
 
-export function Field({
-  label,
-  error,
-  hint,
-  ...input
-}: InputHTMLAttributes<HTMLInputElement> & {
-  label: string;
-  name: string;
-  error?: string;
-  hint?: string;
-}) {
-  const id = `field-${input.name}`;
-  const describedBy = error ? `${id}-error` : hint ? `${id}-hint` : undefined;
-  return (
-    <div className="space-y-1.5">
-      <label htmlFor={id} className="block text-sm font-medium text-neutral-800">
-        {label}
-      </label>
-      <input
-        id={id}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={describedBy}
-        className="block w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm shadow-xs outline-none placeholder:text-neutral-400 focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10 aria-invalid:border-red-500"
-        {...input}
-      />
-      {error ? (
-        <p id={`${id}-error`} className="text-sm text-red-600">
-          {error}
-        </p>
-      ) : hint ? (
-        <p id={`${id}-hint`} className="text-xs text-neutral-500">
-          {hint}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-export function SubmitButton({ pending, children }: { pending: boolean; children: ReactNode }) {
-  return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="inline-flex w-full items-center justify-center rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 focus-visible:ring-2 focus-visible:ring-neutral-900/30 focus-visible:outline-none disabled:opacity-60"
-    >
-      {pending ? 'Please wait…' : children}
-    </button>
-  );
-}
-
-export function Alert({
-  tone = 'error',
-  children,
-}: {
-  tone?: 'error' | 'success' | 'info';
-  children: ReactNode;
-}) {
-  const styles = {
-    error: 'border-red-200 bg-red-50 text-red-800',
-    success: 'border-green-200 bg-green-50 text-green-800',
-    info: 'border-neutral-200 bg-neutral-50 text-neutral-700',
-  }[tone];
-  return (
-    <div
-      role={tone === 'error' ? 'alert' : 'status'}
-      className={`rounded-md border px-3 py-2 text-sm ${styles}`}
-    >
-      {children}
-    </div>
-  );
-}
-
-export function Divider({ label }: { label: string }) {
-  return (
-    <div className="my-6 flex items-center gap-3 text-xs text-neutral-500">
-      <span className="h-px flex-1 bg-neutral-200" />
-      {label}
-      <span className="h-px flex-1 bg-neutral-200" />
-    </div>
-  );
-}
+export { Alert, Divider, Field, SubmitButton } from '@/components/ui';
 
 /** A plain link (not next/link): the API answers with a redirect to GitHub. */
 export function GithubButton({ redirectTo }: { redirectTo: string }) {
