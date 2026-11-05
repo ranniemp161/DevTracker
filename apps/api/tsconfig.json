@@ -1,0 +1,9 @@
+{
+  "extends": "@devtrack/config/tsconfig/nest.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "./dist",
+    "types": ["node"]
+  },
+  "include": ["src", "test", "vitest.config.ts"]
+}

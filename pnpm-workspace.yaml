@@ -1,0 +1,10 @@
+packages:
+  - apps/*
+  - packages/*
+
+# pnpm 12 blocks dependency install scripts unless explicitly listed here.
+allowBuilds:
+  # esbuild (via drizzle-kit) downloads its platform binary in postinstall.
+  esbuild: true
+  # Binary ships as an optional platform dependency; the postinstall check is unnecessary.
+  '@swc/core': false

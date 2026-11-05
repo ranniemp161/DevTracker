@@ -1,0 +1,5 @@
+pnpm-lock.yaml
+**/migrations/meta/**
+**/dist/**
+**/.next/**
+DEVTRACK_ARCHITECTURE.md
