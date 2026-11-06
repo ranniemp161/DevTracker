@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Alert, Avatar, Badge, Button } from '@/components/ui';
 import { apiPage, ApiError } from '@/lib/api';
+import { useRealtimeRefresh } from '@/lib/realtime';
 import { useApiQuery } from '@/lib/use-api-query';
 import { LabelChip } from './label-chip';
 import { formatDate, PRIORITY_LABEL, PRIORITY_TONE, TASK_STATUS_LABEL } from './labels';
@@ -19,6 +20,11 @@ export function TaskList() {
   const [cursor, setCursor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [version, setVersion] = useState(0);
+  useRealtimeRefresh(
+    (e) => e.projectId === project.id && e.type.startsWith('task.'),
+    () => setVersion((v) => v + 1),
+  );
 
   const query = new URLSearchParams(
     Object.entries(filters).filter(([, v]) => v !== '') as [string, string][],
@@ -41,7 +47,7 @@ export function TaskList() {
     return () => {
       cancelled = true;
     };
-  }, [base]);
+  }, [base, version]);
 
   async function loadMore() {
     if (!cursor) return;

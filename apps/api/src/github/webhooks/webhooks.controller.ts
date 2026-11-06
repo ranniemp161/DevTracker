@@ -1,8 +1,7 @@
 import { Controller, Get, HttpCode, HttpStatus, Inject, Post, Req } from '@nestjs/common';
 import type { Request } from 'express';
-import { safeEqual } from '../../common/crypto/tokens';
 import { Public } from '../../common/decorators/auth.decorators';
-import { AppException } from '../../common/errors/app.exception';
+import { requireCronSecret } from '../../common/guards/cron-secret';
 import { APP_CONFIG, type AppConfig } from '../../config/app-config';
 import { WebhookDeliveriesService } from './webhook-deliveries.service';
 
@@ -43,11 +42,7 @@ export class WebhooksController {
   @Public()
   @Get('internal/github/deliveries/retry')
   async retry(@Req() req: Request) {
-    const secret = this.config.cronSecret;
-    if (!secret) throw AppException.notFound();
-    const header = req.header('authorization') ?? '';
-    const token = header.startsWith('Bearer ') ? header.slice('Bearer '.length) : '';
-    if (!token || !safeEqual(token, secret)) throw AppException.unauthenticated();
+    requireCronSecret(this.config, req);
     return this.deliveries.retryPending();
   }
 }

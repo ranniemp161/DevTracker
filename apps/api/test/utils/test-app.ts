@@ -17,7 +17,7 @@ import {
   type GithubRepo,
 } from '../../src/github/github-app.client';
 import { APP_CONFIG, type AppConfig } from '../../src/config/app-config';
-import { configureApp } from '../../src/configure-app';
+import { configureApp, setupRealtime } from '../../src/configure-app';
 import { DATABASE_CONNECTION } from '../../src/database/database.module';
 import { MAILER, type Mailer, type MailMessage } from '../../src/mail/mailer';
 import type { User } from '../../src/users/users.service';
@@ -50,6 +50,12 @@ export function testConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     },
     githubWebhookSecret: TEST_WEBHOOK_SECRET,
     cronSecret: TEST_CRON_SECRET,
+    realtime: {
+      secret: 'test-realtime-secret-0123456789abcdef',
+      redisUrl: null,
+      maxConnectionMs: 60_000,
+      publishAfterResponse: false,
+    },
     mail: { transport: 'console', from: 'DevTrack <test@devtrack.local>' },
     ...overrides,
   };
@@ -204,6 +210,7 @@ export async function createTestApp(overrides: Partial<AppConfig> = {}) {
 
   const app = moduleRef.createNestApplication<NestExpressApplication>({ logger: false });
   configureApp(app, config);
+  await setupRealtime(app, config);
   await app.init();
 
   return {

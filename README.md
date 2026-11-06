@@ -5,7 +5,7 @@ DevTrack is an internal engineering project management platform with first-class
 - **Architecture reference:** [DEVTRACK_ARCHITECTURE.md](DEVTRACK_ARCHITECTURE.md)
 - **Decision records:** [Docs/decisions/](Docs/decisions/)
 
-**Status:** M1–M3 are complete. M4 (collaboration), M5 (GitHub App installation and repository selection) and M6 (GitHub webhooks, pull requests, commits, reviews and task links) are on the `m4-collaboration`, `m5-github-setup` and `m6-github-events` branches.
+**Status:** M1–M6 are merged. M7 (real-time updates) is on the `m7-realtime` branch.
 
 ## Repository layout
 
@@ -201,3 +201,15 @@ Rules: [Docs/decisions/0006-github-events.md](Docs/decisions/0006-github-events.
 | POST   | `/tasks/:id/pull-requests`          | Task edit access. `{ pullRequestId }`                                  |
 | DELETE | `/tasks/:id/pull-requests/:prId`    | Task edit access                                                       |
 | GET    | `/projects/:id/github/activity`     | Project access. Commits, PRs, reviews and releases                     |
+
+## Real-time API (M7)
+
+Rules: [Docs/decisions/0007-realtime.md](Docs/decisions/0007-realtime.md). Events are hints: clients refetch from the API.
+
+| Method | Endpoint                          | Who                                                                                          |
+| ------ | --------------------------------- | -------------------------------------------------------------------------------------------- |
+| POST   | `/realtime/token`                 | Verified user. Returns a 60-second ticket for opening the socket                             |
+| WS     | `/api/v1/realtime/socket`         | `auth: { token }`, WebSocket transport only. `subscribe` / `unsubscribe` `{ room }` with ack |
+| GET    | `/internal/realtime/outbox/flush` | Scheduler, `Authorization: Bearer $CRON_SECRET`                                              |
+
+Rooms: `user:<id>` (joined automatically), `project:<id>` and `workspace:<id>` (joined through `subscribe`, which checks access). Locally, no Redis is needed; the website connects to `NEXT_PUBLIC_REALTIME_URL` (default `http://localhost:4000`).

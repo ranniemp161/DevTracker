@@ -4,6 +4,7 @@ import type { Comment, Task } from '@devtrack/types';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Alert, Avatar, Button } from '@/components/ui';
 import { api, apiPage, ApiError } from '@/lib/api';
+import { useRealtimeRefresh } from '@/lib/realtime';
 import { useProject } from '../projects/project-context';
 import { useSession } from '../session/session-context';
 import { timeAgo } from './describe-activity';
@@ -43,6 +44,12 @@ export function CommentThread({ task, onActivity }: { task: Task; onActivity: ()
   const [draft, setDraft] = useState('');
   const [posting, setPosting] = useState(false);
   const [editing, setEditing] = useState<{ id: string; body: string } | null>(null);
+  const [version, setVersion] = useState(0);
+  // Live updates (M7): comments posted or deleted by others.
+  useRealtimeRefresh(
+    (e) => e.type.startsWith('comment.') && e.payload.taskId === task.id,
+    () => setVersion((v) => v + 1),
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -58,7 +65,7 @@ export function CommentThread({ task, onActivity }: { task: Task; onActivity: ()
     return () => {
       cancelled = true;
     };
-  }, [task.id]);
+  }, [task.id, version]);
 
   async function loadMore() {
     if (!cursor) return;

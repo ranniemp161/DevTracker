@@ -10,6 +10,7 @@ import type {
 import { useState } from 'react';
 import { Alert, Badge, Button, Card, Select } from '@/components/ui';
 import { api, apiPage, ApiError } from '@/lib/api';
+import { useRealtimeRefresh } from '@/lib/realtime';
 import { useApiQuery } from '@/lib/use-api-query';
 import { useProject } from '../projects/project-context';
 
@@ -26,6 +27,15 @@ const STATE: Record<PullRequestState, { label: string; tone: 'green' | 'blue' | 
 export function TaskPullRequests({ task, onChange }: { task: Task; onChange?: () => void }) {
   const { readOnly } = useProject();
   const linked = useApiQuery<LinkedPullRequest[]>(`/tasks/${task.id}/pull-requests`);
+  // Live updates (M7): links made elsewhere (e.g. automatically) and PR state changes.
+  useRealtimeRefresh(
+    (e) =>
+      e.type === 'github.pull_request.updated' ||
+      (e.type === 'activity.created' &&
+        e.payload.taskId === task.id &&
+        String(e.payload.action).startsWith('pull_request.')),
+    linked.reload,
+  );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 

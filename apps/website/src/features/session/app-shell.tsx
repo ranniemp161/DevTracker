@@ -6,6 +6,7 @@ import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Alert, Avatar, Button } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
+import { RealtimeProvider } from '@/lib/realtime';
 import { useApiQuery } from '@/lib/use-api-query';
 import { NotificationBell } from '../collaboration/notification-bell';
 import { usePendingInvitation } from '../invitations/pending-invitation';
@@ -41,15 +42,20 @@ export function AppShell({ children }: { children: ReactNode }) {
     return <p className="p-8 text-sm text-neutral-500">Loading…</p>;
   }
 
+  const page = (
+    <div className="min-h-dvh">
+      <Header user={session.user} workspaces={session.workspaces} />
+      <main className="mx-auto max-w-5xl space-y-6 px-6 py-8">
+        <PendingInvitationBanner />
+        {verified ? children : <VerifyEmailNotice user={session.user} />}
+      </main>
+    </div>
+  );
+
+  // Real-time updates need a verified account (the API refuses other connections).
   return (
     <SessionContext.Provider value={session}>
-      <div className="min-h-dvh">
-        <Header user={session.user} workspaces={session.workspaces} />
-        <main className="mx-auto max-w-5xl space-y-6 px-6 py-8">
-          <PendingInvitationBanner />
-          {verified ? children : <VerifyEmailNotice user={session.user} />}
-        </main>
-      </div>
+      {verified ? <RealtimeProvider>{page}</RealtimeProvider> : page}
     </SessionContext.Provider>
   );
 }

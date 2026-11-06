@@ -40,6 +40,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger('ExceptionFilter');
 
   catch(exception: unknown, host: ArgumentsHost) {
+    if (host.getType() !== 'http') {
+      // WebSocket handlers answer through acknowledgements and catch expected errors
+      // themselves; anything reaching here is unexpected. Log it; never write an HTTP reply.
+      this.logger.error(`Unhandled ${host.getType()} error`, describeError(exception));
+      return;
+    }
     const ctx = host.switchToHttp();
     const req = ctx.getRequest<Request>();
     const res = ctx.getResponse<Response>();

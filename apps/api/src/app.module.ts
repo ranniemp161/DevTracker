@@ -19,6 +19,7 @@ import { MembersModule } from './members/members.module';
 import { MilestonesModule } from './milestones/milestones.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ProjectsModule } from './projects/projects.module';
+import { RealtimeModule } from './realtime/realtime.module';
 import { TasksModule } from './tasks/tasks.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 
@@ -40,6 +41,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
     ActivityModule,
     NotificationsModule,
     GithubModule,
+    RealtimeModule,
   ],
   controllers: [HealthController],
   providers: [
