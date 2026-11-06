@@ -29,7 +29,7 @@ From the repository root:
 vercel link --repo
 ```
 
-Create **devtrack-api** (Root Directory `apps/api`) and **devtrack-website** (Root Directory `apps/website`). Keep the defaults: Vercel detects NestJS and Next.js and runs `turbo run build` for each. Node 24 or newer is used, from `engines` in `package.json`.
+Create **devtrack-api** (Root Directory `apps/api`) and **devtrack-website** (Root Directory `apps/website`). Keep the defaults: Vercel runs `turbo run build` for each. The API entry is `apps/api/server.cjs` (it loads the compiled `dist/bootstrap.js`), and the website is detected as Next.js. Node 24 or newer is used, from `engines` in `package.json`.
 
 **Check:** both projects appear in the Vercel dashboard, linked to the GitHub repository.
 

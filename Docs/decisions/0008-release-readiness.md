@@ -84,7 +84,7 @@ Rules 1–3 were approved before implementation (§21 rule 12).
 
 - **Two Vercel projects on Hobby**, from one repository:
   - `devtrack-website` (Root Directory `apps/website`, Next.js);
-  - `devtrack-api` (Root Directory `apps/api`; NestJS is detected with zero config from `src/main.ts` and runs as one function).
+  - `devtrack-api` (Root Directory `apps/api`; Vercel runs `apps/api/server.cjs`, which loads the `nest build` output, as one function. `src/main.ts` was renamed `src/bootstrap.ts` so Vercel does not re-type-check the TypeScript with its own, different settings (it failed on code that passes CI)).
 
   Steps are in `Docs/deploy-runbook.md`.
 

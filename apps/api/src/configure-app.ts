@@ -11,7 +11,7 @@ export const API_PREFIX = 'api/v1';
 /** Path of the public GitHub webhook endpoint (architecture §11.4). */
 export const GITHUB_WEBHOOK_PATH = `/${API_PREFIX}/webhooks/github`;
 
-/** HTTP-level setup shared by `main.ts` and the integration tests. */
+/** HTTP-level setup shared by `bootstrap.ts` and the integration tests. */
 export function configureApp(app: NestExpressApplication, config: AppConfig): void {
   app.set('trust proxy', config.trustProxy);
   app.disable('x-powered-by');
