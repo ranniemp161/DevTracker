@@ -22,6 +22,7 @@ import {
   GH_INSTALLATION,
   GH_REPO,
   githubFixture,
+  pr,
   pullRequestEvent,
   pushEvent,
   releaseEvent,
@@ -664,6 +665,91 @@ describe('failures and retries', () => {
         .expect(404);
     } finally {
       await app.close();
+    }
+  });
+});
+
+describe('importing existing pull requests', () => {
+  const history = () => [
+    pr({
+      id: 9101,
+      number: 2,
+      title: 'Old fix for DEV-1',
+      head: { ref: 'fix/old' },
+      state: 'closed',
+      merged_at: '2026-11-05T10:00:00Z',
+      closed_at: '2026-11-05T10:00:00Z',
+      updated_at: '2026-11-05T10:00:00Z',
+    }),
+    pr({
+      id: 9102,
+      number: 3,
+      title: 'Still open',
+      head: { ref: 'feature/x' },
+      updated_at: '2026-11-05T11:00:00Z',
+    }),
+  ];
+
+  it('imports a repository’s pull requests when it is connected, quietly', async () => {
+    t.githubApp.pullRequests.set(GH_REPO, history());
+    const f = await githubFixture(t);
+    const stored = await t.db.select().from(githubPullRequests);
+    expect(stored.map((p) => p.number).sort()).toEqual([2, 3]);
+
+    // History is not news: no feed entries, outbox PR events or notifications.
+    expect(
+      await t.db.select().from(activityLogs).where(eq(activityLogs.entityType, 'pull_request')),
+    ).toEqual([]);
+    expect(await notificationsOf(f.owner.id)).toEqual([]);
+
+    const list = await f.dev.browser.get(`/api/v1/repositories/${f.repositoryId}/pull-requests`);
+    expect(
+      list.body.data.map((p: { number: number; state: string }) => [p.number, p.state]),
+    ).toEqual([
+      [3, 'open'],
+      [2, 'merged'],
+    ]);
+  });
+
+  it('syncs on demand, links task keys, and is idempotent', async () => {
+    const f = await githubFixture(t);
+    const task = await devTask(f);
+    t.githubApp.pullRequests.set(GH_REPO, history());
+    const sync = () =>
+      f.admin.browser.post(`/api/v1/projects/${f.project}/repositories/${f.repositoryId}/sync`);
+
+    const first = await sync();
+    expect(first.status).toBe(200);
+    expect(first.body.data).toEqual({ imported: 2 });
+    await sync().expect(200);
+    expect(await t.db.select().from(githubPullRequests)).toHaveLength(2);
+
+    const links = await t.db.select().from(taskGithubLinks);
+    expect(links).toEqual([expect.objectContaining({ taskId: task.id, source: 'AUTO' })]);
+    expect(await activityOf('linked')).toEqual([]);
+  });
+
+  it('only lets workspace admins sync, and only connected repositories', async () => {
+    const f = await githubFixture(t);
+    const path = `/api/v1/projects/${f.project}/repositories/${f.repositoryId}/sync`;
+    await f.dev.browser.post(path).expect(403);
+    await f.outsider.browser.post(path).expect(404);
+    await f.owner.browser
+      .post(`/api/v1/projects/${f.project}/repositories/00000000-0000-4000-8000-000000000000/sync`)
+      .expect(404);
+  });
+
+  it('keeps the connection when the import fails', async () => {
+    const original = t.githubApp.listPullRequests.bind(t.githubApp);
+    t.githubApp.listPullRequests = async () => {
+      throw new Error('GitHub is down');
+    };
+    try {
+      const f = await githubFixture(t);
+      const repos = await f.owner.browser.get(`/api/v1/projects/${f.project}/repositories`);
+      expect(repos.body.data).toHaveLength(1);
+    } finally {
+      t.githubApp.listPullRequests = original;
     }
   });
 });

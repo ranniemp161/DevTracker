@@ -851,6 +851,7 @@ Base path:
 | POST | `/projects/:id/repositories` | Connect selected repository |
 | GET | `/projects/:id/repositories` | List connected repositories |
 | DELETE | `/projects/:id/repositories/:repoId` | Disconnect repository |
+| POST | `/projects/:id/repositories/:repoId/sync` | Import existing pull requests (also done on connect; M7 addition) |
 | GET | `/projects/:id/github/activity` | GitHub activity |
 | GET | `/repositories/:id/pull-requests` | List PRs |
 | POST | `/tasks/:id/pull-requests` | Link PR to task |

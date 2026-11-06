@@ -19,9 +19,34 @@ export function ProjectRepositories() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const [notice, setNotice] = useState<string | null>(null);
+
+  /** Imports existing pull requests from GitHub (e.g. ones merged before connecting). */
+  async function sync(repo: ConnectedRepository) {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const { imported } = await api<{ imported: number }>(
+        `/projects/${project.id}/repositories/${repo.id}/sync`,
+        { method: 'POST' },
+      );
+      setNotice(
+        imported === 0
+          ? `${repo.fullName} has no pull requests on GitHub yet.`
+          : `Synced ${imported} pull request${imported === 1 ? '' : 's'} from ${repo.fullName}.`,
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not sync pull requests.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function disconnect(repo: ConnectedRepository) {
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
       await api(`/projects/${project.id}/repositories/${repo.id}`, { method: 'DELETE' });
       connected.reload();
@@ -39,6 +64,7 @@ export function ProjectRepositories() {
     >
       <div className="space-y-4">
         {error ? <Alert>{error}</Alert> : null}
+        {notice ? <Alert tone="success">{notice}</Alert> : null}
         {connected.error ? <Alert>{connected.error.message}</Alert> : null}
         {connected.data?.length === 0 ? (
           <p className="text-sm text-neutral-500">No repositories connected yet.</p>
@@ -64,6 +90,14 @@ export function ProjectRepositories() {
                 {r.installationStatus !== 'ACTIVE' ? (
                   <Badge tone="amber">Installation {r.installationStatus.toLowerCase()}</Badge>
                 ) : null}
+                <Button
+                  size="sm"
+                  disabled={busy || r.installationStatus !== 'ACTIVE'}
+                  onClick={() => sync(r)}
+                  title="Import this repository's recent pull requests from GitHub"
+                >
+                  Sync pull requests
+                </Button>
                 <Button size="sm" variant="danger" disabled={busy} onClick={() => disconnect(r)}>
                   Disconnect
                 </Button>

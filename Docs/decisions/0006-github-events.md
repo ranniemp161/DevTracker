@@ -136,3 +136,15 @@ These are in addition to 0005 §8:
   - commits: `branch`, `url`, `author_name`;
   - reviews: `url`;
   - links: `source`.
+
+## Addendum (M7): importing existing pull requests
+
+Webhooks only report what happens **after** a repository is connected, so pull requests opened or merged earlier never appeared in DevTrack (found while testing M7 against a real repository).
+
+- **On connect,** DevTrack fetches the repository's **100 most recently updated** pull requests, in any state, through the installation (`GET /repositories/:id/pulls?state=all&sort=updated`).
+  - They are stored with the same upsert and out-of-order guard as webhooks (rule 5).
+  - Task keys in their branch names or titles are auto-linked (rule 2).
+  - An import failure is logged and doesn't undo the connection.
+- **`POST /projects/:id/repositories/:repoId/sync`** (workspace Admin/Owner, active installation) repeats the import on demand. The **Sync pull requests** button in Project Settings → Repositories calls it, and it is idempotent.
+- **Imported history is quiet:** no activity entries, outbox events or notifications, including for the links it creates. Only live webhook events are news.
+- Commits, reviews and releases aren't imported. Only pull requests are, because those are what tasks link to.

@@ -4,6 +4,7 @@ import { createSign } from 'node:crypto';
 import { z } from 'zod';
 import { AppException } from '../common/errors/app.exception';
 import { APP_CONFIG, type AppConfig, type GithubAppConfig } from '../config/app-config';
+import { pullRequestSchema, type PullRequestPayload } from './webhooks/payloads';
 
 /** What DevTrack reads about a repository (architecture §11.3). */
 export interface GithubRepo {
@@ -204,6 +205,30 @@ export class GithubAppClient {
     const parsed = repoSchema.safeParse(await res.json().catch(() => null));
     if (!parsed.success) throw githubApiError();
     return toRepo(parsed.data);
+  }
+
+  /**
+   * The repository's most recently updated pull requests (any state), up to `limit` (max 100),
+   * in the same shape as webhook payloads. Invalid entries are skipped.
+   */
+  async listPullRequests(
+    installationId: number,
+    githubRepositoryId: number,
+    limit = 100,
+  ): Promise<PullRequestPayload[]> {
+    const perPage = Math.min(Math.max(limit, 1), 100);
+    const res = await this.installationGet(
+      installationId,
+      `/repositories/${githubRepositoryId}/pulls?state=all&sort=updated&direction=desc&per_page=${perPage}`,
+    );
+    if (res.status === 404 || res.status === 403) return [];
+    if (!res.ok) throw githubApiError();
+    const body: unknown = await res.json().catch(() => null);
+    if (!Array.isArray(body)) throw githubApiError();
+    return body.flatMap((item) => {
+      const parsed = pullRequestSchema.safeParse(item);
+      return parsed.success ? [parsed.data] : [];
+    });
   }
 
   private async installationGet(installationId: number, path: string): Promise<Response> {

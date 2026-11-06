@@ -1,4 +1,4 @@
-import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
 import {
   and,
   asc,
@@ -21,6 +21,7 @@ import { EventRecorder, type Actor } from '../../events/event-recorder.service';
 import { ProjectAccessService, type ProjectRow } from '../../projects/project-access.service';
 import { GithubAppClient } from '../github-app.client';
 import { GithubInstallationsService } from '../installations/installations.service';
+import { GithubEventProcessor } from '../webhooks/github-event-processor.service';
 
 const notConnected = () =>
   AppException.notFound('This repository is not connected to the project.');
@@ -42,7 +43,10 @@ export class ProjectRepositoriesService {
     private readonly installations: GithubInstallationsService,
     private readonly client: GithubAppClient,
     private readonly events: EventRecorder,
+    private readonly processor: GithubEventProcessor,
   ) {}
+
+  private readonly logger = new Logger(ProjectRepositoriesService.name);
 
   async list(userId: string, projectId: string): Promise<ConnectedRepository[]> {
     const { project } = await this.access.require(userId, projectId);
@@ -121,8 +125,61 @@ export class ProjectRepositoriesService {
       }
       throw err;
     }
+    // Import existing pull requests. Best effort: the connection stands even if GitHub is
+    // unavailable right now, and "Sync pull requests" can be used later.
+    await this.importPullRequests(installation, repo.id).catch((err: unknown) =>
+      this.logger.warn(
+        `Pull request import for ${repo.fullName} failed: ${err instanceof Error ? err.message : String(err)}`,
+      ),
+    );
     const connected = await this.query(project.id, repositoryId);
     return connected[0]!;
+  }
+
+  /**
+   * "Sync pull requests" (M7 fix): re-imports the repository's most recently updated pull
+   * requests. Admins/Owner, like connecting. History only: no activity or notifications.
+   */
+  async syncPullRequests(
+    userId: string,
+    projectId: string,
+    repositoryId: string,
+  ): Promise<{ imported: number }> {
+    const { project } = await this.access.require(userId, projectId, { manage: true });
+    if (!isUuid(repositoryId)) throw notConnected();
+    const [row] = await this.db
+      .select({ repo: githubRepositories, installation: githubInstallations })
+      .from(projectRepositories)
+      .innerJoin(githubRepositories, eq(githubRepositories.id, projectRepositories.repositoryId))
+      .innerJoin(githubInstallations, eq(githubInstallations.id, githubRepositories.installationId))
+      .where(
+        and(
+          eq(projectRepositories.projectId, project.id),
+          eq(projectRepositories.repositoryId, repositoryId),
+        ),
+      );
+    if (!row) throw notConnected();
+    return {
+      imported: await this.importPullRequests(row.installation, row.repo.githubRepositoryId),
+    };
+  }
+
+  private async importPullRequests(
+    installation: typeof githubInstallations.$inferSelect,
+    githubRepositoryId: number,
+  ): Promise<number> {
+    const pullRequests = await this.installations.call(installation, () =>
+      this.client.listPullRequests(installation.githubInstallationId, githubRepositoryId),
+    );
+    if (pullRequests.length === 0) return 0;
+    return this.db.transaction((tx) =>
+      this.processor.importPullRequests(
+        tx,
+        installation.githubInstallationId,
+        githubRepositoryId,
+        pullRequests,
+      ),
+    );
   }
 
   async disconnect(actor: Actor, projectId: string, repositoryId: string): Promise<void> {
