@@ -30,10 +30,14 @@ export class GithubInstallationUnavailableError extends Error {
 }
 
 /**
- * The response type of the global `fetch`, derived rather than named: under some compiler settings
- * (e.g. Vercel's NestJS build) the global name `Response` resolves to an empty placeholder type.
+ * The parts of a `fetch` response this client uses. Declared here instead of relying on the global
+ * `Response` type, which Vercel's NestJS build resolves to an empty placeholder (TS2339).
  */
-type FetchResponse = Awaited<ReturnType<typeof fetch>>;
+interface FetchResponse {
+  ok: boolean;
+  status: number;
+  json(): Promise<unknown>;
+}
 
 const API = 'https://api.github.com';
 const TIMEOUT_MS = 10_000;
@@ -285,6 +289,7 @@ export class GithubAppClient {
       () => null,
     );
     if (!res) throw githubApiError();
-    return res;
+    // Cast through unknown: see FetchResponse. At runtime this is Node's real Response.
+    return res as unknown as FetchResponse;
   }
 }
