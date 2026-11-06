@@ -12,6 +12,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { Alert, Avatar, Button, Card, Field, Select } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
+import { useRealtimeRefresh } from '@/lib/realtime';
 import { useApiQuery } from '@/lib/use-api-query';
 import { useSession } from '../session/session-context';
 import { formatDate, PRIORITY_LABEL, TASK_STATUS_LABEL } from './labels';
@@ -24,6 +25,8 @@ import { TaskLabels } from './task-labels';
 export function TaskDetail() {
   const { taskId } = useParams<{ taskId: string }>();
   const query = useApiQuery<{ task: Task }>(`/tasks/${taskId}`);
+  // Live updates (M7): refetch when this task changes elsewhere.
+  useRealtimeRefresh((e) => e.type.startsWith('task.') && e.entity.id === taskId, query.reload);
   const { project } = useProject();
   // Bumped after comments/edits so the History list re-fetches.
   const [history, setHistory] = useState(0);

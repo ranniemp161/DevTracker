@@ -16,6 +16,8 @@ import { Paginated } from '../http/paginated';
 @Injectable()
 export class ResponseEnvelopeInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
+    // HTTP only: WebSocket acknowledgements are sent as-is.
+    if (context.getType() !== 'http') return next.handle();
     const http = context.switchToHttp();
     const req = http.getRequest<Request>();
     const res = http.getResponse<Response>();

@@ -114,3 +114,34 @@ describe('loadConfig: webhook and cron secrets', () => {
     expect(() => loadConfig({ ...base, CRON_SECRET: 'short' })).toThrow(/CRON_SECRET/);
   });
 });
+
+describe('loadConfig: realtime', () => {
+  it('uses a per-process key and no Redis in development', () => {
+    const config = loadConfig(base);
+    expect(config.realtime.secret.length).toBeGreaterThanOrEqual(32);
+    expect(config.realtime).toMatchObject({ redisUrl: null, publishAfterResponse: true });
+    expect(loadConfig(base).realtime.secret).not.toBe(config.realtime.secret);
+  });
+
+  it('validates REALTIME_SECRET and REDIS_URL', () => {
+    expect(() => loadConfig({ ...base, REALTIME_SECRET: 'short' })).toThrow(/REALTIME_SECRET/);
+    expect(() => loadConfig({ ...base, REDIS_URL: 'http://x' })).toThrow(/REDIS_URL/);
+    const config = loadConfig({
+      ...base,
+      REALTIME_SECRET: 's'.repeat(32),
+      REDIS_URL: 'rediss://default:pw@example.upstash.io:6379',
+    });
+    expect(config.realtime).toMatchObject({
+      secret: 's'.repeat(32),
+      redisUrl: 'rediss://default:pw@example.upstash.io:6379',
+    });
+  });
+
+  it('requires both in production', () => {
+    expect(() =>
+      loadConfig({ ...base, NODE_ENV: 'production', WEB_ORIGIN: 'https://devtrack.example' }),
+    ).toThrow(
+      /REALTIME_SECRET: is required in production[\s\S]*REDIS_URL: is required in production/,
+    );
+  });
+});

@@ -37,6 +37,17 @@ export class SessionsService {
     return row ?? null;
   }
 
+  /** A session by ID, if it still exists and has not expired (real-time connections, M7). */
+  async findActive(sessionId: string): Promise<{ user: User; session: Session } | null> {
+    const [row] = await this.db
+      .select({ session: sessions, user: users })
+      .from(sessions)
+      .innerJoin(users, eq(users.id, sessions.userId))
+      .where(and(eq(sessions.id, sessionId), gt(sessions.expiresAt, new Date())))
+      .limit(1);
+    return row ?? null;
+  }
+
   async revoke(token: string): Promise<void> {
     await this.db.delete(sessions).where(eq(sessions.tokenHash, hashToken(token)));
   }

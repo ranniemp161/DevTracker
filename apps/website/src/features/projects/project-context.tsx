@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams, usePathname } from 'next/navigation';
 import { createContext, useContext, type ReactNode } from 'react';
 import { Alert, Badge } from '@/components/ui';
+import { useRealtimeRefresh, useRealtimeRoom, type RealtimeEvent } from '@/lib/realtime';
 import { useApiQuery } from '@/lib/use-api-query';
 import { PROJECT_STATUS_LABEL } from './labels';
 
@@ -30,6 +31,15 @@ export function ProjectLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const project = useApiQuery<{ project: Project }>(`/projects/${id}`);
   const members = useApiQuery<ProjectMember[]>(`/projects/${id}/members`);
+  // Every page of a project follows the project room (M7); individual views react to events.
+  useRealtimeRoom(`project:${id}`);
+  useRealtimeRefresh(
+    (e) => e.projectId === id && e.type === 'activity.created' && isProjectChange(e),
+    () => {
+      project.reload();
+      members.reload();
+    },
+  );
 
   if (project.error) {
     return (
@@ -116,4 +126,10 @@ export function ProjectLayout({ children }: { children: ReactNode }) {
       </div>
     </ProjectContext.Provider>
   );
+}
+
+/** Project-level changes (details, archive, membership) that the header and tabs show. */
+function isProjectChange(e: RealtimeEvent): boolean {
+  const action = (e.payload as { action?: string }).action ?? '';
+  return action.startsWith('project.');
 }

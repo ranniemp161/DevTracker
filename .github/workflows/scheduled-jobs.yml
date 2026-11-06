@@ -1,0 +1,35 @@
+name: Scheduled jobs
+
+# Vercel Hobby runs cron jobs only once a day, so GitHub Actions triggers the API's recovery
+# jobs instead (decision record 0007). Both are idempotent and safe to run at any time.
+# Configure in the repository settings:
+#   - variable  API_URL      e.g. https://devtrack-api.vercel.app (no trailing slash)
+#   - secret    CRON_SECRET  the same value as the API's CRON_SECRET
+# Until API_URL is set, the job is skipped.
+
+on:
+  schedule:
+    # Every 10 minutes. GitHub may delay scheduled runs under load; that is acceptable here.
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  run:
+    if: ${{ vars.API_URL != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Retry failed GitHub webhook deliveries
+        run: >
+          curl --fail-with-body --silent --show-error --max-time 60
+          -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+          "${{ vars.API_URL }}/api/v1/internal/github/deliveries/retry"
+
+      - name: Publish outbox events the after-response flush missed
+        if: ${{ always() }}
+        run: >
+          curl --fail-with-body --silent --show-error --max-time 60
+          -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+          "${{ vars.API_URL }}/api/v1/internal/realtime/outbox/flush"

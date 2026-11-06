@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Alert, Avatar, Button } from '@/components/ui';
 import { apiPage, ApiError } from '@/lib/api';
+import { useRealtimeRefresh } from '@/lib/realtime';
 import { describeActivity, timeAgo } from './describe-activity';
 
 /** Newest-first activity list with "Load more". Pass `taskId` for a single task's history. */
@@ -24,6 +25,15 @@ export function ActivityFeed({
   const [entries, setEntries] = useState<ActivityEntry[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [version, setVersion] = useState(0);
+  // Live updates (M7): new entries for this project (or this task).
+  useRealtimeRefresh(
+    (e) =>
+      e.type === 'activity.created' &&
+      e.projectId === projectId &&
+      (!taskId || e.payload.taskId === taskId),
+    () => setVersion((v) => v + 1),
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -39,7 +49,7 @@ export function ActivityFeed({
     return () => {
       cancelled = true;
     };
-  }, [base, refreshKey]);
+  }, [base, refreshKey, version]);
 
   async function loadMore() {
     if (!cursor) return;
@@ -63,9 +73,7 @@ export function ActivityFeed({
           <li key={e.id} className="flex gap-3 text-sm">
             <Avatar name={e.actor?.username ?? '?'} url={e.actor?.avatarUrl ?? null} size="sm" />
             <p className="min-w-0 flex-1 text-neutral-700">
-              <span className="font-medium text-neutral-900">
-                {e.actor ? `@${e.actor.username}` : 'System'}
-              </span>{' '}
+              <span className="font-medium text-neutral-900">{actorLabel(e)}</span>{' '}
               {describeActivity(e)}
               {!taskId && e.task ? (
                 <>
@@ -99,4 +107,11 @@ export function ActivityFeed({
       ) : null}
     </div>
   );
+}
+
+/** DevTrack user, else the GitHub login for GitHub events, else "System". */
+function actorLabel(e: ActivityEntry): string {
+  if (e.actor) return `@${e.actor.username}`;
+  const github = (e.metadata as { github?: { login?: string } | null }).github;
+  return github?.login ? `${github.login} (GitHub)` : 'System';
 }

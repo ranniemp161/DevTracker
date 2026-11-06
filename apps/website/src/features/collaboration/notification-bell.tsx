@@ -5,10 +5,8 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui';
 import { api, apiPage } from '@/lib/api';
+import { useRealtimeRefresh } from '@/lib/realtime';
 import { timeAgo } from './describe-activity';
-
-/** Until real-time delivery (M7), the unread count is refreshed on navigation and every 60s. */
-const POLL_MS = 60_000;
 
 export function NotificationBell() {
   const router = useRouter();
@@ -21,15 +19,16 @@ export function NotificationBell() {
   const refreshCount = useCallback(() => {
     api<{ count: number }>('/notifications/unread-count').then(
       (r) => setCount(r.count),
-      () => undefined, // transient failures are fine; the next poll retries
+      () => undefined, // transient failures are fine; the next event or navigation retries
     );
   }, []);
 
+  // Refreshed on navigation, on every notification event for this user (M7), and after a
+  // reconnect. No polling.
   useEffect(() => {
     refreshCount();
-    const id = setInterval(refreshCount, POLL_MS);
-    return () => clearInterval(id);
   }, [refreshCount, pathname]);
+  useRealtimeRefresh((e) => e.type.startsWith('notification.'), refreshCount);
 
   useEffect(() => {
     if (!open) return;

@@ -3,6 +3,7 @@
 import type { Task } from '@devtrack/types';
 import { useCallback, useEffect, useState } from 'react';
 import { apiPage, ApiError } from '@/lib/api';
+import { useRealtimeRefresh } from '@/lib/realtime';
 
 /** Loads every live task of a project (all pages), for the Kanban board. */
 export function useProjectTasks(projectId: string) {
@@ -37,5 +38,7 @@ export function useProjectTasks(projectId: string) {
   }, [projectId, version]);
 
   const reload = useCallback(() => setVersion((v) => v + 1), []);
+  // Live updates (M7): any task change in this project refetches the board.
+  useRealtimeRefresh((e) => e.projectId === projectId && e.type.startsWith('task.'), reload);
   return { tasks, setTasks, error, reload };
 }

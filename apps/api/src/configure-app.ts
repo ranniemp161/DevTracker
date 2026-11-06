@@ -4,6 +4,7 @@ import { raw } from 'express';
 import helmet from 'helmet';
 import { requestIdMiddleware } from './common/http/request-context';
 import type { AppConfig } from './config/app-config';
+import { RealtimeIoAdapter } from './realtime/realtime-io.adapter';
 
 export const API_PREFIX = 'api/v1';
 
@@ -26,4 +27,11 @@ export function configureApp(app: NestExpressApplication, config: AppConfig): vo
   app.enableCors({ origin: [config.webOrigin], credentials: true });
   app.setGlobalPrefix(API_PREFIX);
   app.enableShutdownHooks();
+}
+
+/** Socket.IO setup (M7). Call before `app.init()`/`listen()`; connects to Redis if configured. */
+export async function setupRealtime(app: NestExpressApplication, config: AppConfig): Promise<void> {
+  const adapter = new RealtimeIoAdapter(app, config);
+  await adapter.connect();
+  app.useWebSocketAdapter(adapter);
 }

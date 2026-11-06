@@ -1,4 +1,4 @@
-import { createPrivateKey } from 'node:crypto';
+import { createPrivateKey, randomBytes } from 'node:crypto';
 import { z } from 'zod';
 
 export const APP_CONFIG = Symbol('APP_CONFIG');
@@ -21,6 +21,8 @@ export interface AppConfig {
   githubWebhookSecret: string | null;
   /** Bearer secret for the scheduled delivery-retry job (M6). Null: the job is disabled. */
   cronSecret: string | null;
+  /** Socket.IO (M7, decision record 0007). */
+  realtime: RealtimeConfig;
   mail: { transport: 'console'; from: string };
 }
 
@@ -41,6 +43,26 @@ export interface GithubAppConfig {
   /** PEM-encoded RSA private key, used to sign App JWTs. */
   privateKey: string;
 }
+
+export interface RealtimeConfig {
+  /** HMAC key for short-lived connection tickets. */
+  secret: string;
+  /** Cross-instance broadcasting. Null: in-process only (single instance, development). */
+  redisUrl: string | null;
+  /** The server closes each connection after this long so the client re-authenticates. */
+  maxConnectionMs: number;
+  /**
+   * Flush the outbox after each successful write request. Off in most tests, which assert on
+   * unpublished rows; the realtime tests turn it on.
+   */
+  publishAfterResponse: boolean;
+}
+
+/**
+ * Below Vercel Hobby's 300 s function limit, so connections end on our terms (with a
+ * reconnect) rather than being cut by the platform.
+ */
+export const REALTIME_MAX_CONNECTION_MS = 4.5 * 60 * 1000;
 
 const GITHUB_APP_VARS = [
   'GITHUB_APP_ID',
@@ -107,6 +129,15 @@ const envSchema = z
     CRON_SECRET: optionalString.pipe(
       z.string().min(16, { error: 'must be at least 16 characters' }).optional(),
     ),
+    REALTIME_SECRET: optionalString.pipe(
+      z.string().min(32, { error: 'must be at least 32 characters' }).optional(),
+    ),
+    REDIS_URL: optionalString.pipe(
+      z
+        .string()
+        .regex(/^rediss?:\/\//, { error: 'must be a redis:// or rediss:// URL' })
+        .optional(),
+    ),
     MAIL_TRANSPORT: z.enum(['console']).default('console'),
     MAIL_FROM: z.string().min(1).default('DevTrack <no-reply@devtrack.local>'),
   })
@@ -135,6 +166,17 @@ const envSchema = z
           path: ['GITHUB_APP_WEBHOOK_SECRET'],
           message: 'is required in production when the GitHub App is configured',
         });
+      }
+      // Several function instances must share the ticket key and broadcast through Redis.
+      if (!env.REALTIME_SECRET) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['REALTIME_SECRET'],
+          message: 'is required in production',
+        });
+      }
+      if (!env.REDIS_URL) {
+        ctx.addIssue({ code: 'custom', path: ['REDIS_URL'], message: 'is required in production' });
       }
     }
     if (Boolean(env.GITHUB_OAUTH_CLIENT_ID) !== Boolean(env.GITHUB_OAUTH_CLIENT_SECRET)) {
@@ -205,6 +247,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
         : null,
     githubWebhookSecret: e.GITHUB_APP_WEBHOOK_SECRET ?? null,
     cronSecret: e.CRON_SECRET ?? null,
+    realtime: {
+      // Development falls back to a per-process key: fine for a single local API process.
+      secret: e.REALTIME_SECRET ?? randomBytes(32).toString('base64url'),
+      redisUrl: e.REDIS_URL ?? null,
+      maxConnectionMs: REALTIME_MAX_CONNECTION_MS,
+      publishAfterResponse: true,
+    },
     mail: { transport: e.MAIL_TRANSPORT, from: e.MAIL_FROM },
   };
 }
