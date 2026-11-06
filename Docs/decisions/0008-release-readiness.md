@@ -84,7 +84,7 @@ Rules 1–3 were approved before implementation (§21 rule 12).
 
 - **Two Vercel projects on Hobby**, from one repository:
   - `devtrack-website` (Root Directory `apps/website`, Next.js);
-  - `devtrack-api` (Root Directory `apps/api`; Vercel runs `apps/api/server.cjs`, which loads the `nest build` output, as one function. `src/main.ts` was renamed `src/bootstrap.ts` so Vercel does not re-type-check the TypeScript with its own, different settings (it failed on code that passes CI)).
+  - `devtrack-api` (Root Directory `apps/api`). Vercel runs `apps/api/server.mjs` as one function. It loads `dist/esm`, an ES module build made by `scripts/build-esm.mjs` (SWC) after `nest build`. Two problems forced this: Vercel re-type-checked the TypeScript with its own, different settings and failed on code that passes CI; and NestJS 12 is ES-module-only, which Vercel's runtime cannot `require()` from the CommonJS `nest build` output (`ERR_REQUIRE_ESM`, reproduced locally with `node --no-experimental-require-module`). `src/main.ts` is now `src/bootstrap.ts`, so Vercel no longer auto-detects the TypeScript entry; type-checking stays with `nest build` and CI.
 
   Steps are in `Docs/deploy-runbook.md`.
 

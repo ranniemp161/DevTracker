@@ -4,7 +4,7 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "build": "nest build",
+    "build": "nest build && node scripts/build-esm.mjs",
     "dev": "nest start --watch --preserveWatchOutput",
     "start": "node dist/bootstrap",
     "typecheck": "tsc -p tsconfig.json --noEmit",
