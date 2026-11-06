@@ -29,6 +29,12 @@ export class GithubInstallationUnavailableError extends Error {
   }
 }
 
+/**
+ * The response type of the global `fetch`, derived rather than named: under some compiler settings
+ * (e.g. Vercel's NestJS build) the global name `Response` resolves to an empty placeholder type.
+ */
+type FetchResponse = Awaited<ReturnType<typeof fetch>>;
+
 const API = 'https://api.github.com';
 const TIMEOUT_MS = 10_000;
 /** Upper bound on repositories listed per installation (10 pages of 100). */
@@ -231,7 +237,7 @@ export class GithubAppClient {
     });
   }
 
-  private async installationGet(installationId: number, path: string): Promise<Response> {
+  private async installationGet(installationId: number, path: string): Promise<FetchResponse> {
     const token = await this.installationToken(installationId);
     const res = await this.fetch(`${API}${path}`, {
       headers: { ...API_HEADERS, Authorization: `Bearer ${token}` },
@@ -274,7 +280,7 @@ export class GithubAppClient {
     return parsed.data.token;
   }
 
-  private async fetch(url: string, init: RequestInit): Promise<Response> {
+  private async fetch(url: string, init: RequestInit): Promise<FetchResponse> {
     const res = await fetch(url, { ...init, signal: AbortSignal.timeout(TIMEOUT_MS) }).catch(
       () => null,
     );
