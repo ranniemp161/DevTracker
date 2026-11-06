@@ -59,11 +59,21 @@ export function describeActivity(entry: ActivityEntry): string {
       return `added @${user ?? 'someone'} to the project`;
     case 'project.member_removed':
       return `removed @${user ?? 'someone'} from the project`;
+    case 'project.repository_connected':
+      return `connected repository ${repoName(m)}`;
+    case 'project.repository_disconnected':
+      return `disconnected repository ${repoName(m)}`;
+    case 'github_installation.installed':
+      return `installed the GitHub App on ${String(m.account ?? 'an account')}`;
     case 'milestone.completed':
       return `completed milestone "${String(m.name ?? '')}"`;
     default:
       return entry.action;
   }
+}
+
+function repoName(m: Record<string, unknown>): string {
+  return (m.repository as { fullName?: string } | null)?.fullName ?? 'a repository';
 }
 
 export function timeAgo(iso: string, now = Date.now()): string {

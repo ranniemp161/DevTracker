@@ -29,6 +29,9 @@ export type ActivityAction =
   | 'project.archived'
   | 'project.member_added'
   | 'project.member_removed'
+  | 'project.repository_connected'
+  | 'project.repository_disconnected'
+  | 'github_installation.installed'
   | 'milestone.completed';
 
 export interface ActivityEntry {

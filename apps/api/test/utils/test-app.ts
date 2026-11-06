@@ -10,6 +10,12 @@ import {
   type GithubProfile,
 } from '../../src/auth/github/github-oauth.client';
 import { CurrentUser } from '../../src/common/decorators/auth.decorators';
+import {
+  GithubAppClient,
+  GithubInstallationUnavailableError,
+  type GithubInstallationInfo,
+  type GithubRepo,
+} from '../../src/github/github-app.client';
 import { APP_CONFIG, type AppConfig } from '../../src/config/app-config';
 import { configureApp } from '../../src/configure-app';
 import { DATABASE_CONNECTION } from '../../src/database/database.module';
@@ -31,6 +37,14 @@ export function testConfig(overrides: Partial<AppConfig> = {}): AppConfig {
       clientId: 'test-client-id',
       clientSecret: 'test-client-secret',
       callbackUrl: `${WEB_ORIGIN}/api/v1/auth/github/callback`,
+    },
+    githubApp: {
+      appId: '12345',
+      slug: 'devtrack-test',
+      clientId: 'Iv23li-test-app',
+      clientSecret: 'test-app-secret',
+      // Never used: tests replace GithubAppClient with FakeGithubAppClient.
+      privateKey: 'unused-in-tests',
     },
     mail: { transport: 'console', from: 'DevTrack <test@devtrack.local>' },
     ...overrides,
@@ -86,6 +100,68 @@ export class FakeGithubOAuthClient implements Pick<GithubOAuthClient, keyof Gith
   }
 }
 
+/** One installation as GitHub sees it. */
+export interface FakeInstallation extends GithubInstallationInfo {
+  repos: GithubRepo[];
+  /** Simulates GitHub refusing installation tokens. */
+  unavailable?: 'SUSPENDED' | 'REMOVED';
+}
+
+/** Stands in for the GitHub App API (installation tokens, user verification, repositories). */
+export class FakeGithubAppClient implements Pick<GithubAppClient, keyof GithubAppClient> {
+  installations = new Map<number, FakeInstallation>();
+  /** OAuth code from the install callback -> installation IDs that GitHub user can access. */
+  codes = new Map<string, number[]>();
+  revoked: string[] = [];
+
+  reset(): void {
+    this.installations.clear();
+    this.codes.clear();
+    this.revoked = [];
+  }
+
+  addInstallation(id: number, accountLogin: string, repos: GithubRepo[] = []): FakeInstallation {
+    const inst: FakeInstallation = {
+      id,
+      accountLogin,
+      accountType: 'Organization',
+      suspendedAt: null,
+      repos,
+    };
+    this.installations.set(id, inst);
+    return inst;
+  }
+
+  async exchangeInstallCode(code: string): Promise<string | null> {
+    return this.codes.has(code) ? `ghu_${code}` : null;
+  }
+  async findUserInstallation(
+    userToken: string,
+    installationId: number,
+  ): Promise<GithubInstallationInfo | null> {
+    const allowed = this.codes.get(userToken.replace(/^ghu_/, '')) ?? [];
+    const inst = this.installations.get(installationId);
+    if (!inst || !allowed.includes(installationId)) return null;
+    const { repos: _repos, unavailable: _unavailable, ...info } = inst;
+    return info;
+  }
+  async revokeUserToken(userToken: string): Promise<void> {
+    this.revoked.push(userToken);
+  }
+  async listInstallationRepositories(installationId: number): Promise<GithubRepo[]> {
+    return this.usable(installationId).repos;
+  }
+  async getRepository(installationId: number, githubRepositoryId: number) {
+    return this.usable(installationId).repos.find((r) => r.id === githubRepositoryId) ?? null;
+  }
+  private usable(installationId: number): FakeInstallation {
+    const inst = this.installations.get(installationId);
+    if (!inst) throw new GithubInstallationUnavailableError('REMOVED');
+    if (inst.unavailable) throw new GithubInstallationUnavailableError(inst.unavailable);
+    return inst;
+  }
+}
+
 /** A route that uses the default (verified-email) protection, for guard tests. */
 @Controller('test-protected')
 class ProtectedTestController {
@@ -104,6 +180,7 @@ export async function createTestApp(overrides: Partial<AppConfig> = {}) {
   const database = await createTestDatabase();
   const mailer = new CapturingMailer();
   const github = new FakeGithubOAuthClient();
+  const githubApp = new FakeGithubAppClient();
 
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
@@ -117,6 +194,8 @@ export async function createTestApp(overrides: Partial<AppConfig> = {}) {
     .useValue(mailer)
     .overrideProvider(GithubOAuthClient)
     .useValue(github)
+    .overrideProvider(GithubAppClient)
+    .useValue(githubApp)
     .compile();
 
   const app = moduleRef.createNestApplication<NestExpressApplication>({ logger: false });
@@ -129,6 +208,7 @@ export async function createTestApp(overrides: Partial<AppConfig> = {}) {
     db: database.db,
     mailer,
     github,
+    githubApp,
     http: () => request(app.getHttpServer()),
     /** A cookie-keeping client, i.e. one browser. */
     browser: () => request.agent(app.getHttpServer()),
@@ -136,6 +216,7 @@ export async function createTestApp(overrides: Partial<AppConfig> = {}) {
       await database.truncateAll();
       mailer.messages = [];
       github.reset();
+      githubApp.reset();
     },
     close: () => app.close(),
   };

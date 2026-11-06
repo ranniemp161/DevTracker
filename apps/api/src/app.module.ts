@@ -10,6 +10,7 @@ import { CommentsModule } from './comments/comments.module';
 import { ConfigModule } from './config/config.module';
 import { DatabaseModule } from './database/database.module';
 import { EventsModule } from './events/events.module';
+import { GithubModule } from './github/github.module';
 import { HealthController } from './health/health.controller';
 import { InvitationsModule } from './invitations/invitations.module';
 import { LabelsModule } from './labels/labels.module';
@@ -38,6 +39,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
     CommentsModule,
     ActivityModule,
     NotificationsModule,
+    GithubModule,
   ],
   controllers: [HealthController],
   providers: [

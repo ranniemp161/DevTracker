@@ -3,6 +3,8 @@ import type { CookieOptions, Request, Response } from 'express';
 import { APP_CONFIG, type AppConfig } from '../config/app-config';
 
 export const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+/** GitHub App installation can involve choosing repositories on GitHub, so allow longer. */
+export const GITHUB_INSTALL_STATE_TTL_MS = 30 * 60 * 1000;
 
 /**
  * Cookie policy (architecture §5/§14): HttpOnly, SameSite=Lax, Secure over HTTPS, Path=/.
@@ -13,11 +15,13 @@ export const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 export class AuthCookiesService {
   readonly sessionCookie: string;
   readonly oauthStateCookie: string;
+  readonly githubInstallStateCookie: string;
 
   constructor(@Inject(APP_CONFIG) private readonly config: AppConfig) {
     const prefix = config.secureCookies ? '__Host-' : '';
     this.sessionCookie = `${prefix}devtrack_session`;
     this.oauthStateCookie = `${prefix}devtrack_oauth_state`;
+    this.githubInstallStateCookie = `${prefix}devtrack_gh_install_state`;
   }
 
   private base(): CookieOptions {
@@ -47,6 +51,22 @@ export class AuthCookiesService {
 
   clearOAuthState(res: Response): void {
     res.clearCookie(this.oauthStateCookie, this.base());
+  }
+
+  readGithubInstallState(req: Request): string | undefined {
+    return readCookie(req, this.githubInstallStateCookie);
+  }
+
+  /** Binds a GitHub App installation flow to this browser (Lax: sent on the redirect back). */
+  setGithubInstallState(res: Response, state: string): void {
+    res.cookie(this.githubInstallStateCookie, state, {
+      ...this.base(),
+      maxAge: GITHUB_INSTALL_STATE_TTL_MS,
+    });
+  }
+
+  clearGithubInstallState(res: Response): void {
+    res.clearCookie(this.githubInstallStateCookie, this.base());
   }
 }
 

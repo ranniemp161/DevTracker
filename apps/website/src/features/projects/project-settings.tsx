@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { Alert, Button, Card, Field, Select, SubmitButton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useAuthForm } from '../auth/use-auth-form';
+import { ProjectRepositories } from '../github/project-repositories';
 import { PROJECT_STATUS_LABEL } from './labels';
 import { useProject } from './project-context';
 
@@ -18,6 +19,7 @@ export function ProjectSettings() {
   return (
     <div className="space-y-6">
       <GeneralCard />
+      <ProjectRepositories />
       <ArchiveCard />
     </div>
   );

@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { loadConfig } from './app-config';
 
@@ -55,5 +56,47 @@ describe('loadConfig', () => {
 
   it('lists every missing required variable', () => {
     expect(() => loadConfig({})).toThrow(/DATABASE_URL[\s\S]*WEB_ORIGIN/);
+  });
+});
+
+describe('loadConfig: GitHub App', () => {
+  const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const pem = privateKey.export({ type: 'pkcs1', format: 'pem' }).toString();
+  const app = {
+    GITHUB_APP_ID: '12345',
+    GITHUB_APP_SLUG: 'devtrack-test',
+    GITHUB_APP_CLIENT_ID: 'Iv23li-client',
+    GITHUB_APP_CLIENT_SECRET: 'app-secret',
+  };
+
+  it('is disabled when no GitHub App variables are set', () => {
+    expect(loadConfig(base).githubApp).toBeNull();
+  });
+
+  it.each([
+    ['raw PEM', pem],
+    ['\n-escaped PEM', pem.trim().replace(/\n/g, '\n')],
+    ['base64 PEM', Buffer.from(pem).toString('base64')],
+  ])('accepts a %s private key', (_label, value) => {
+    const config = loadConfig({ ...base, ...app, GITHUB_APP_PRIVATE_KEY: value });
+    expect(config.githubApp).toMatchObject({ appId: '12345', slug: 'devtrack-test' });
+    expect(config.githubApp?.privateKey).toContain('-----BEGIN RSA PRIVATE KEY-----');
+  });
+
+  it('requires every GitHub App variable together', () => {
+    expect(() => loadConfig({ ...base, GITHUB_APP_ID: '12345' })).toThrow(
+      /GitHub App variables must be set together/,
+    );
+  });
+
+  it('rejects an invalid private key without echoing it', () => {
+    let message = '';
+    try {
+      loadConfig({ ...base, ...app, GITHUB_APP_PRIVATE_KEY: 'not-a-key-SECRET' });
+    } catch (err) {
+      message = (err as Error).message;
+    }
+    expect(message).toMatch(/GITHUB_APP_PRIVATE_KEY: is not a valid PEM private key/);
+    expect(message).not.toContain('SECRET');
   });
 });

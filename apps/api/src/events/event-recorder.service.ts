@@ -18,7 +18,10 @@ export interface ActivityInput extends Scope {
   workspaceId: string;
   taskId?: string | null;
   actor: Actor | null;
-  entity: { type: 'task' | 'comment' | 'project' | 'milestone'; id: string };
+  entity: {
+    type: 'task' | 'comment' | 'project' | 'milestone' | 'github_installation';
+    id: string;
+  };
   action: ActivityAction;
   /** Minimal display details only — never comment/description text or secrets (§8.4). */
   metadata?: Record<string, unknown>;
