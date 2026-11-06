@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { expect } from 'vitest';
+import type { PullRequestPayload } from '../../src/github/webhooks/payloads';
 import { signWebhookBody } from '../../src/github/webhooks/webhook-signature';
 import { projectFixture } from './fixtures';
 import { TEST_WEBHOOK_SECRET, type TestApp } from './test-app';
@@ -75,7 +76,7 @@ const repoRef = {
   sender,
 };
 
-export function pr(overrides: Record<string, unknown> = {}) {
+export function pr(overrides: Record<string, unknown> = {}): PullRequestPayload {
   return {
     id: 7001,
     number: 12,
@@ -91,7 +92,7 @@ export function pr(overrides: Record<string, unknown> = {}) {
     created_at: '2026-11-06T10:00:00Z',
     updated_at: '2026-11-06T10:00:00Z',
     ...overrides,
-  };
+  } as PullRequestPayload;
 }
 
 export const pullRequestEvent = (action: string, prOverrides: Record<string, unknown> = {}) => ({

@@ -16,6 +16,7 @@ import {
   type GithubInstallationInfo,
   type GithubRepo,
 } from '../../src/github/github-app.client';
+import type { PullRequestPayload } from '../../src/github/webhooks/payloads';
 import { APP_CONFIG, type AppConfig } from '../../src/config/app-config';
 import { configureApp, setupRealtime } from '../../src/configure-app';
 import { DATABASE_CONNECTION } from '../../src/database/database.module';
@@ -123,10 +124,13 @@ export class FakeGithubAppClient implements Pick<GithubAppClient, keyof GithubAp
   /** OAuth code from the install callback -> installation IDs that GitHub user can access. */
   codes = new Map<string, number[]>();
   revoked: string[] = [];
+  /** GitHub repository ID -> its existing pull requests (for the import on connect/sync). */
+  pullRequests = new Map<number, PullRequestPayload[]>();
 
   reset(): void {
     this.installations.clear();
     this.codes.clear();
+    this.pullRequests.clear();
     this.revoked = [];
   }
 
@@ -163,6 +167,10 @@ export class FakeGithubAppClient implements Pick<GithubAppClient, keyof GithubAp
   }
   async getRepository(installationId: number, githubRepositoryId: number) {
     return this.usable(installationId).repos.find((r) => r.id === githubRepositoryId) ?? null;
+  }
+  async listPullRequests(installationId: number, githubRepositoryId: number) {
+    this.usable(installationId);
+    return this.pullRequests.get(githubRepositoryId) ?? [];
   }
   private usable(installationId: number): FakeInstallation {
     const inst = this.installations.get(installationId);

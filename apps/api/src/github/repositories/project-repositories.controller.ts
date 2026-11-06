@@ -30,6 +30,17 @@ export class ProjectRepositoriesController {
     return { repository: await this.repositories.connect(user, projectId, body) };
   }
 
+  /** M7 fix: import existing pull requests from GitHub (Admin/Owner). */
+  @Post(':repoId/sync')
+  @HttpCode(HttpStatus.OK)
+  sync(
+    @CurrentUser() user: User,
+    @Param('id', UuidParamPipe) projectId: string,
+    @Param('repoId', UuidParamPipe) repoId: string,
+  ): Promise<{ imported: number }> {
+    return this.repositories.syncPullRequests(user.id, projectId, repoId);
+  }
+
   @Delete(':repoId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async disconnect(

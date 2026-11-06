@@ -178,15 +178,16 @@ Rules: [Docs/decisions/0004-collaboration.md](Docs/decisions/0004-collaboration.
 
 Rules: [Docs/decisions/0005-github-app-setup.md](Docs/decisions/0005-github-app-setup.md).
 
-| Method | Endpoint                                 | Who                                                                    |
-| ------ | ---------------------------------------- | ---------------------------------------------------------------------- |
-| GET    | `/github/install?workspaceId=`           | Admin, Owner. Browser redirect to GitHub's install page                |
-| GET    | `/github/install/callback`               | Public. GitHub's redirect back, checked by state cookie and user token |
-| GET    | `/github/installations?workspaceId=`     | Admin, Owner                                                           |
-| GET    | `/github/installations/:id/repositories` | Admin, Owner. Live from GitHub, with `connectedProjectIds`             |
-| GET    | `/projects/:id/repositories`             | Project access                                                         |
-| POST   | `/projects/:id/repositories`             | Admin, Owner. `{ installationId, githubRepositoryId }`                 |
-| DELETE | `/projects/:id/repositories/:repoId`     | Admin, Owner. History is kept                                          |
+| Method | Endpoint                                  | Who                                                                                   |
+| ------ | ----------------------------------------- | ------------------------------------------------------------------------------------- |
+| GET    | `/github/install?workspaceId=`            | Admin, Owner. Browser redirect to GitHub's install page                               |
+| GET    | `/github/install/callback`                | Public. GitHub's redirect back, checked by state cookie and user token                |
+| GET    | `/github/installations?workspaceId=`      | Admin, Owner                                                                          |
+| GET    | `/github/installations/:id/repositories`  | Admin, Owner. Live from GitHub, with `connectedProjectIds`                            |
+| GET    | `/projects/:id/repositories`              | Project access                                                                        |
+| POST   | `/projects/:id/repositories`              | Admin, Owner. `{ installationId, githubRepositoryId }`                                |
+| DELETE | `/projects/:id/repositories/:repoId`      | Admin, Owner. History is kept                                                         |
+| POST   | `/projects/:id/repositories/:repoId/sync` | Admin, Owner. Imports the repo's 100 most recently updated PRs (also done on connect) |
 
 ## GitHub events API (M6)
 

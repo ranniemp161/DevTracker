@@ -83,6 +83,27 @@ export class GithubEventProcessor {
     private readonly projectAccess: ProjectAccessService,
   ) {}
 
+  /**
+   * Imports existing pull requests of a connected repository (decision record 0006, M7 fix):
+   * stores them with the same out-of-order guard as webhooks and auto-links task keys, but
+   * records no activity, outbox events or notifications, because this is history, not news.
+   * Returns how many were stored or refreshed; 0 if the repository is not connected.
+   */
+  async importPullRequests(
+    tx: Transaction,
+    githubInstallationId: number,
+    githubRepositoryId: number,
+    pullRequests: PullRequestPayload[],
+  ): Promise<number> {
+    const target = await this.target(tx, githubInstallationId, githubRepositoryId);
+    if (!target) return 0;
+    for (const payload of pullRequests) {
+      const pr = await this.upsertPullRequest(tx, target.repo, payload);
+      await this.autoLink(tx, target, pr, undefined, { recordActivity: false });
+    }
+    return pullRequests.length;
+  }
+
   async handle(tx: Transaction, eventType: string, payload: unknown): Promise<ProcessResult> {
     switch (eventType) {
       case 'push':
@@ -529,6 +550,7 @@ export class GithubEventProcessor {
     target: Target,
     pr: PrRow,
     sender: z.infer<typeof senderSchema>,
+    options: { recordActivity?: boolean } = {},
   ): Promise<void> {
     const keys = extractTaskKeys(pr.headBranch, pr.title);
     if (keys.length === 0) return;
@@ -553,6 +575,7 @@ export class GithubEventProcessor {
         .values(found.map((t) => ({ taskId: t.id, pullRequestId: pr.id, source: 'AUTO' as const })))
         .onConflictDoNothing()
         .returning({ taskId: taskGithubLinks.taskId });
+      if (options.recordActivity === false) continue;
       const actor = await this.actor(tx, sender, project.workspaceId);
       for (const { taskId } of created) {
         await this.events.activity(tx, {
