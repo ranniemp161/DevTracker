@@ -145,3 +145,19 @@ describe('loadConfig: realtime', () => {
     );
   });
 });
+
+describe('loadConfig: mail', () => {
+  it('uses Resend when configured and requires its API key', () => {
+    expect(() => loadConfig({ ...base, MAIL_TRANSPORT: 'resend' })).toThrow(/RESEND_API_KEY/);
+    const config = loadConfig({ ...base, MAIL_TRANSPORT: 'resend', RESEND_API_KEY: 're_123' });
+    expect(config.mail).toMatchObject({ transport: 'resend', apiKey: 're_123' });
+  });
+});
+
+describe('loadConfig: port', () => {
+  it('prefers API_PORT, then the platform PORT, then 4000', () => {
+    expect(loadConfig(base).port).toBe(4000);
+    expect(loadConfig({ ...base, PORT: '3000' }).port).toBe(3000);
+    expect(loadConfig({ ...base, PORT: '3000', API_PORT: '4100' }).port).toBe(4100);
+  });
+});

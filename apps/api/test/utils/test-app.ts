@@ -26,6 +26,7 @@ import type { User } from '../../src/users/users.service';
 export const WEB_ORIGIN = 'http://localhost:3000';
 export const TEST_WEBHOOK_SECRET = 'test-webhook-secret-0123456789';
 export const TEST_CRON_SECRET = 'test-cron-secret-0123456789';
+export const TEST_PROXY_SECRET = 'test-proxy-secret-0123456789abcdef0123';
 
 export function testConfig(overrides: Partial<AppConfig> = {}): AppConfig {
   return {
@@ -51,6 +52,8 @@ export function testConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     },
     githubWebhookSecret: TEST_WEBHOOK_SECRET,
     cronSecret: TEST_CRON_SECRET,
+    webProxySecret: TEST_PROXY_SECRET,
+    sentry: { dsn: null, environment: 'test', release: null },
     realtime: {
       secret: 'test-realtime-secret-0123456789abcdef',
       redisUrl: null,

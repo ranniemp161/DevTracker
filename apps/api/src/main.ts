@@ -7,6 +7,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { APP_CONFIG, type AppConfig } from './config/app-config';
 import { configureApp, setupRealtime } from './configure-app';
+import { initSentry } from './observability/sentry';
 
 // Local development reads the repository-root `.env`; deployed environments inject variables.
 const rootEnv = resolve(process.cwd(), '../../.env');
@@ -19,6 +20,7 @@ async function bootstrap() {
   const config = app.get<AppConfig>(APP_CONFIG);
   configureApp(app, config);
   await setupRealtime(app, config);
+  initSentry(config);
   await app.listen(config.port);
   new Logger('Bootstrap').log(`DevTrack API listening on port ${config.port}`);
 }

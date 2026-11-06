@@ -13,6 +13,7 @@ import {
 import { ErrorCode } from '@devtrack/types';
 import { AppException } from '../../common/errors/app.exception';
 import { describeError } from '../../common/filters/all-exceptions.filter';
+import { reportError } from '../../observability/sentry';
 import { APP_CONFIG, type AppConfig } from '../../config/app-config';
 import { DATABASE } from '../../database/database.module';
 import { GithubEventProcessor } from './github-event-processor.service';
@@ -175,6 +176,11 @@ export class WebhookDeliveriesService {
         `GitHub delivery ${claimed.deliveryId} (${claimed.eventType}) failed on attempt ${claimed.attempts}`,
         describeError(err),
       );
+      reportError(err, {
+        deliveryId: claimed.deliveryId,
+        event: claimed.eventType,
+        attempt: claimed.attempts,
+      });
       await this.db
         .update(githubWebhookDeliveries)
         .set({ processingStatus: 'FAILED', errorMessage: shortError(err) })

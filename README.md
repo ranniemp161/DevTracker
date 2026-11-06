@@ -5,7 +5,7 @@ DevTrack is an internal engineering project management platform with first-class
 - **Architecture reference:** [DEVTRACK_ARCHITECTURE.md](DEVTRACK_ARCHITECTURE.md)
 - **Decision records:** [Docs/decisions/](Docs/decisions/)
 
-**Status:** M1–M6 are merged. M7 (real-time updates) is on the `m7-realtime` branch.
+**Status:** M1–M7 are merged. M8 (release readiness) is on the `m8-release` branch. To deploy, follow [Docs/deploy-runbook.md](Docs/deploy-runbook.md); release sign-off uses [Docs/release-checklist.md](Docs/release-checklist.md).
 
 ## Repository layout
 
@@ -214,3 +214,14 @@ Rules: [Docs/decisions/0007-realtime.md](Docs/decisions/0007-realtime.md). Event
 | GET    | `/internal/realtime/outbox/flush` | Scheduler, `Authorization: Bearer $CRON_SECRET`                                              |
 
 Rooms: `user:<id>` (joined automatically), `project:<id>` and `workspace:<id>` (joined through `subscribe`, which checks access). Locally, no Redis is needed; the website connects to `NEXT_PUBLIC_REALTIME_URL` (default `http://localhost:4000`).
+
+## Operations (M8)
+
+Rules: [Docs/decisions/0008-release-readiness.md](Docs/decisions/0008-release-readiness.md). All of these use `Authorization: Bearer $CRON_SECRET`, and the scheduled GitHub Actions workflow calls them.
+
+| Method | Endpoint                      | Purpose                                                                   |
+| ------ | ----------------------------- | ------------------------------------------------------------------------- |
+| GET    | `/internal/status`            | Outbox backlog and webhook delivery health (failed, retryable, exhausted) |
+| GET    | `/internal/maintenance/prune` | Daily retention cleanup                                                   |
+
+Production email goes through Resend (`MAIL_TRANSPORT=resend`). Errors go to Sentry when `SENTRY_DSN` and `NEXT_PUBLIC_SENTRY_DSN` are set.

@@ -1,4 +1,4 @@
-/** Transport-agnostic mail interface (email provider is open decision #1). */
+/** Transport-agnostic mail interface. Providers: console (development), Resend (0008). */
 export const MAILER = Symbol('MAILER');
 
 export interface MailMessage {

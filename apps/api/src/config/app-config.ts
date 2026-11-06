@@ -21,9 +21,13 @@ export interface AppConfig {
   githubWebhookSecret: string | null;
   /** Bearer secret for the scheduled delivery-retry job (M6). Null: the job is disabled. */
   cronSecret: string | null;
+  /** Shared with the website's proxy so the API can trust its client-IP header (M8). */
+  webProxySecret: string | null;
+  /** Error tracking (M8). Null DSN: disabled. */
+  sentry: { dsn: string | null; environment: string; release: string | null };
   /** Socket.IO (M7, decision record 0007). */
   realtime: RealtimeConfig;
-  mail: { transport: 'console'; from: string };
+  mail: MailConfig;
 }
 
 export interface GithubOAuthConfig {
@@ -43,6 +47,10 @@ export interface GithubAppConfig {
   /** PEM-encoded RSA private key, used to sign App JWTs. */
   privateKey: string;
 }
+
+/** Console prints emails (development only). Resend is the production provider (0008). */
+export type MailConfig =
+  { transport: 'console'; from: string } | { transport: 'resend'; from: string; apiKey: string };
 
 export interface RealtimeConfig {
   /** HMAC key for short-lived connection tickets. */
@@ -96,7 +104,9 @@ const optionalString = z
 const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-    API_PORT: z.coerce.number().int().positive().default(4000),
+    API_PORT: z.coerce.number().int().positive().optional(),
+    // Set by hosting platforms (e.g. Vercel); API_PORT wins when both are set.
+    PORT: z.coerce.number().int().positive().optional(),
     DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
     WEB_ORIGIN: z.url().transform((v) => new URL(v).origin),
     TRUST_PROXY: z
@@ -138,7 +148,15 @@ const envSchema = z
         .regex(/^rediss?:\/\//, { error: 'must be a redis:// or rediss:// URL' })
         .optional(),
     ),
-    MAIL_TRANSPORT: z.enum(['console']).default('console'),
+    MAIL_TRANSPORT: z.enum(['console', 'resend']).default('console'),
+    RESEND_API_KEY: optionalString,
+    WEB_PROXY_SECRET: optionalString.pipe(
+      z.string().min(32, { error: 'must be at least 32 characters' }).optional(),
+    ),
+    SENTRY_DSN: optionalString.pipe(z.url().optional()),
+    // Set by Vercel: 'production', 'preview' or 'development'; the git commit SHA.
+    VERCEL_ENV: optionalString,
+    VERCEL_GIT_COMMIT_SHA: optionalString,
     MAIL_FROM: z.string().min(1).default('DevTrack <no-reply@devtrack.local>'),
   })
   .superRefine((env, ctx) => {
@@ -155,8 +173,7 @@ const envSchema = z
         ctx.addIssue({
           code: 'custom',
           path: ['MAIL_TRANSPORT'],
-          message:
-            'console transport is not allowed in production (email provider is an open decision)',
+          message: 'console transport is not allowed in production (use resend)',
         });
       }
       if (env.GITHUB_APP_ID && !env.GITHUB_APP_WEBHOOK_SECRET) {
@@ -175,6 +192,14 @@ const envSchema = z
           message: 'is required in production',
         });
       }
+      if (!env.WEB_PROXY_SECRET) {
+        // Without it every user shares the website's IP and its rate-limit buckets.
+        ctx.addIssue({
+          code: 'custom',
+          path: ['WEB_PROXY_SECRET'],
+          message: 'is required in production',
+        });
+      }
       if (!env.REDIS_URL) {
         ctx.addIssue({ code: 'custom', path: ['REDIS_URL'], message: 'is required in production' });
       }
@@ -184,6 +209,13 @@ const envSchema = z
         code: 'custom',
         path: ['GITHUB_OAUTH_CLIENT_SECRET'],
         message: 'GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET must be set together',
+      });
+    }
+    if (env.MAIL_TRANSPORT === 'resend' && !env.RESEND_API_KEY) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['RESEND_API_KEY'],
+        message: 'is required when MAIL_TRANSPORT=resend',
       });
     }
     const appVars = GITHUB_APP_VARS.filter((name) => Boolean(env[name]));
@@ -217,7 +249,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   return {
     nodeEnv: e.NODE_ENV,
     isProduction: e.NODE_ENV === 'production',
-    port: e.API_PORT,
+    port: e.API_PORT ?? e.PORT ?? 4000,
     databaseUrl: e.DATABASE_URL,
     webOrigin: e.WEB_ORIGIN,
     trustProxy: e.TRUST_PROXY,
@@ -245,6 +277,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
             privateKey: normalizePrivateKey(e.GITHUB_APP_PRIVATE_KEY)!,
           }
         : null,
+    webProxySecret: e.WEB_PROXY_SECRET ?? null,
+    sentry: {
+      dsn: e.SENTRY_DSN ?? null,
+      environment: e.VERCEL_ENV ?? e.NODE_ENV,
+      release: e.VERCEL_GIT_COMMIT_SHA ?? null,
+    },
     githubWebhookSecret: e.GITHUB_APP_WEBHOOK_SECRET ?? null,
     cronSecret: e.CRON_SECRET ?? null,
     realtime: {
@@ -254,6 +292,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       maxConnectionMs: REALTIME_MAX_CONNECTION_MS,
       publishAfterResponse: true,
     },
-    mail: { transport: e.MAIL_TRANSPORT, from: e.MAIL_FROM },
+    mail:
+      e.MAIL_TRANSPORT === 'resend'
+        ? { transport: 'resend', from: e.MAIL_FROM, apiKey: e.RESEND_API_KEY! }
+        : { transport: 'console', from: e.MAIL_FROM },
   };
 }

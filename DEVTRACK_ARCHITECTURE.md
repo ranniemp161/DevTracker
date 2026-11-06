@@ -1,7 +1,7 @@
 # DevTrack — MVP Architecture & Engineering Overview
 
 **Document status:** Architecture baseline for MVP implementation  
-**Version:** 1.7 (M1–M7 decisions recorded; see `Docs/decisions/`)  
+**Version:** 1.8 (M1–M8 decisions recorded; see `Docs/decisions/`)  
 **Last updated:** 2026-11-06  
 **Purpose:** Give Claude and other engineering agents a self-contained overview of the DevTrack product, architecture, constraints, and implementation plan.
 
@@ -860,6 +860,8 @@ Base path:
 | GET | `/internal/github/deliveries/retry` | Scheduled retry of failed webhook deliveries (bearer `CRON_SECRET`; M6 addition) |
 | POST | `/realtime/token` | 60-second socket connection ticket (M7 addition) |
 | GET | `/internal/realtime/outbox/flush` | Scheduled outbox sweep (bearer `CRON_SECRET`; M7 addition) |
+| GET | `/internal/status` | Outbox and webhook health (bearer `CRON_SECRET`; M8 addition) |
+| GET | `/internal/maintenance/prune` | Daily retention cleanup (bearer `CRON_SECRET`; M8 addition) |
 
 Public GitHub webhook endpoint:
 
@@ -1459,13 +1461,13 @@ Keep the MVP focused on the core engineering workflow.
 
 These are intentionally not hard-coded into the architecture yet.
 
-1. **Email provider:** Choose a transactional email service for verification, invitations, and password resets.
+1. ~~**Email provider:**~~ **Resolved in M8.** Resend (`MAIL_TRANSPORT=resend`). See `Docs/decisions/0008-release-readiness.md`.
 2. **Redis provider:** Choose a managed Redis provider compatible with the selected Socket.IO adapter and deployment. *M7: Redis through the Socket.IO Redis adapter, configured by `REDIS_URL` (Upstash from the Vercel Marketplace expected); required in production. See `Docs/decisions/0007-realtime.md`.*
 3. **Real-time hosting validation:** Verify current Vercel WebSocket/runtime behavior and choose direct Socket.IO hosting or managed real-time delivery accordingly. *M7: Vercel Functions support WebSockets (GA 2026-10-20). Socket.IO runs in the Nest API on Vercel, WebSocket transport only, with ticket authentication, a 4.5-minute server-side connection limit and outbox publishing after each write plus a GitHub Actions sweep (Hobby plan). Running a Nest gateway on Vercel is still to be confirmed with a deploy in M8. See `Docs/decisions/0007-realtime.md`.*
-4. ~~**Session implementation:**~~ **Resolved in M1.** Opaque, database-backed sessions, with no session library. See `Docs/decisions/0001-authentication-and-sessions.md`. The Vercel proxy and client-IP behaviour still need checking in M8.
+4. ~~**Session implementation:**~~ **Resolved in M1.** Opaque, database-backed sessions, with no session library. See `Docs/decisions/0001-authentication-and-sessions.md`. M8: the website proxy forwards the client IP to the API in a header trusted only with `WEB_PROXY_SECRET` (0008 §4).
 5. **GitHub App details:** Register the app, validate exact permissions, webhook subscriptions, callback URLs, and installation lifecycle. *M5: installation is verified with user authorization during installation; installation tokens are minted on demand and never stored; repositories may be shared by projects of one workspace; registration settings and permissions are listed. The live install flow was confirmed on 2026-11-06. M6: webhook subscriptions (push, pull request, pull request review, release, plus installation lifecycle), signature checking, and inline processing with a cron-driven retry. See `Docs/decisions/0005-github-app-setup.md` and `0006-github-events.md`.*
 6. ~~**Task deletion policy:**~~ **Resolved in M3.** Soft deletion (`tasks.deleted_at`), by the reporter or a workspace Admin/Owner. See `Docs/decisions/0003-projects-and-tasks.md`.
-7. **Activity retention:** Define retention and payload minimization for raw webhook deliveries and activity records. *M4: payloads are minimized (no comment or description text); everything is kept for the MVP and pruning is decided in M8. M6: raw webhook payloads are cleared once a delivery is processed or ignored (kept only on failures, for retry). See `Docs/decisions/0004-collaboration.md` and `0006-github-events.md`.*
+7. ~~**Activity retention:**~~ **Resolved in M8** (0008 §3: deliveries 30 days, published outbox 7 days, read notifications 90 days, expired auth data removed, product history kept). Define retention and payload minimization for raw webhook deliveries and activity records. *M4: payloads are minimized (no comment or description text); everything is kept for the MVP and pruning is decided in M8. M6: raw webhook payloads are cleared once a delivery is processed or ignored (kept only on failures, for retry). See `Docs/decisions/0004-collaboration.md` and `0006-github-events.md`.*
 
 Do not guess these details. Validate them during the relevant implementation milestone and document the final decision.
 

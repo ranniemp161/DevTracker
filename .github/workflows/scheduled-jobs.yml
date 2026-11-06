@@ -1,35 +1,64 @@
 name: Scheduled jobs
 
-# Vercel Hobby runs cron jobs only once a day, so GitHub Actions triggers the API's recovery
-# jobs instead (decision record 0007). Both are idempotent and safe to run at any time.
+# Vercel Hobby runs cron jobs only once a day, so GitHub Actions triggers the API's jobs instead
+# (decision records 0007 and 0008). All jobs are idempotent and safe to run at any time.
 # Configure in the repository settings:
 #   - variable  API_URL      e.g. https://devtrack-api.vercel.app (no trailing slash)
 #   - secret    CRON_SECRET  the same value as the API's CRON_SECRET
-# Until API_URL is set, the job is skipped.
+# Until API_URL is set, every job is skipped. GitHub emails the repository owner when a run fails,
+# which is the alert for a stuck outbox or failing webhooks.
 
 on:
   schedule:
-    # Every 10 minutes. GitHub may delay scheduled runs under load; that is acceptable here.
+    # Every 10 minutes: recovery and health check. GitHub may delay scheduled runs under load.
     - cron: '*/10 * * * *'
+    # Daily at 03:17 UTC: retention cleanup.
+    - cron: '17 3 * * *'
   workflow_dispatch:
 
 permissions: {}
 
+env:
+  CURL: curl --fail-with-body --silent --show-error --max-time 60
+
 jobs:
-  run:
-    if: ${{ vars.API_URL != '' }}
+  recover:
+    if: ${{ vars.API_URL != '' && github.event.schedule != '17 3 * * *' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Retry failed GitHub webhook deliveries
-        run: >
-          curl --fail-with-body --silent --show-error --max-time 60
-          -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
-          "${{ vars.API_URL }}/api/v1/internal/github/deliveries/retry"
+        run: |
+          $CURL -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" "${{ vars.API_URL }}/api/v1/internal/github/deliveries/retry"
 
       - name: Publish outbox events the after-response flush missed
         if: ${{ always() }}
-        run: >
-          curl --fail-with-body --silent --show-error --max-time 60
-          -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
-          "${{ vars.API_URL }}/api/v1/internal/realtime/outbox/flush"
+        run: |
+          $CURL -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" "${{ vars.API_URL }}/api/v1/internal/realtime/outbox/flush"
+
+      - name: Health check (fails, and emails the owner, when something is stuck)
+        if: ${{ always() }}
+        run: |
+          status=$($CURL -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" "${{ vars.API_URL }}/api/v1/internal/status")
+          echo "$status" | jq .data
+          oldest=$(echo "$status" | jq -r '.data.outbox.oldestUnpublishedAt // empty')
+          exhausted=$(echo "$status" | jq '.data.webhooks.exhaustedLast24h')
+          problems=0
+          if [ -n "$oldest" ] && [ $(( $(date +%s) - $(date -d "$oldest" +%s) )) -gt 1800 ]; then
+            echo "::error::Outbox events have been unpublished for more than 30 minutes (oldest: $oldest)."
+            problems=1
+          fi
+          if [ "$exhausted" -gt 0 ]; then
+            echo "::error::$exhausted webhook deliveries failed every retry in the last 24 hours. Check the API logs and Sentry."
+            problems=1
+          fi
+          exit $problems
+
+  prune:
+    if: ${{ vars.API_URL != '' && (github.event.schedule == '17 3 * * *' || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Retention cleanup
+        run: |
+          $CURL -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" "${{ vars.API_URL }}/api/v1/internal/maintenance/prune"

@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { APP_CONFIG, type AppConfig } from '../config/app-config';
 import { ConsoleMailer } from './console.mailer';
 import { MAILER, type Mailer } from './mailer';
+import { ResendMailer } from './resend.mailer';
 
 @Global()
 @Module({
@@ -13,6 +14,8 @@ import { MAILER, type Mailer } from './mailer';
         switch (config.mail.transport) {
           case 'console':
             return new ConsoleMailer();
+          case 'resend':
+            return new ResendMailer(config.mail.apiKey, config.mail.from);
         }
       },
     },
