@@ -3,6 +3,7 @@ import { asc, inArray, isNull, outboxEvents, sql, type Database } from '@devtrac
 import type { Server } from 'socket.io';
 import { describeError } from '../common/filters/all-exceptions.filter';
 import { DATABASE } from '../database/database.module';
+import { reportError } from '../observability/sentry';
 import { roomsFor, type OutboxEnvelope } from './rooms';
 
 /** Rows per transaction. */
@@ -75,6 +76,7 @@ export class OutboxPublisher {
       await this.flush();
     } catch (err) {
       this.logger.error('Outbox flush failed', describeError(err));
+      reportError(err, { job: 'outbox-flush' });
     }
   }
 

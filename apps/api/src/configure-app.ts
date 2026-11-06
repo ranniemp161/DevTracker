@@ -2,7 +2,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
 import { raw } from 'express';
 import helmet from 'helmet';
-import { requestIdMiddleware } from './common/http/request-context';
+import { clientIpMiddleware, requestIdMiddleware } from './common/http/request-context';
 import type { AppConfig } from './config/app-config';
 import { RealtimeIoAdapter } from './realtime/realtime-io.adapter';
 
@@ -16,6 +16,7 @@ export function configureApp(app: NestExpressApplication, config: AppConfig): vo
   app.set('trust proxy', config.trustProxy);
   app.disable('x-powered-by');
   app.use(requestIdMiddleware);
+  app.use(clientIpMiddleware(config.webProxySecret));
   app.use(helmet());
   // GitHub signs the exact bytes it sends, so the webhook keeps its raw body (§11.5). This is
   // registered before Nest's JSON parser, which then skips the already-read body. Push payloads

@@ -673,6 +673,7 @@ describe('importing existing pull requests', () => {
   const history = () => [
     pr({
       id: 9101,
+      created_at: '2026-11-04T10:00:00Z',
       number: 2,
       title: 'Old fix for DEV-1',
       head: { ref: 'fix/old' },
@@ -683,6 +684,7 @@ describe('importing existing pull requests', () => {
     }),
     pr({
       id: 9102,
+      created_at: '2026-11-05T09:00:00Z',
       number: 3,
       title: 'Still open',
       head: { ref: 'feature/x' },

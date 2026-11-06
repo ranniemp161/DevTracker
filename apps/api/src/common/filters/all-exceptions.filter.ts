@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { ErrorCode, type ApiErrorBody } from '@devtrack/types';
 import type { Request, Response } from 'express';
+import { reportError } from '../../observability/sentry';
 import { AppException } from '../errors/app.exception';
 
 const STATUS_TO_CODE: Partial<Record<number, ErrorCode>> = {
@@ -44,6 +45,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       // WebSocket handlers answer through acknowledgements and catch expected errors
       // themselves; anything reaching here is unexpected. Log it; never write an HTTP reply.
       this.logger.error(`Unhandled ${host.getType()} error`, describeError(exception));
+      reportError(exception, { context: host.getType() });
       return;
     }
     const ctx = host.switchToHttp();
@@ -92,6 +94,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
         { requestId, method: req.method, path: req.path, status },
         describeError(exception),
       );
+      reportError(exception, {
+        requestId,
+        method: req.method,
+        path: req.route?.path ?? req.path,
+        status,
+      });
     }
 
     if (res.headersSent) return;

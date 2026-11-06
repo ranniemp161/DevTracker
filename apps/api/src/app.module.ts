@@ -15,6 +15,7 @@ import { HealthController } from './health/health.controller';
 import { InvitationsModule } from './invitations/invitations.module';
 import { LabelsModule } from './labels/labels.module';
 import { MailModule } from './mail/mail.module';
+import { MaintenanceModule } from './maintenance/maintenance.module';
 import { MembersModule } from './members/members.module';
 import { MilestonesModule } from './milestones/milestones.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -42,6 +43,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
     NotificationsModule,
     GithubModule,
     RealtimeModule,
+    MaintenanceModule,
   ],
   controllers: [HealthController],
   providers: [
