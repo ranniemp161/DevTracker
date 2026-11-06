@@ -29,6 +29,7 @@ export const RATE_LIMITS = {
     limit: 200,
     windowSeconds: 86400,
   },
+  taskCreatePerUser: { name: 'task-create:user', limit: 600, windowSeconds: 3600 },
   invitationAcceptPerUser: { name: 'invite-accept:user', limit: 20, windowSeconds: 900 },
 } as const satisfies Record<string, RateLimitRule>;
 

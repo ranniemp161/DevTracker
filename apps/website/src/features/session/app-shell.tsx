@@ -73,7 +73,7 @@ function Header({ user, workspaces }: { user: PublicUser; workspaces: WorkspaceS
           <label className="flex items-center gap-2 text-sm">
             <span className="sr-only">Workspace</span>
             <select
-              value={params.id ?? ''}
+              value={workspaces.some((w) => w.id === params.id) ? params.id : ''}
               onChange={(e) => router.push(e.target.value ? `/workspaces/${e.target.value}` : '/')}
               className="rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm"
             >

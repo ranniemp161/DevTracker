@@ -15,6 +15,20 @@
       "when": 1793904969947,
       "tag": "0001_workspaces",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793907447064,
+      "tag": "0002_projects_tasks",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793940761245,
+      "tag": "0003_labels_milestones",
+      "breakpoints": true
     }
   ]
 }

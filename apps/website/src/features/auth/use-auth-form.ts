@@ -1,16 +1,27 @@
 'use client';
 
 import { useState, type ChangeEvent, type FormEvent } from 'react';
-import type { z } from 'zod';
+import { z } from 'zod';
 import { ApiError } from '@/lib/api';
 
+/** Wraps a schema so empty form inputs count as "not provided" (for optional fields). */
+export function withoutBlanks<S extends z.ZodType>(schema: S) {
+  return z.preprocess(
+    (v) =>
+      v && typeof v === 'object'
+        ? Object.fromEntries(Object.entries(v).filter(([, x]) => x !== ''))
+        : v,
+    schema,
+  );
+}
+
 /**
- * Minimal form state for the auth screens: validates with the same shared schema the API
- * uses, then shows server-side field errors and messages from the API error envelope.
+ * Minimal form state: validates with the same shared schema the API uses, then shows
+ * server-side field errors and messages from the API error envelope.
  */
-export function useAuthForm<S extends z.ZodObject>(
+export function useAuthForm<S extends z.ZodType, V extends Record<string, string>>(
   schema: S,
-  initial: Record<keyof z.input<S> & string, string>,
+  initial: V,
   submit: (values: z.output<S>) => Promise<void>,
 ) {
   const [values, setValues] = useState(initial);

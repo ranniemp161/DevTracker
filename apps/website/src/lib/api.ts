@@ -60,3 +60,34 @@ export async function api<T>(
   }
   return (json as { data: T }).data;
 }
+
+export interface Page<T> {
+  items: T[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+/** GET a cursor-paginated list: `{ data: T[], meta: { nextCursor, hasMore } }`. */
+export async function apiPage<T>(path: string): Promise<Page<T>> {
+  const res = await fetch(`/api/v1${path}`, {
+    credentials: 'same-origin',
+    cache: 'no-store',
+  }).catch(() => {
+    throw new ApiError(
+      0,
+      'NETWORK_ERROR',
+      'Could not reach DevTrack. Check your connection and try again.',
+    );
+  });
+  const json: unknown = await res.json().catch(() => null);
+  if (!res.ok) {
+    const err = (json as Partial<ApiErrorBody> | null)?.error;
+    throw new ApiError(
+      res.status,
+      err?.code ?? 'INTERNAL_ERROR',
+      err?.message ?? 'Something went wrong.',
+    );
+  }
+  const page = json as { data: T[]; meta: { nextCursor: string | null; hasMore: boolean } };
+  return { items: page.data, nextCursor: page.meta.nextCursor, hasMore: page.meta.hasMore };
+}

@@ -9,8 +9,12 @@ import { ConfigModule } from './config/config.module';
 import { DatabaseModule } from './database/database.module';
 import { HealthController } from './health/health.controller';
 import { InvitationsModule } from './invitations/invitations.module';
+import { LabelsModule } from './labels/labels.module';
 import { MailModule } from './mail/mail.module';
 import { MembersModule } from './members/members.module';
+import { MilestonesModule } from './milestones/milestones.module';
+import { ProjectsModule } from './projects/projects.module';
+import { TasksModule } from './tasks/tasks.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 
 @Module({
@@ -22,6 +26,10 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
     WorkspacesModule,
     MembersModule,
     InvitationsModule,
+    ProjectsModule,
+    TasksModule,
+    LabelsModule,
+    MilestonesModule,
   ],
   controllers: [HealthController],
   providers: [

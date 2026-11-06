@@ -47,6 +47,7 @@ export function WorkspaceLayout({ children }: { children: ReactNode }) {
   const base = `/workspaces/${workspace.id}`;
   const tabs = [
     { href: base, label: 'Overview' },
+    { href: `${base}/projects`, label: 'Projects' },
     { href: `${base}/members`, label: 'Members' },
     ...(isAdmin(workspace.role) ? [{ href: `${base}/settings`, label: 'Settings' }] : []),
   ];
@@ -63,7 +64,7 @@ export function WorkspaceLayout({ children }: { children: ReactNode }) {
           </div>
           <nav className="mt-4 flex gap-1 border-b border-neutral-200" aria-label="Workspace">
             {tabs.map((tab) => {
-              const active = pathname === tab.href;
+              const active = tab.href === base ? pathname === base : pathname.startsWith(tab.href);
               return (
                 <Link
                   key={tab.href}

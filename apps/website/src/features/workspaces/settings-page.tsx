@@ -8,6 +8,7 @@ import { Alert, Button, Card, Field, SubmitButton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useAuthForm } from '../auth/use-auth-form';
 import { useSession } from '../session/session-context';
+import { LabelsSettings } from './labels-settings';
 import { isAdmin } from './permissions';
 import { useWorkspace } from './workspace-context';
 
@@ -19,6 +20,7 @@ export function SettingsPage() {
   return (
     <div className="space-y-6">
       <RenameCard />
+      <LabelsSettings />
       {workspace.role === 'OWNER' ? <ArchiveCard /> : null}
     </div>
   );
