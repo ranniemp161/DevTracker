@@ -12,6 +12,7 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "db:generate": "pnpm --filter @devtrack/database db:generate",
     "db:migrate": "pnpm --filter @devtrack/database db:migrate"
   },
