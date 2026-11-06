@@ -100,3 +100,17 @@ describe('loadConfig: GitHub App', () => {
     expect(message).not.toContain('SECRET');
   });
 });
+
+describe('loadConfig: webhook and cron secrets', () => {
+  it('reads both secrets and requires at least 16 characters', () => {
+    const config = loadConfig({
+      ...base,
+      GITHUB_APP_WEBHOOK_SECRET: 'w'.repeat(16),
+      CRON_SECRET: 'c'.repeat(32),
+    });
+    expect(config.githubWebhookSecret).toBe('w'.repeat(16));
+    expect(config.cronSecret).toBe('c'.repeat(32));
+    expect(loadConfig(base)).toMatchObject({ githubWebhookSecret: null, cronSecret: null });
+    expect(() => loadConfig({ ...base, CRON_SECRET: 'short' })).toThrow(/CRON_SECRET/);
+  });
+});

@@ -19,7 +19,14 @@ export interface ActivityInput extends Scope {
   taskId?: string | null;
   actor: Actor | null;
   entity: {
-    type: 'task' | 'comment' | 'project' | 'milestone' | 'github_installation';
+    type:
+      | 'task'
+      | 'comment'
+      | 'project'
+      | 'milestone'
+      | 'github_installation'
+      | 'pull_request'
+      | 'repository';
     id: string;
   };
   action: ActivityAction;
