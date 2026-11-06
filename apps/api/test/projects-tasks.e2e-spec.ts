@@ -37,14 +37,12 @@ async function setup() {
   await join(owner!, ws, admin!, 'ADMIN');
   await join(owner!, ws, dev!, 'MEMBER');
   await join(owner!, ws, bystander!, 'MEMBER');
-  const created = await owner!.browser
-    .post(`/api/v1/workspaces/${ws}/projects`)
-    .send({
-      name: 'Developer Platform',
-      key: 'dev',
-      startDate: '2026-11-01',
-      targetDate: '2026-12-31',
-    });
+  const created = await owner!.browser.post(`/api/v1/workspaces/${ws}/projects`).send({
+    name: 'Developer Platform',
+    key: 'dev',
+    startDate: '2026-11-01',
+    targetDate: '2026-12-31',
+  });
   expect(created.status).toBe(201);
   const project = created.body.data.project.id as string;
   await owner!.browser

@@ -15,6 +15,8 @@ import { api, ApiError } from '@/lib/api';
 import { useApiQuery } from '@/lib/use-api-query';
 import { useSession } from '../session/session-context';
 import { formatDate, PRIORITY_LABEL, TASK_STATUS_LABEL } from './labels';
+import { ActivityFeed } from '../collaboration/activity-feed';
+import { CommentThread } from '../collaboration/comment-thread';
 import { useProject } from './project-context';
 import { TaskLabels } from './task-labels';
 
@@ -22,6 +24,9 @@ export function TaskDetail() {
   const { taskId } = useParams<{ taskId: string }>();
   const query = useApiQuery<{ task: Task }>(`/tasks/${taskId}`);
   const { project } = useProject();
+  // Bumped after comments/edits so the History list re-fetches.
+  const [history, setHistory] = useState(0);
+  const bumpHistory = () => setHistory((h) => h + 1);
 
   if (query.error) {
     return (
@@ -38,9 +43,30 @@ export function TaskDetail() {
     );
   }
   if (!query.data) return <p className="text-sm text-neutral-500">Loading task…</p>;
+  const task = query.data.task;
   // Re-mount the editor when the task changes on the server so the form shows fresh values.
   return (
-    <TaskEditor key={query.data.task.updatedAt} task={query.data.task} onSaved={query.reload} />
+    <div className="space-y-8">
+      <TaskEditor
+        key={task.updatedAt}
+        task={task}
+        onSaved={() => {
+          query.reload();
+          bumpHistory();
+        }}
+      />
+      <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
+        <CommentThread task={task} onActivity={bumpHistory} />
+        <Card title="History">
+          <ActivityFeed
+            projectId={project.id}
+            taskId={task.id}
+            limit={15}
+            refreshKey={`${task.updatedAt}:${history}`}
+          />
+        </Card>
+      </div>
+    </div>
   );
 }
 

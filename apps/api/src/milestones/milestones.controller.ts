@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import type { Milestone } from '@devtrack/types';
 import {
   createMilestoneSchema,
@@ -18,7 +28,10 @@ export class MilestonesController {
   constructor(private readonly milestones: MilestonesService) {}
 
   @Get('projects/:id/milestones')
-  list(@CurrentUser() user: User, @Param('id', UuidParamPipe) projectId: string): Promise<Milestone[]> {
+  list(
+    @CurrentUser() user: User,
+    @Param('id', UuidParamPipe) projectId: string,
+  ): Promise<Milestone[]> {
     return this.milestones.list(user.id, projectId);
   }
 
@@ -38,7 +51,7 @@ export class MilestonesController {
     @Param('id', UuidParamPipe) id: string,
     @Body(new ZodValidationPipe(updateMilestoneSchema)) body: UpdateMilestoneInput,
   ): Promise<{ milestone: Milestone }> {
-    return { milestone: await this.milestones.update(user.id, id, body) };
+    return { milestone: await this.milestones.update(user, id, body) };
   }
 
   @Delete('milestones/:id')

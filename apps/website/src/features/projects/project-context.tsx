@@ -54,6 +54,7 @@ export function ProjectLayout({ children }: { children: ReactNode }) {
     { href: base, label: 'Board' },
     { href: `${base}/list`, label: 'List' },
     { href: `${base}/milestones`, label: 'Milestones' },
+    { href: `${base}/activity`, label: 'Activity' },
     { href: `${base}/members`, label: 'Members' },
     ...(p.viewerCanManage ? [{ href: `${base}/settings`, label: 'Settings' }] : []),
   ];

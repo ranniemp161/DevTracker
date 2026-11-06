@@ -29,15 +29,11 @@ import {
 import type { CreateTaskInput, ListTasksQuery, UpdateTaskInput } from '@devtrack/validators';
 import { AppException } from '../common/errors/app.exception';
 import { decodeCursor, encodeCursor, Paginated } from '../common/http/paginated';
-import { isUuid } from '../common/pipes/uuid-param.pipe';
 import { DATABASE } from '../database/database.module';
-import {
-  ProjectAccessService,
-  type ProjectAccess,
-  type ProjectAccessOptions,
-} from '../projects/project-access.service';
+import { EventRecorder, type Actor } from '../events/event-recorder.service';
+import { ProjectAccessService, type ProjectRow } from '../projects/project-access.service';
+import { TaskAccessService, type TaskRow } from './task-access.service';
 
-type TaskRow = typeof tasks.$inferSelect;
 const userRef = { id: users.id, username: users.username, avatarUrl: users.avatarUrl };
 
 interface TaskCursor {
@@ -52,19 +48,24 @@ function completionFor(next: TaskStatus, current: TaskRow | null): Date | null |
   return next === 'DONE' ? new Date() : null;
 }
 
+const taskKey = (project: Pick<ProjectRow, 'key'>, task: Pick<TaskRow, 'taskNumber'>) =>
+  `${project.key}-${task.taskNumber}`;
+
 @Injectable()
 export class TasksService {
   constructor(
     @Inject(DATABASE) private readonly db: Database,
-    private readonly access: ProjectAccessService,
+    private readonly projectAccess: ProjectAccessService,
+    private readonly taskAccess: TaskAccessService,
+    private readonly events: EventRecorder,
   ) {}
 
   /**
    * Creates a task with the next number for its project. The `UPDATE … RETURNING` row lock on
    * the project serializes concurrent creators; numbers are never reused (§7.3, M3 rule 4).
    */
-  async create(userId: string, projectId: string, input: CreateTaskInput): Promise<Task> {
-    const { project } = await this.access.require(userId, projectId, { write: true });
+  async create(actor: Actor, projectId: string, input: CreateTaskInput): Promise<Task> {
+    const { project } = await this.projectAccess.require(actor.id, projectId, { write: true });
     const assigneeIds = input.assigneeIds ?? [];
     await this.assertProjectMembers(projectId, assigneeIds);
     const status = input.status ?? 'TODO';
@@ -86,24 +87,33 @@ export class TasksService {
           description: input.description ?? null,
           status,
           priority: input.priority ?? 'MEDIUM',
-          reporterId: userId,
+          reporterId: actor.id,
           dueDate: input.dueDate ?? null,
           completedAt: status === 'DONE' ? new Date() : null,
         })
-        .returning({ id: tasks.id });
+        .returning();
       if (assigneeIds.length > 0) {
         await tx
           .insert(taskAssignees)
           .values(assigneeIds.map((id) => ({ taskId: task!.id, userId: id })));
       }
+
+      await this.events.activity(tx, {
+        ...scope(project, task!),
+        actor,
+        action: 'task.created',
+        metadata: { key: taskKey(project, task!), title: task!.title, status },
+        event: { type: 'task.created', payload: { taskId: task!.id, status } },
+      });
+      await this.notifyAssigned(tx, actor, project, task!, assigneeIds);
       return task!.id;
     });
     return (await this.load([taskId], project.key))[0]!;
   }
 
-  /** Newest first, cursor-paginated, with optional status/priority/assignee filters (M3 rule 9). */
+  /** Newest first, cursor-paginated, with optional filters (M3 rule 9). */
   async list(userId: string, projectId: string, query: ListTasksQuery): Promise<Paginated<Task>> {
-    const { project } = await this.access.require(userId, projectId);
+    const { project } = await this.projectAccess.require(userId, projectId);
     const conditions: SQL[] = [eq(tasks.projectId, projectId), isNull(tasks.deletedAt)];
     if (query.status) conditions.push(eq(tasks.status, query.status));
     if (query.priority) conditions.push(eq(tasks.priority, query.priority));
@@ -129,8 +139,9 @@ export class TasksService {
         ),
       );
     }
-    if (query.cursor)
+    if (query.cursor) {
       conditions.push(lt(tasks.taskNumber, decodeCursor(query.cursor, isTaskCursor).n));
+    }
 
     const rows = await this.db
       .select({ id: tasks.id, number: tasks.taskNumber })
@@ -150,53 +161,108 @@ export class TasksService {
   }
 
   async get(userId: string, taskId: string): Promise<Task> {
-    const { task, access } = await this.requireTask(userId, taskId);
+    const { task, access } = await this.taskAccess.require(userId, taskId);
     return (await this.load([task.id], access.project.key))[0]!;
   }
 
-  async update(userId: string, taskId: string, input: UpdateTaskInput): Promise<Task> {
-    const { task, access } = await this.requireTask(userId, taskId, { write: true });
-    await this.db
-      .update(tasks)
-      .set({
-        title: input.title,
-        description: input.description,
-        priority: input.priority,
-        dueDate: input.dueDate,
-        status: input.status,
-        completedAt: input.status ? completionFor(input.status, task) : undefined,
-      })
-      .where(eq(tasks.id, task.id));
+  async update(actor: Actor, taskId: string, input: UpdateTaskInput): Promise<Task> {
+    const { task, access } = await this.taskAccess.require(actor.id, taskId, { write: true });
+    const changes = describeChanges(task, input);
+
+    if (Object.keys(changes).length > 0) {
+      await this.db.transaction(async (tx) => {
+        await tx
+          .update(tasks)
+          .set({
+            title: input.title,
+            description: input.description,
+            priority: input.priority,
+            dueDate: input.dueDate,
+            status: input.status,
+            completedAt: input.status ? completionFor(input.status, task) : undefined,
+          })
+          .where(eq(tasks.id, task.id));
+        await this.events.activity(tx, {
+          ...scope(access.project, task),
+          actor,
+          action: 'task.updated',
+          metadata: { key: taskKey(access.project, task), changes },
+          event: { type: 'task.updated', payload: { taskId: task.id, changes } },
+        });
+      });
+    }
     return (await this.load([task.id], access.project.key))[0]!;
   }
 
   /** Soft delete: the reporter or a workspace Owner/Admin (M3 rule 5). */
-  async remove(userId: string, taskId: string): Promise<void> {
-    const { task, access } = await this.requireTask(userId, taskId, { write: true });
-    if (task.reporterId !== userId && !access.canManage) {
+  async remove(actor: Actor, taskId: string): Promise<void> {
+    const { task, access } = await this.taskAccess.require(actor.id, taskId, { write: true });
+    if (task.reporterId !== actor.id && !access.canManage) {
       throw AppException.forbidden('Only the reporter or a workspace admin can delete this task.');
     }
-    await this.db.update(tasks).set({ deletedAt: new Date() }).where(eq(tasks.id, task.id));
+    await this.db.transaction(async (tx) => {
+      await tx.update(tasks).set({ deletedAt: new Date() }).where(eq(tasks.id, task.id));
+      await this.events.activity(tx, {
+        ...scope(access.project, task),
+        actor,
+        action: 'task.deleted',
+        metadata: { key: taskKey(access.project, task), title: task.title },
+        event: { type: 'task.deleted', payload: { taskId: task.id } },
+      });
+    });
   }
 
-  async addAssignees(userId: string, taskId: string, assigneeIds: string[]): Promise<Task> {
-    const { task, access } = await this.requireTask(userId, taskId, { write: true });
+  async addAssignees(actor: Actor, taskId: string, assigneeIds: string[]): Promise<Task> {
+    const { task, access } = await this.taskAccess.require(actor.id, taskId, { write: true });
     await this.assertProjectMembers(task.projectId, assigneeIds);
-    await this.db
-      .insert(taskAssignees)
-      .values(assigneeIds.map((id) => ({ taskId: task.id, userId: id })))
-      .onConflictDoNothing();
+    await this.db.transaction(async (tx) => {
+      // RETURNING yields only rows actually inserted, i.e. new assignees.
+      const added = await tx
+        .insert(taskAssignees)
+        .values(assigneeIds.map((id) => ({ taskId: task.id, userId: id })))
+        .onConflictDoNothing()
+        .returning({ userId: taskAssignees.userId });
+      const newIds = added.map((a) => a.userId);
+      if (newIds.length === 0) return;
+      const people = await this.usernames(tx, newIds);
+      for (const person of people) {
+        await this.events.activity(tx, {
+          ...scope(access.project, task),
+          actor,
+          action: 'task.assigned',
+          metadata: { key: taskKey(access.project, task), user: person },
+          event: {
+            type: 'task.assigned',
+            payload: { taskId: task.id, userId: person.id, assigned: true },
+          },
+        });
+      }
+      await this.notifyAssigned(tx, actor, access.project, task, newIds);
+    });
     return (await this.load([task.id], access.project.key))[0]!;
   }
 
-  async removeAssignee(userId: string, taskId: string, assigneeId: string): Promise<Task> {
-    const { task, access } = await this.requireTask(userId, taskId, { write: true });
-    const removed = await this.db
-      .delete(taskAssignees)
-      .where(and(eq(taskAssignees.taskId, task.id), eq(taskAssignees.userId, assigneeId)))
-      .returning({ userId: taskAssignees.userId });
-    if (removed.length === 0)
-      throw AppException.notFound('This person is not assigned to the task.');
+  async removeAssignee(actor: Actor, taskId: string, assigneeId: string): Promise<Task> {
+    const { task, access } = await this.taskAccess.require(actor.id, taskId, { write: true });
+    await this.db.transaction(async (tx) => {
+      const removed = await tx
+        .delete(taskAssignees)
+        .where(and(eq(taskAssignees.taskId, task.id), eq(taskAssignees.userId, assigneeId)))
+        .returning({ userId: taskAssignees.userId });
+      if (removed.length === 0)
+        throw AppException.notFound('This person is not assigned to the task.');
+      const [person] = await this.usernames(tx, [assigneeId]);
+      await this.events.activity(tx, {
+        ...scope(access.project, task),
+        actor,
+        action: 'task.unassigned',
+        metadata: { key: taskKey(access.project, task), user: person ?? null },
+        event: {
+          type: 'task.assigned',
+          payload: { taskId: task.id, userId: assigneeId, assigned: false },
+        },
+      });
+    });
     return (await this.load([task.id], access.project.key))[0]!;
   }
 
@@ -204,59 +270,95 @@ export class TasksService {
    * Attaches a workspace label. Labels from another workspace are reported as not found,
    * so they can never be linked across workspaces (architecture §8.4).
    */
-  async addLabel(userId: string, taskId: string, labelId: string): Promise<Task> {
-    const { task, access } = await this.requireTask(userId, taskId, { write: true });
+  async addLabel(actor: Actor, taskId: string, labelId: string): Promise<Task> {
+    const { task, access } = await this.taskAccess.require(actor.id, taskId, { write: true });
     const [label] = await this.db
-      .select({ id: labels.id })
+      .select({ id: labels.id, name: labels.name })
       .from(labels)
-      .where(and(eq(labels.id, labelId.toLowerCase()), eq(labels.workspaceId, access.project.workspaceId)))
+      .where(
+        and(
+          eq(labels.id, labelId.toLowerCase()),
+          eq(labels.workspaceId, access.project.workspaceId),
+        ),
+      )
       .limit(1);
     if (!label) throw AppException.notFound('Label not found.');
-    await this.db.insert(taskLabels).values({ taskId: task.id, labelId: label.id }).onConflictDoNothing();
+    await this.db.transaction(async (tx) => {
+      const added = await tx
+        .insert(taskLabels)
+        .values({ taskId: task.id, labelId: label.id })
+        .onConflictDoNothing()
+        .returning({ labelId: taskLabels.labelId });
+      if (added.length === 0) return;
+      await this.events.activity(tx, {
+        ...scope(access.project, task),
+        actor,
+        action: 'task.labeled',
+        metadata: { key: taskKey(access.project, task), label },
+        event: { type: 'task.updated', payload: { taskId: task.id, labelAdded: label.id } },
+      });
+    });
     return (await this.load([task.id], access.project.key))[0]!;
   }
 
-  async removeLabel(userId: string, taskId: string, labelId: string): Promise<Task> {
-    const { task, access } = await this.requireTask(userId, taskId, { write: true });
-    const removed = await this.db
-      .delete(taskLabels)
-      .where(and(eq(taskLabels.taskId, task.id), eq(taskLabels.labelId, labelId)))
-      .returning({ labelId: taskLabels.labelId });
-    if (removed.length === 0) throw AppException.notFound('This label is not on the task.');
+  async removeLabel(actor: Actor, taskId: string, labelId: string): Promise<Task> {
+    const { task, access } = await this.taskAccess.require(actor.id, taskId, { write: true });
+    await this.db.transaction(async (tx) => {
+      const removed = await tx
+        .delete(taskLabels)
+        .where(and(eq(taskLabels.taskId, task.id), eq(taskLabels.labelId, labelId)))
+        .returning({ labelId: taskLabels.labelId });
+      if (removed.length === 0) throw AppException.notFound('This label is not on the task.');
+      const [label] = await tx
+        .select({ id: labels.id, name: labels.name })
+        .from(labels)
+        .where(eq(labels.id, labelId));
+      await this.events.activity(tx, {
+        ...scope(access.project, task),
+        actor,
+        action: 'task.unlabeled',
+        metadata: { key: taskKey(access.project, task), label: label ?? null },
+        event: { type: 'task.updated', payload: { taskId: task.id, labelRemoved: labelId } },
+      });
+    });
     return (await this.load([task.id], access.project.key))[0]!;
   }
 
-  /** Loads a live task and authorizes through its project; hidden tasks are 404. */
-  private async requireTask(
-    userId: string,
-    taskId: string,
-    options: ProjectAccessOptions = {},
-  ): Promise<{ task: TaskRow; access: ProjectAccess }> {
-    if (!isUuid(taskId)) throw taskNotFound();
-    const [task] = await this.db
-      .select()
-      .from(tasks)
-      .where(and(eq(tasks.id, taskId), isNull(tasks.deletedAt)))
-      .limit(1);
-    if (!task) throw taskNotFound();
-    try {
-      return { task, access: await this.access.require(userId, task.projectId, options) };
-    } catch (err) {
-      // Outsiders must not learn that the task exists.
-      if (err instanceof AppException && err.getStatus() === HttpStatus.NOT_FOUND)
-        throw taskNotFound();
-      throw err;
-    }
+  /** TASK_ASSIGNED for each new assignee except the actor (M4 rule 5). */
+  private async notifyAssigned(
+    tx: Executor,
+    actor: Actor,
+    project: ProjectRow,
+    task: TaskRow,
+    userIds: string[],
+  ): Promise<void> {
+    await this.events.notify(
+      tx,
+      actor,
+      userIds.map((userId) => ({
+        userId,
+        workspaceId: project.workspaceId,
+        projectId: project.id,
+        type: 'TASK_ASSIGNED' as const,
+        title: `@${actor.username} assigned you to ${taskKey(project, task)}`,
+        body: task.title,
+        resourceType: 'task',
+        resourceId: task.id,
+      })),
+    );
+  }
+
+  private usernames(tx: Executor, ids: string[]) {
+    return tx
+      .select({ id: users.id, username: users.username })
+      .from(users)
+      .where(inArray(users.id, ids));
   }
 
   /** Assignees must be members of the project (M3 rule 7). */
-  private async assertProjectMembers(
-    projectId: string,
-    userIds: string[],
-    executor: Executor = this.db,
-  ) {
+  private async assertProjectMembers(projectId: string, userIds: string[]) {
     if (userIds.length === 0) return;
-    const rows = await executor
+    const rows = await this.db
       .select({ userId: projectMembers.userId })
       .from(projectMembers)
       .where(and(eq(projectMembers.projectId, projectId), inArray(projectMembers.userId, userIds)));
@@ -269,7 +371,7 @@ export class TasksService {
     }
   }
 
-  /** Loads tasks with reporter and assignees, preserving the order of `ids`. */
+  /** Loads tasks with reporter, assignees and labels, preserving the order of `ids`. */
   private async load(ids: string[], projectKey: string): Promise<Task[]> {
     if (ids.length === 0) return [];
     const rows = await this.db
@@ -284,16 +386,23 @@ export class TasksService {
       .where(inArray(taskAssignees.taskId, ids))
       .orderBy(taskAssignees.assignedAt);
     const attached = await this.db
-      .select({ taskId: taskLabels.taskId, label: { id: labels.id, name: labels.name, color: labels.color } })
+      .select({
+        taskId: taskLabels.taskId,
+        label: { id: labels.id, name: labels.name, color: labels.color },
+      })
       .from(taskLabels)
       .innerJoin(labels, eq(labels.id, taskLabels.labelId))
       .where(inArray(taskLabels.taskId, ids))
       .orderBy(labels.name);
 
-    const byTask = new Map<string, UserRef[]>();
-    for (const a of assignees) byTask.set(a.taskId, [...(byTask.get(a.taskId) ?? []), a.user]);
+    const assigneesByTask = new Map<string, UserRef[]>();
+    for (const a of assignees) {
+      assigneesByTask.set(a.taskId, [...(assigneesByTask.get(a.taskId) ?? []), a.user]);
+    }
     const labelsByTask = new Map<string, TaskLabel[]>();
-    for (const l of attached) labelsByTask.set(l.taskId, [...(labelsByTask.get(l.taskId) ?? []), l.label]);
+    for (const l of attached) {
+      labelsByTask.set(l.taskId, [...(labelsByTask.get(l.taskId) ?? []), l.label]);
+    }
     const byId = new Map(rows.map((r) => [r.task.id, r]));
     return ids.map((id) => {
       const { task, reporter } = byId.get(id)!;
@@ -307,7 +416,7 @@ export class TasksService {
         status: task.status,
         priority: task.priority,
         reporter,
-        assignees: byTask.get(task.id) ?? [],
+        assignees: assigneesByTask.get(task.id) ?? [],
         labels: labelsByTask.get(task.id) ?? [],
         dueDate: task.dueDate,
         createdAt: task.createdAt.toISOString(),
@@ -318,7 +427,32 @@ export class TasksService {
   }
 }
 
-const taskNotFound = () => AppException.notFound('Task not found.');
+function scope(project: ProjectRow, task: TaskRow) {
+  return {
+    workspaceId: project.workspaceId,
+    projectId: project.id,
+    taskId: task.id,
+    entity: { type: 'task' as const, id: task.id },
+  };
+}
+
+/**
+ * Field changes for the activity feed. The description is reported as changed without its
+ * text (M4 rule 3: no description/comment text in activity metadata).
+ */
+function describeChanges(task: TaskRow, input: UpdateTaskInput): Record<string, unknown> {
+  const changes: Record<string, unknown> = {};
+  for (const field of ['title', 'status', 'priority', 'dueDate'] as const) {
+    if (input[field] !== undefined && input[field] !== task[field]) {
+      changes[field] = { from: task[field], to: input[field] };
+    }
+  }
+  if (input.description !== undefined && input.description !== task.description) {
+    changes.description = { changed: true };
+  }
+  return changes;
+}
+
 const projectArchived = () =>
   new AppException(
     HttpStatus.CONFLICT,

@@ -67,7 +67,10 @@ describe('task schemas', () => {
 describe('label and milestone schemas', () => {
   it('normalizes label colors and rejects non-hex values', async () => {
     const { createLabelSchema, updateMilestoneSchema } = await import('./project.js');
-    expect(createLabelSchema.parse({ name: ' bug ', color: '#2563EB' })).toEqual({ name: 'bug', color: '#2563eb' });
+    expect(createLabelSchema.parse({ name: ' bug ', color: '#2563EB' })).toEqual({
+      name: 'bug',
+      color: '#2563eb',
+    });
     expect(createLabelSchema.safeParse({ name: 'bug', color: 'red' }).success).toBe(false);
     expect(createLabelSchema.safeParse({ name: '', color: '#000000' }).success).toBe(false);
     expect(updateMilestoneSchema.safeParse({}).success).toBe(false);

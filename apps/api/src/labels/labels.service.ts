@@ -18,7 +18,11 @@ const toLabel = (l: LabelRow): Label => ({
 });
 
 const nameTaken = () =>
-  new AppException(HttpStatus.CONFLICT, ErrorCode.LABEL_NAME_TAKEN, 'A label with this name already exists.');
+  new AppException(
+    HttpStatus.CONFLICT,
+    ErrorCode.LABEL_NAME_TAKEN,
+    'A label with this name already exists.',
+  );
 
 /**
  * Workspace labels (M3 addition): any member can list and create; Admins/Owner can rename,
@@ -44,7 +48,10 @@ export class LabelsService {
   async create(userId: string, workspaceId: string, input: CreateLabelInput): Promise<Label> {
     await this.access.require(userId, workspaceId);
     try {
-      const [row] = await this.db.insert(labels).values({ workspaceId, ...input }).returning();
+      const [row] = await this.db
+        .insert(labels)
+        .values({ workspaceId, ...input })
+        .returning();
       return toLabel(row!);
     } catch (err) {
       if (isUniqueViolation(err, 'labels_workspace_name_unique')) throw nameTaken();
@@ -55,7 +62,11 @@ export class LabelsService {
   async update(userId: string, labelId: string, input: UpdateLabelInput): Promise<Label> {
     const label = await this.requireLabel(userId, labelId);
     try {
-      const [row] = await this.db.update(labels).set(input).where(eq(labels.id, label.id)).returning();
+      const [row] = await this.db
+        .update(labels)
+        .set(input)
+        .where(eq(labels.id, label.id))
+        .returning();
       return toLabel(row!);
     } catch (err) {
       if (isUniqueViolation(err, 'labels_workspace_name_unique')) throw nameTaken();

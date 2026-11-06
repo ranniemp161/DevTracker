@@ -36,6 +36,17 @@ export async function projectFixture(t: TestApp) {
     .send({ name: 'Developer Platform', key: 'DEV' });
   expect(created.status).toBe(201);
   const project: string = created.body.data.project.id;
-  await owner!.browser.post(`/api/v1/projects/${project}/members`).send({ userId: dev!.id }).expect(201);
-  return { owner: owner!, admin: admin!, dev: dev!, bystander: bystander!, outsider: outsider!, ws, project };
+  await owner!.browser
+    .post(`/api/v1/projects/${project}/members`)
+    .send({ userId: dev!.id })
+    .expect(201);
+  return {
+    owner: owner!,
+    admin: admin!,
+    dev: dev!,
+    bystander: bystander!,
+    outsider: outsider!,
+    ws,
+    project,
+  };
 }

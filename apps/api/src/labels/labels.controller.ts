@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import type { Label } from '@devtrack/types';
 import {
   createLabelSchema,
@@ -18,7 +28,10 @@ export class LabelsController {
   constructor(private readonly labels: LabelsService) {}
 
   @Get('workspaces/:id/labels')
-  list(@CurrentUser() user: User, @Param('id', UuidParamPipe) workspaceId: string): Promise<Label[]> {
+  list(
+    @CurrentUser() user: User,
+    @Param('id', UuidParamPipe) workspaceId: string,
+  ): Promise<Label[]> {
     return this.labels.list(user.id, workspaceId);
   }
 

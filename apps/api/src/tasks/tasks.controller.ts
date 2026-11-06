@@ -49,7 +49,7 @@ export class TasksController {
     @Body(new ZodValidationPipe(createTaskSchema)) body: CreateTaskInput,
   ): Promise<{ task: Task }> {
     await this.rateLimit.consume(RATE_LIMITS.taskCreatePerUser, user.id);
-    return { task: await this.tasks.create(user.id, projectId, body) };
+    return { task: await this.tasks.create(user, projectId, body) };
   }
 
   @Get('projects/:id/tasks')
@@ -75,7 +75,7 @@ export class TasksController {
     @Param('id', UuidParamPipe) id: string,
     @Body(new ZodValidationPipe(updateTaskSchema)) body: UpdateTaskInput,
   ): Promise<{ task: Task }> {
-    return { task: await this.tasks.update(user.id, id, body) };
+    return { task: await this.tasks.update(user, id, body) };
   }
 
   @Patch('tasks/:id/status')
@@ -84,13 +84,13 @@ export class TasksController {
     @Param('id', UuidParamPipe) id: string,
     @Body(new ZodValidationPipe(changeTaskStatusSchema)) body: ChangeTaskStatusInput,
   ): Promise<{ task: Task }> {
-    return { task: await this.tasks.update(user.id, id, { status: body.status }) };
+    return { task: await this.tasks.update(user, id, { status: body.status }) };
   }
 
   @Delete('tasks/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async remove(@CurrentUser() user: User, @Param('id', UuidParamPipe) id: string): Promise<void> {
-    await this.tasks.remove(user.id, id);
+    await this.tasks.remove(user, id);
   }
 
   @Post('tasks/:id/assignees')
@@ -100,7 +100,7 @@ export class TasksController {
     @Param('id', UuidParamPipe) id: string,
     @Body(new ZodValidationPipe(addAssigneesSchema)) body: AddAssigneesInput,
   ): Promise<{ task: Task }> {
-    return { task: await this.tasks.addAssignees(user.id, id, body.userIds) };
+    return { task: await this.tasks.addAssignees(user, id, body.userIds) };
   }
 
   @Delete('tasks/:id/assignees/:userId')
@@ -109,7 +109,7 @@ export class TasksController {
     @Param('id', UuidParamPipe) id: string,
     @Param('userId', UuidParamPipe) userId: string,
   ): Promise<{ task: Task }> {
-    return { task: await this.tasks.removeAssignee(user.id, id, userId) };
+    return { task: await this.tasks.removeAssignee(user, id, userId) };
   }
 
   @Post('tasks/:id/labels')
@@ -119,7 +119,7 @@ export class TasksController {
     @Param('id', UuidParamPipe) id: string,
     @Body(new ZodValidationPipe(attachLabelSchema)) body: AttachLabelInput,
   ): Promise<{ task: Task }> {
-    return { task: await this.tasks.addLabel(user.id, id, body.labelId) };
+    return { task: await this.tasks.addLabel(user, id, body.labelId) };
   }
 
   @Delete('tasks/:id/labels/:labelId')
@@ -128,6 +128,6 @@ export class TasksController {
     @Param('id', UuidParamPipe) id: string,
     @Param('labelId', UuidParamPipe) labelId: string,
   ): Promise<{ task: Task }> {
-    return { task: await this.tasks.removeLabel(user.id, id, labelId) };
+    return { task: await this.tasks.removeLabel(user, id, labelId) };
   }
 }

@@ -5,7 +5,7 @@ DevTrack is an internal engineering project management platform with first-class
 - **Architecture reference:** [DEVTRACK_ARCHITECTURE.md](DEVTRACK_ARCHITECTURE.md)
 - **Decision records:** [Docs/decisions/](Docs/decisions/)
 
-**Status:** M1 (Foundation) and M2 (workspaces) are complete. M3 (projects, tasks, Kanban and List views, labels and milestones) is implemented on the `m3-projects-tasks` branch.
+**Status:** M1–M3 are complete. M4 (comments, mentions, activity feed and notifications) is implemented on the `m4-collaboration` branch.
 
 ## Repository layout
 
@@ -134,3 +134,18 @@ Owners and Admins can access every project in their workspace; Members only the 
 | POST / DELETE        | `/tasks/:id/labels`, `/tasks/:id/labels/:labelId`      | Project access; the label must belong to the same workspace                        |
 | GET / POST           | `/projects/:id/milestones`                             | Read: project access. Create: Admin, Owner                                         |
 | PATCH / DELETE       | `/milestones/:id`                                      | Admin, Owner                                                                       |
+
+## Collaboration API (M4)
+
+Rules: [Docs/decisions/0004-collaboration.md](Docs/decisions/0004-collaboration.md). Lists use cursor pagination (`meta.nextCursor`, `meta.hasMore`).
+
+| Method     | Endpoint                      | Who                                                                              |
+| ---------- | ----------------------------- | -------------------------------------------------------------------------------- |
+| POST / GET | `/tasks/:id/comments`         | Project access (oldest first). `@username` mentions notify people on the project |
+| PATCH      | `/comments/:id`               | The author                                                                       |
+| DELETE     | `/comments/:id`               | The author, or a workspace Admin/Owner (soft delete)                             |
+| GET        | `/projects/:id/activity`      | Project access (newest first; `?taskId=` filter)                                 |
+| GET        | `/notifications`              | Your notifications (`?unreadOnly=true`)                                          |
+| GET        | `/notifications/unread-count` | Your unread count                                                                |
+| PATCH      | `/notifications/:id/read`     | Your notification                                                                |
+| POST       | `/notifications/read-all`     | Marks all of yours read                                                          |
