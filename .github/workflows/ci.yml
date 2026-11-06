@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A new push to the same branch or PR cancels the run in progress.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NEXT_TELEMETRY_DISABLED: '1'
+  TURBO_TELEMETRY_DISABLED: '1'
+  # Turborepo's local cache, persisted between runs by actions/cache below.
+  TURBO_CACHE_DIR: .turbo/cache
+
+jobs:
+  verify:
+    name: Format, lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      # Uses the version pinned in package.json "packageManager".
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          # The minimum supported by package.json "engines".
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Restore Turborepo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: turbo-${{ runner.os }}-
+
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Lint, typecheck, test and build
+        # Tests use in-memory Postgres (PGlite): no database or secrets are needed.
+        run: pnpm turbo run lint typecheck test build
+
+      - name: Check migrations match the schema
+        # `check` validates the migration history. `generate` must find nothing new: a schema
+        # change without its committed migration fails the build.
+        working-directory: packages/database
+        run: |
+          pnpm exec drizzle-kit check
+          pnpm exec drizzle-kit generate
+          if [ -n "$(git status --porcelain migrations)" ]; then
+            echo "::error::Schema changes without a migration. Run 'pnpm db:generate --name <name>' and commit the result."
+            git status --porcelain migrations
+            exit 1
+          fi
