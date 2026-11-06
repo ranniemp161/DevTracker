@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Alert, Avatar, Button } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useApiQuery } from '@/lib/use-api-query';
+import { NotificationBell } from '../collaboration/notification-bell';
 import { usePendingInvitation } from '../invitations/pending-invitation';
 import { SessionContext, type Session } from './session-context';
 
@@ -87,6 +88,7 @@ function Header({ user, workspaces }: { user: PublicUser; workspaces: WorkspaceS
           </label>
         ) : null}
         <div className="ml-auto flex items-center gap-3">
+          {user.emailVerified ? <NotificationBell /> : null}
           <Avatar name={user.username} url={user.avatarUrl} size="sm" />
           <span className="hidden text-sm text-neutral-700 sm:inline">@{user.username}</span>
           <Button variant="ghost" size="sm" onClick={logout}>

@@ -1,7 +1,7 @@
 # DevTrack — MVP Architecture & Engineering Overview
 
 **Document status:** Architecture baseline for MVP implementation  
-**Version:** 1.3 (M1–M3 decisions recorded; see `Docs/decisions/`)  
+**Version:** 1.5 (M1–M5 decisions recorded; see `Docs/decisions/`)  
 **Last updated:** 2026-11-06  
 **Purpose:** Give Claude and other engineering agents a self-contained overview of the DevTrack product, architecture, constraints, and implementation plan.
 
@@ -498,6 +498,7 @@ Use PostgreSQL with Drizzle ORM. The list below is the logical model; exact Driz
 - `github_commits`
 - `github_reviews`
 - `task_github_links`
+- `github_install_states` (M5 addition: pending installation flows, see decision record 0005)
 
 #### Activity and reliability
 - `activity_logs`
@@ -843,9 +844,9 @@ Base path:
 
 | Method | Endpoint | Purpose |
 |---|---|---|
-| GET | `/github/install` | Start GitHub App installation |
+| GET | `/github/install` | Start GitHub App installation (`?workspaceId=`; browser redirect) |
 | GET | `/github/install/callback` | Complete installation callback |
-| GET | `/github/installations` | List workspace installations |
+| GET | `/github/installations` | List workspace installations (`?workspaceId=`; returns `{ appConfigured, installations }`, M5) |
 | GET | `/github/installations/:id/repositories` | List available repositories |
 | POST | `/projects/:id/repositories` | Connect selected repository |
 | GET | `/projects/:id/repositories` | List connected repositories |
@@ -867,7 +868,7 @@ This endpoint uses GitHub HMAC signature verification rather than user session a
 
 | Method | Endpoint | Purpose |
 |---|---|---|
-| GET | `/projects/:id/activity` | Project activity |
+| GET | `/projects/:id/activity` | Project activity (optional `?taskId=` for one task's history; M4 addition) |
 | GET | `/notifications` | List notifications |
 | GET | `/notifications/unread-count` | Unread count |
 | PATCH | `/notifications/:id/read` | Mark one as read |
@@ -1457,9 +1458,9 @@ These are intentionally not hard-coded into the architecture yet.
 2. **Redis provider:** Choose a managed Redis provider compatible with the selected Socket.IO adapter and deployment.
 3. **Real-time hosting validation:** Verify current Vercel WebSocket/runtime behavior and choose direct Socket.IO hosting or managed real-time delivery accordingly.
 4. ~~**Session implementation:**~~ **Resolved in M1.** Opaque, database-backed sessions, with no session library. See `Docs/decisions/0001-authentication-and-sessions.md`. The Vercel proxy and client-IP behaviour still need checking in M8.
-5. **GitHub App details:** Register the app, validate exact permissions, webhook subscriptions, callback URLs, and installation lifecycle.
+5. **GitHub App details:** Register the app, validate exact permissions, webhook subscriptions, callback URLs, and installation lifecycle. *M5: installation is verified with user authorization during installation; installation tokens are minted on demand and never stored; repositories may be shared by projects of one workspace; registration settings and permissions are listed. Webhook subscriptions and lifecycle events remain for M6, and the live flow still needs checking against a registered app. See `Docs/decisions/0005-github-app-setup.md`.*
 6. ~~**Task deletion policy:**~~ **Resolved in M3.** Soft deletion (`tasks.deleted_at`), by the reporter or a workspace Admin/Owner. See `Docs/decisions/0003-projects-and-tasks.md`.
-7. **Activity retention:** Define retention and payload minimization for raw webhook deliveries and activity records.
+7. **Activity retention:** Define retention and payload minimization for raw webhook deliveries and activity records. *M4: payloads are minimized (no comment or description text); everything is kept for the MVP and pruning is decided in M8. See `Docs/decisions/0004-collaboration.md`.*
 
 Do not guess these details. Validate them during the relevant implementation milestone and document the final decision.
 

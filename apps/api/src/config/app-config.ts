@@ -1,3 +1,4 @@
+import { createPrivateKey } from 'node:crypto';
 import { z } from 'zod';
 
 export const APP_CONFIG = Symbol('APP_CONFIG');
@@ -14,6 +15,8 @@ export interface AppConfig {
   /** Secure cookies (and the `__Host-` prefix) whenever the site is served over HTTPS. */
   secureCookies: boolean;
   github: GithubOAuthConfig | null;
+  /** The GitHub App (repository access, M5). Separate from OAuth login. */
+  githubApp: GithubAppConfig | null;
   mail: { transport: 'console'; from: string };
 }
 
@@ -21,6 +24,41 @@ export interface GithubOAuthConfig {
   clientId: string;
   clientSecret: string;
   callbackUrl: string;
+}
+
+/** GitHub App credentials (architecture §11). Never sent to the browser or logged. */
+export interface GithubAppConfig {
+  appId: string;
+  /** URL slug: `https://github.com/apps/<slug>`. */
+  slug: string;
+  /** The App's own OAuth client, used to verify who completed an installation. */
+  clientId: string;
+  clientSecret: string;
+  /** PEM-encoded RSA private key, used to sign App JWTs. */
+  privateKey: string;
+}
+
+const GITHUB_APP_VARS = [
+  'GITHUB_APP_ID',
+  'GITHUB_APP_SLUG',
+  'GITHUB_APP_CLIENT_ID',
+  'GITHUB_APP_CLIENT_SECRET',
+  'GITHUB_APP_PRIVATE_KEY',
+] as const;
+
+/**
+ * Accepts the PEM as-is, with literal `\n` escapes (single-line .env values), or
+ * base64-encoded. Returns undefined when it is not a usable private key.
+ */
+export function normalizePrivateKey(raw: string): string | undefined {
+  let pem = raw.replace(/\\n/g, '\n').trim();
+  if (!pem.includes('-----BEGIN')) pem = Buffer.from(pem, 'base64').toString('utf8');
+  try {
+    createPrivateKey(pem);
+    return pem;
+  } catch {
+    return undefined;
+  }
 }
 
 const optionalString = z
@@ -49,6 +87,16 @@ const envSchema = z
     GITHUB_OAUTH_CLIENT_ID: optionalString,
     GITHUB_OAUTH_CLIENT_SECRET: optionalString,
     GITHUB_OAUTH_CALLBACK_URL: optionalString.pipe(z.url().optional()),
+    GITHUB_APP_ID: optionalString.pipe(z.string().regex(/^\d+$/).optional()),
+    GITHUB_APP_SLUG: optionalString.pipe(
+      z
+        .string()
+        .regex(/^[a-z0-9][a-z0-9-]*$/)
+        .optional(),
+    ),
+    GITHUB_APP_CLIENT_ID: optionalString,
+    GITHUB_APP_CLIENT_SECRET: optionalString,
+    GITHUB_APP_PRIVATE_KEY: optionalString,
     MAIL_TRANSPORT: z.enum(['console']).default('console'),
     MAIL_FROM: z.string().min(1).default('DevTrack <no-reply@devtrack.local>'),
   })
@@ -78,6 +126,22 @@ const envSchema = z
         message: 'GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET must be set together',
       });
     }
+    const appVars = GITHUB_APP_VARS.filter((name) => Boolean(env[name]));
+    if (appVars.length > 0 && appVars.length < GITHUB_APP_VARS.length) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['GITHUB_APP_ID'],
+        message: `GitHub App variables must be set together: ${GITHUB_APP_VARS.join(', ')}`,
+      });
+    }
+    if (env.GITHUB_APP_PRIVATE_KEY && !normalizePrivateKey(env.GITHUB_APP_PRIVATE_KEY)) {
+      // Never echo the value.
+      ctx.addIssue({
+        code: 'custom',
+        path: ['GITHUB_APP_PRIVATE_KEY'],
+        message: 'is not a valid PEM private key (raw, \\n-escaped or base64)',
+      });
+    }
   });
 
 /** Parses and validates environment variables; throws with every problem listed. */
@@ -105,6 +169,20 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
             clientSecret: e.GITHUB_OAUTH_CLIENT_SECRET,
             callbackUrl:
               e.GITHUB_OAUTH_CALLBACK_URL ?? `${e.WEB_ORIGIN}/api/v1/auth/github/callback`,
+          }
+        : null,
+    githubApp:
+      e.GITHUB_APP_ID &&
+      e.GITHUB_APP_SLUG &&
+      e.GITHUB_APP_CLIENT_ID &&
+      e.GITHUB_APP_CLIENT_SECRET &&
+      e.GITHUB_APP_PRIVATE_KEY
+        ? {
+            appId: e.GITHUB_APP_ID,
+            slug: e.GITHUB_APP_SLUG,
+            clientId: e.GITHUB_APP_CLIENT_ID,
+            clientSecret: e.GITHUB_APP_CLIENT_SECRET,
+            privateKey: normalizePrivateKey(e.GITHUB_APP_PRIVATE_KEY)!,
           }
         : null,
     mail: { transport: e.MAIL_TRANSPORT, from: e.MAIL_FROM },

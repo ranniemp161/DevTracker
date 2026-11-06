@@ -38,7 +38,7 @@ export class ProjectsController {
     @Param('id', UuidParamPipe) workspaceId: string,
     @Body(new ZodValidationPipe(createProjectSchema)) body: CreateProjectInput,
   ): Promise<{ project: Project }> {
-    return { project: await this.projects.create(user.id, workspaceId, body) };
+    return { project: await this.projects.create(user, workspaceId, body) };
   }
 
   @Get('workspaces/:id/projects')
@@ -64,13 +64,13 @@ export class ProjectsController {
     @Param('id', UuidParamPipe) id: string,
     @Body(new ZodValidationPipe(updateProjectSchema)) body: UpdateProjectInput,
   ): Promise<{ project: Project }> {
-    return { project: await this.projects.update(user.id, id, body) };
+    return { project: await this.projects.update(user, id, body) };
   }
 
   @Delete('projects/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async archive(@CurrentUser() user: User, @Param('id', UuidParamPipe) id: string): Promise<void> {
-    await this.projects.archive(user.id, id);
+    await this.projects.archive(user, id);
   }
 
   @Get('projects/:id/members')
@@ -88,7 +88,7 @@ export class ProjectsController {
     @Param('id', UuidParamPipe) id: string,
     @Body(new ZodValidationPipe(addProjectMemberSchema)) body: AddProjectMemberInput,
   ): Promise<{ member: ProjectMember }> {
-    return { member: await this.projects.addMember(user.id, id, body.userId.toLowerCase()) };
+    return { member: await this.projects.addMember(user, id, body.userId.toLowerCase()) };
   }
 
   @Delete('projects/:id/members/:userId')
@@ -98,6 +98,6 @@ export class ProjectsController {
     @Param('id', UuidParamPipe) id: string,
     @Param('userId', UuidParamPipe) userId: string,
   ): Promise<void> {
-    await this.projects.removeMember(user.id, id, userId);
+    await this.projects.removeMember(user, id, userId);
   }
 }

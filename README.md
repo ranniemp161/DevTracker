@@ -5,7 +5,7 @@ DevTrack is an internal engineering project management platform with first-class
 - **Architecture reference:** [DEVTRACK_ARCHITECTURE.md](DEVTRACK_ARCHITECTURE.md)
 - **Decision records:** [Docs/decisions/](Docs/decisions/)
 
-**Status:** M1 (Foundation) and M2 (workspaces) are complete. M3 (projects, tasks, Kanban and List views, labels and milestones) is implemented on the `m3-projects-tasks` branch.
+**Status:** M1–M3 are complete. M4 (comments, mentions, activity feed and notifications) is on the `m4-collaboration` branch, and M5 (GitHub App installation and repository selection) is on `m5-github-setup`.
 
 ## Repository layout
 
@@ -64,7 +64,7 @@ In development, emails (verification and password reset) are printed to the API 
 2. Set its authorization callback URL to `http://localhost:3000/api/v1/auth/github/callback`.
 3. Set `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET` in `.env`.
 
-The DevTrack GitHub App, which grants repository access, is set up separately in M5.
+The DevTrack GitHub App, which grants repository access, is set up separately (below).
 
 ## Common commands
 
@@ -134,3 +134,32 @@ Owners and Admins can access every project in their workspace; Members only the 
 | POST / DELETE        | `/tasks/:id/labels`, `/tasks/:id/labels/:labelId`      | Project access; the label must belong to the same workspace                        |
 | GET / POST           | `/projects/:id/milestones`                             | Read: project access. Create: Admin, Owner                                         |
 | PATCH / DELETE       | `/milestones/:id`                                      | Admin, Owner                                                                       |
+
+## Collaboration API (M4)
+
+Rules: [Docs/decisions/0004-collaboration.md](Docs/decisions/0004-collaboration.md). Lists use cursor pagination (`meta.nextCursor`, `meta.hasMore`).
+
+| Method     | Endpoint                      | Who                                                                              |
+| ---------- | ----------------------------- | -------------------------------------------------------------------------------- |
+| POST / GET | `/tasks/:id/comments`         | Project access (oldest first). `@username` mentions notify people on the project |
+| PATCH      | `/comments/:id`               | The author                                                                       |
+| DELETE     | `/comments/:id`               | The author, or a workspace Admin/Owner (soft delete)                             |
+| GET        | `/projects/:id/activity`      | Project access (newest first; `?taskId=` filter)                                 |
+| GET        | `/notifications`              | Your notifications (`?unreadOnly=true`)                                          |
+| GET        | `/notifications/unread-count` | Your unread count                                                                |
+| PATCH      | `/notifications/:id/read`     | Your notification                                                                |
+| POST       | `/notifications/read-all`     | Marks all of yours read                                                          |
+
+## GitHub API (M5)
+
+Rules: [Docs/decisions/0005-github-app-setup.md](Docs/decisions/0005-github-app-setup.md).
+
+| Method | Endpoint                                 | Who                                                                    |
+| ------ | ---------------------------------------- | ---------------------------------------------------------------------- |
+| GET    | `/github/install?workspaceId=`           | Admin, Owner. Browser redirect to GitHub's install page                |
+| GET    | `/github/install/callback`               | Public. GitHub's redirect back, checked by state cookie and user token |
+| GET    | `/github/installations?workspaceId=`     | Admin, Owner                                                           |
+| GET    | `/github/installations/:id/repositories` | Admin, Owner. Live from GitHub, with `connectedProjectIds`             |
+| GET    | `/projects/:id/repositories`             | Project access                                                         |
+| POST   | `/projects/:id/repositories`             | Admin, Owner. `{ installationId, githubRepositoryId }`                 |
+| DELETE | `/projects/:id/repositories/:repoId`     | Admin, Owner. History is kept                                          |

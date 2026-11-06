@@ -29,6 +29,20 @@
       "when": 1793940761245,
       "tag": "0003_labels_milestones",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793943261703,
+      "tag": "0004_collaboration",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793946755579,
+      "tag": "0005_github_setup",
+      "breakpoints": true
     }
   ]
 }

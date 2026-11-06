@@ -19,6 +19,7 @@ import { ErrorCode, type Project, type ProjectMember } from '@devtrack/types';
 import type { CreateProjectInput, UpdateProjectInput } from '@devtrack/validators';
 import { AppException } from '../common/errors/app.exception';
 import { DATABASE } from '../database/database.module';
+import { EventRecorder, type Actor } from '../events/event-recorder.service';
 import { isUniqueViolation } from '../database/pg-errors';
 import { WorkspaceAccessService } from '../workspaces/workspace-access.service';
 import { hasAtLeastRole } from '../workspaces/workspace-policy';
@@ -33,10 +34,12 @@ export class ProjectsService {
     @Inject(DATABASE) private readonly db: Database,
     private readonly workspaceAccess: WorkspaceAccessService,
     private readonly access: ProjectAccessService,
+    private readonly events: EventRecorder,
   ) {}
 
   /** Admins and the Owner create projects; the creator becomes a project member. */
-  async create(userId: string, workspaceId: string, input: CreateProjectInput): Promise<Project> {
+  async create(actor: Actor, workspaceId: string, input: CreateProjectInput): Promise<Project> {
+    const userId = actor.id;
     await this.workspaceAccess.require(userId, workspaceId, 'ADMIN');
     let created: ProjectRow;
     try {
@@ -55,6 +58,12 @@ export class ProjectsService {
           })
           .returning();
         await tx.insert(projectMembers).values({ projectId: project!.id, userId });
+        await this.events.activity(tx, {
+          ...projectScope(project!),
+          actor,
+          action: 'project.created',
+          metadata: { key: project!.key, name: project!.name },
+        });
         return project!;
       });
     } catch (err) {
@@ -102,8 +111,8 @@ export class ProjectsService {
     return this.load(projectId, canManage);
   }
 
-  async update(userId: string, projectId: string, input: UpdateProjectInput): Promise<Project> {
-    const { project } = await this.access.require(userId, projectId, { manage: true });
+  async update(actor: Actor, projectId: string, input: UpdateProjectInput): Promise<Project> {
+    const { project } = await this.access.require(actor.id, projectId, { manage: true });
 
     // Validate the resulting date range against the stored values, too.
     const startDate = input.startDate !== undefined ? input.startDate : project.startDate;
@@ -114,23 +123,50 @@ export class ProjectsService {
       ]);
     }
 
-    await this.db
-      .update(projects)
-      .set({
-        name: input.name,
-        description: input.description,
-        status: input.status,
-        startDate: input.startDate,
-        targetDate: input.targetDate,
-      })
-      .where(eq(projects.id, projectId));
+    // Only field names (and status values) go into the feed, not description text.
+    const changed = (['name', 'description', 'status', 'startDate', 'targetDate'] as const).filter(
+      (f) => input[f] !== undefined && input[f] !== project[f],
+    );
+    if (changed.length > 0) {
+      await this.db.transaction(async (tx) => {
+        await tx
+          .update(projects)
+          .set({
+            name: input.name,
+            description: input.description,
+            status: input.status,
+            startDate: input.startDate,
+            targetDate: input.targetDate,
+          })
+          .where(eq(projects.id, projectId));
+        await this.events.activity(tx, {
+          ...projectScope(project),
+          actor,
+          action: 'project.updated',
+          metadata: {
+            fields: changed,
+            ...(changed.includes('status')
+              ? { status: { from: project.status, to: input.status } }
+              : {}),
+          },
+        });
+      });
+    }
     return this.load(projectId, true);
   }
 
   /** M3 rule 3: DELETE archives; archived projects are read-only. */
-  async archive(userId: string, projectId: string): Promise<void> {
-    await this.access.require(userId, projectId, { manage: true });
-    await this.db.update(projects).set({ status: 'ARCHIVED' }).where(eq(projects.id, projectId));
+  async archive(actor: Actor, projectId: string): Promise<void> {
+    const { project } = await this.access.require(actor.id, projectId, { manage: true });
+    await this.db.transaction(async (tx) => {
+      await tx.update(projects).set({ status: 'ARCHIVED' }).where(eq(projects.id, projectId));
+      await this.events.activity(tx, {
+        ...projectScope(project),
+        actor,
+        action: 'project.archived',
+        metadata: { key: project.key },
+      });
+    });
   }
 
   async listMembers(userId: string, projectId: string): Promise<ProjectMember[]> {
@@ -153,11 +189,8 @@ export class ProjectsService {
   }
 
   /** Only existing workspace members can be added to a project (M3 rule 2). */
-  async addMember(
-    actorId: string,
-    projectId: string,
-    targetUserId: string,
-  ): Promise<ProjectMember> {
+  async addMember(actor: Actor, projectId: string, targetUserId: string): Promise<ProjectMember> {
+    const actorId = actor.id;
     const { project } = await this.access.require(actorId, projectId, { manage: true });
     const [inWorkspace] = await this.db
       .select({ id: workspaceMembers.id })
@@ -176,7 +209,19 @@ export class ProjectsService {
       );
     }
     try {
-      await this.db.insert(projectMembers).values({ projectId, userId: targetUserId });
+      await this.db.transaction(async (tx) => {
+        await tx.insert(projectMembers).values({ projectId, userId: targetUserId });
+        const [person] = await tx
+          .select({ id: users.id, username: users.username })
+          .from(users)
+          .where(eq(users.id, targetUserId));
+        await this.events.activity(tx, {
+          ...projectScope(project),
+          actor,
+          action: 'project.member_added',
+          metadata: { user: person },
+        });
+      });
     } catch (err) {
       if (isUniqueViolation(err, 'project_members_project_user_unique')) {
         throw new AppException(
@@ -192,9 +237,9 @@ export class ProjectsService {
   }
 
   /** Removing someone from a project also unassigns them from its tasks (M3 rule 7). */
-  async removeMember(actorId: string, projectId: string, targetUserId: string): Promise<void> {
-    await this.access.require(actorId, projectId, { manage: true });
-    const removed = await this.db.transaction(async (tx) => {
+  async removeMember(actor: Actor, projectId: string, targetUserId: string): Promise<void> {
+    const { project } = await this.access.require(actor.id, projectId, { manage: true });
+    await this.db.transaction(async (tx) => {
       await tx
         .delete(taskAssignees)
         .where(
@@ -206,14 +251,24 @@ export class ProjectsService {
             ),
           ),
         );
-      return tx
+      const removed = await tx
         .delete(projectMembers)
         .where(
           and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, targetUserId)),
         )
         .returning({ id: projectMembers.id });
+      if (removed.length === 0) throw AppException.notFound('Member not found.');
+      const [person] = await tx
+        .select({ id: users.id, username: users.username })
+        .from(users)
+        .where(eq(users.id, targetUserId));
+      await this.events.activity(tx, {
+        ...projectScope(project),
+        actor,
+        action: 'project.member_removed',
+        metadata: { user: person ?? null },
+      });
     });
-    if (removed.length === 0) throw AppException.notFound('Member not found.');
   }
 
   private async load(projectId: string, canManage: boolean): Promise<Project> {
@@ -246,5 +301,13 @@ function toProject(
     viewerCanManage: canManage,
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
+  };
+}
+
+function projectScope(project: ProjectRow) {
+  return {
+    workspaceId: project.workspaceId,
+    projectId: project.id,
+    entity: { type: 'project' as const, id: project.id },
   };
 }

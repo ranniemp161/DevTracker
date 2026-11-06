@@ -2,9 +2,12 @@ import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import {
   and,
   eq,
+  inArray,
   isNull,
+  or,
   projectMembers,
   projects,
+  users,
   workspaceMembers,
   workspaces,
   type Database,
@@ -90,6 +93,40 @@ export class ProjectAccessService {
       );
     }
     return { project: row.project, workspaceRole: row.workspaceRole, canManage };
+  }
+
+  /**
+   * Everyone who can access the project: its members plus the workspace's Owner/Admins.
+   * Optionally narrowed to the given usernames (for `@mentions`, M4 rule 2).
+   */
+  async audience(
+    project: Pick<ProjectRow, 'id' | 'workspaceId'>,
+    options: { usernames?: string[] } = {},
+    executor: Executor = this.db,
+  ): Promise<{ id: string; username: string }[]> {
+    if (options.usernames && options.usernames.length === 0) return [];
+    const projectMemberIds = executor
+      .select({ id: projectMembers.userId })
+      .from(projectMembers)
+      .where(eq(projectMembers.projectId, project.id));
+    const adminIds = executor
+      .select({ id: workspaceMembers.userId })
+      .from(workspaceMembers)
+      .where(
+        and(
+          eq(workspaceMembers.workspaceId, project.workspaceId),
+          inArray(workspaceMembers.role, ['OWNER', 'ADMIN']),
+        ),
+      );
+    return executor
+      .select({ id: users.id, username: users.username })
+      .from(users)
+      .where(
+        and(
+          or(inArray(users.id, projectMemberIds), inArray(users.id, adminIds)),
+          options.usernames ? inArray(users.username, options.usernames) : undefined,
+        ),
+      );
   }
 }
 

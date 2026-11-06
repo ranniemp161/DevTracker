@@ -3,11 +3,12 @@
 import type { WorkspaceDetails } from '@devtrack/types';
 import { updateWorkspaceSchema } from '@devtrack/validators';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { Alert, Button, Card, Field, SubmitButton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useAuthForm } from '../auth/use-auth-form';
 import { useSession } from '../session/session-context';
+import { GithubSettings } from '../github/github-settings';
 import { LabelsSettings } from './labels-settings';
 import { isAdmin } from './permissions';
 import { useWorkspace } from './workspace-context';
@@ -21,6 +22,10 @@ export function SettingsPage() {
     <div className="space-y-6">
       <RenameCard />
       <LabelsSettings />
+      {/* GithubSettings reads ?github= via useSearchParams, which needs a Suspense boundary. */}
+      <Suspense>
+        <GithubSettings />
+      </Suspense>
       {workspace.role === 'OWNER' ? <ArchiveCard /> : null}
     </div>
   );

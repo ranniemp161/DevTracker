@@ -1,0 +1,5 @@
+# Keep LF everywhere (matches Prettier). Prevents CRLF/LF churn with core.autocrlf on Windows.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
