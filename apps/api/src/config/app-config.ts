@@ -17,6 +17,10 @@ export interface AppConfig {
   github: GithubOAuthConfig | null;
   /** The GitHub App (repository access, M5). Separate from OAuth login. */
   githubApp: GithubAppConfig | null;
+  /** HMAC secret for `POST /webhooks/github` (M6). Null: the endpoint answers 503. */
+  githubWebhookSecret: string | null;
+  /** Bearer secret for the scheduled delivery-retry job (M6). Null: the job is disabled. */
+  cronSecret: string | null;
   mail: { transport: 'console'; from: string };
 }
 
@@ -97,6 +101,12 @@ const envSchema = z
     GITHUB_APP_CLIENT_ID: optionalString,
     GITHUB_APP_CLIENT_SECRET: optionalString,
     GITHUB_APP_PRIVATE_KEY: optionalString,
+    GITHUB_APP_WEBHOOK_SECRET: optionalString.pipe(
+      z.string().min(16, { error: 'must be at least 16 characters' }).optional(),
+    ),
+    CRON_SECRET: optionalString.pipe(
+      z.string().min(16, { error: 'must be at least 16 characters' }).optional(),
+    ),
     MAIL_TRANSPORT: z.enum(['console']).default('console'),
     MAIL_FROM: z.string().min(1).default('DevTrack <no-reply@devtrack.local>'),
   })
@@ -116,6 +126,14 @@ const envSchema = z
           path: ['MAIL_TRANSPORT'],
           message:
             'console transport is not allowed in production (email provider is an open decision)',
+        });
+      }
+      if (env.GITHUB_APP_ID && !env.GITHUB_APP_WEBHOOK_SECRET) {
+        // Without it, GitHub events can never be accepted.
+        ctx.addIssue({
+          code: 'custom',
+          path: ['GITHUB_APP_WEBHOOK_SECRET'],
+          message: 'is required in production when the GitHub App is configured',
         });
       }
     }
@@ -185,6 +203,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
             privateKey: normalizePrivateKey(e.GITHUB_APP_PRIVATE_KEY)!,
           }
         : null,
+    githubWebhookSecret: e.GITHUB_APP_WEBHOOK_SECRET ?? null,
+    cronSecret: e.CRON_SECRET ?? null,
     mail: { transport: e.MAIL_TRANSPORT, from: e.MAIL_FROM },
   };
 }

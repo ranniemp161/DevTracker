@@ -1,5 +1,15 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { activityLogs, and, desc, eq, sql, tasks, users, type Database } from '@devtrack/database';
+import {
+  activityLogs,
+  and,
+  desc,
+  eq,
+  inArray,
+  sql,
+  tasks,
+  users,
+  type Database,
+} from '@devtrack/database';
 import type { ActivityAction, ActivityEntry } from '@devtrack/types';
 import type { ListActivityQuery } from '@devtrack/validators';
 import { decodeCursor, isTimeCursor, Paginated, timeCursorOf } from '../common/http/paginated';
@@ -17,7 +27,8 @@ export class ActivityService {
   async list(
     userId: string,
     projectId: string,
-    query: ListActivityQuery,
+    query: Pick<ListActivityQuery, 'cursor' | 'limit'> & { taskId?: string },
+    filter: { entityTypes?: string[] } = {},
   ): Promise<Paginated<ActivityEntry>> {
     const { project } = await this.access.require(userId, projectId);
     const before = query.cursor ? decodeCursor(query.cursor, isTimeCursor) : null;
@@ -35,6 +46,7 @@ export class ActivityService {
         and(
           eq(activityLogs.projectId, project.id),
           query.taskId ? eq(activityLogs.taskId, query.taskId.toLowerCase()) : undefined,
+          filter.entityTypes ? inArray(activityLogs.entityType, filter.entityTypes) : undefined,
           before
             ? sql`(${activityLogs.createdAt}, ${activityLogs.id}) < (${before.t}::timestamptz, ${before.id}::uuid)`
             : undefined,

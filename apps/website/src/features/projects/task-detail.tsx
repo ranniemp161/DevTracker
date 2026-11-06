@@ -17,6 +17,7 @@ import { useSession } from '../session/session-context';
 import { formatDate, PRIORITY_LABEL, TASK_STATUS_LABEL } from './labels';
 import { ActivityFeed } from '../collaboration/activity-feed';
 import { CommentThread } from '../collaboration/comment-thread';
+import { TaskPullRequests } from '../github/task-pull-requests';
 import { useProject } from './project-context';
 import { TaskLabels } from './task-labels';
 
@@ -57,14 +58,17 @@ export function TaskDetail() {
       />
       <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
         <CommentThread task={task} onActivity={bumpHistory} />
-        <Card title="History">
-          <ActivityFeed
-            projectId={project.id}
-            taskId={task.id}
-            limit={15}
-            refreshKey={`${task.updatedAt}:${history}`}
-          />
-        </Card>
+        <div className="space-y-6">
+          <TaskPullRequests task={task} onChange={bumpHistory} />
+          <Card title="History">
+            <ActivityFeed
+              projectId={project.id}
+              taskId={task.id}
+              limit={15}
+              refreshKey={`${task.updatedAt}:${history}`}
+            />
+          </Card>
+        </div>
       </div>
     </div>
   );

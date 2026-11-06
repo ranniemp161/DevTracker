@@ -23,6 +23,8 @@ import { MAILER, type Mailer, type MailMessage } from '../../src/mail/mailer';
 import type { User } from '../../src/users/users.service';
 
 export const WEB_ORIGIN = 'http://localhost:3000';
+export const TEST_WEBHOOK_SECRET = 'test-webhook-secret-0123456789';
+export const TEST_CRON_SECRET = 'test-cron-secret-0123456789';
 
 export function testConfig(overrides: Partial<AppConfig> = {}): AppConfig {
   return {
@@ -46,6 +48,8 @@ export function testConfig(overrides: Partial<AppConfig> = {}): AppConfig {
       // Never used: tests replace GithubAppClient with FakeGithubAppClient.
       privateKey: 'unused-in-tests',
     },
+    githubWebhookSecret: TEST_WEBHOOK_SECRET,
+    cronSecret: TEST_CRON_SECRET,
     mail: { transport: 'console', from: 'DevTrack <test@devtrack.local>' },
     ...overrides,
   };

@@ -32,6 +32,15 @@ export type ActivityAction =
   | 'project.repository_connected'
   | 'project.repository_disconnected'
   | 'github_installation.installed'
+  | 'pull_request.opened'
+  | 'pull_request.reopened'
+  | 'pull_request.closed'
+  | 'pull_request.merged'
+  | 'pull_request.reviewed'
+  | 'pull_request.linked'
+  | 'pull_request.unlinked'
+  | 'repository.pushed'
+  | 'repository.release_published'
   | 'milestone.completed';
 
 export interface ActivityEntry {

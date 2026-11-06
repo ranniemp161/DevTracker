@@ -67,9 +67,45 @@ export function describeActivity(entry: ActivityEntry): string {
       return `installed the GitHub App on ${String(m.account ?? 'an account')}`;
     case 'milestone.completed':
       return `completed milestone "${String(m.name ?? '')}"`;
+    case 'pull_request.opened':
+      return `opened ${pr(m)}`;
+    case 'pull_request.reopened':
+      return `reopened ${pr(m)}`;
+    case 'pull_request.closed':
+      return `closed ${pr(m)} without merging`;
+    case 'pull_request.merged':
+      return `merged ${pr(m)}`;
+    case 'pull_request.reviewed': {
+      const state = (m.review as { state?: string } | null)?.state ?? '';
+      return `${REVIEW_VERB[state] ?? 'reviewed'} ${pr(m)}`;
+    }
+    case 'pull_request.linked':
+      return m.auto ? `was linked to ${pr(m)} automatically` : `linked ${pr(m)}`;
+    case 'pull_request.unlinked':
+      return `unlinked ${pr(m)}`;
+    case 'repository.pushed': {
+      const count = Number(m.count ?? 0);
+      return `pushed ${count} commit${count === 1 ? '' : 's'} to ${String(m.branch ?? '?')} in ${String(m.repository ?? 'a repository')}`;
+    }
+    case 'repository.release_published': {
+      const release = (m.release ?? {}) as { tag?: string };
+      return `published release ${release.tag ?? '?'} of ${String(m.repository ?? 'a repository')}`;
+    }
     default:
       return entry.action;
   }
+}
+
+const REVIEW_VERB: Record<string, string> = {
+  approved: 'approved',
+  changes_requested: 'requested changes on',
+  commented: 'reviewed',
+};
+
+function pr(m: Record<string, unknown>): string {
+  const p = (m.pullRequest ?? {}) as { number?: number; title?: string };
+  const repo = typeof m.repository === 'string' ? ` in ${m.repository}` : '';
+  return `PR #${p.number ?? '?'} "${p.title ?? ''}"${repo}`;
 }
 
 function repoName(m: Record<string, unknown>): string {

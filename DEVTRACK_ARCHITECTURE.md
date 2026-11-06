@@ -1,7 +1,7 @@
 # DevTrack — MVP Architecture & Engineering Overview
 
 **Document status:** Architecture baseline for MVP implementation  
-**Version:** 1.5 (M1–M5 decisions recorded; see `Docs/decisions/`)  
+**Version:** 1.6 (M1–M6 decisions recorded; see `Docs/decisions/`)  
 **Last updated:** 2026-11-06  
 **Purpose:** Give Claude and other engineering agents a self-contained overview of the DevTrack product, architecture, constraints, and implementation plan.
 
@@ -855,6 +855,8 @@ Base path:
 | GET | `/repositories/:id/pull-requests` | List PRs |
 | POST | `/tasks/:id/pull-requests` | Link PR to task |
 | DELETE | `/tasks/:id/pull-requests/:prId` | Unlink PR |
+| GET | `/tasks/:id/pull-requests` | Linked PRs of a task (M6 addition) |
+| GET | `/internal/github/deliveries/retry` | Scheduled retry of failed webhook deliveries (bearer `CRON_SECRET`; M6 addition) |
 
 Public GitHub webhook endpoint:
 
@@ -1458,9 +1460,9 @@ These are intentionally not hard-coded into the architecture yet.
 2. **Redis provider:** Choose a managed Redis provider compatible with the selected Socket.IO adapter and deployment.
 3. **Real-time hosting validation:** Verify current Vercel WebSocket/runtime behavior and choose direct Socket.IO hosting or managed real-time delivery accordingly.
 4. ~~**Session implementation:**~~ **Resolved in M1.** Opaque, database-backed sessions, with no session library. See `Docs/decisions/0001-authentication-and-sessions.md`. The Vercel proxy and client-IP behaviour still need checking in M8.
-5. **GitHub App details:** Register the app, validate exact permissions, webhook subscriptions, callback URLs, and installation lifecycle. *M5: installation is verified with user authorization during installation; installation tokens are minted on demand and never stored; repositories may be shared by projects of one workspace; registration settings and permissions are listed. Webhook subscriptions and lifecycle events remain for M6, and the live flow still needs checking against a registered app. See `Docs/decisions/0005-github-app-setup.md`.*
+5. **GitHub App details:** Register the app, validate exact permissions, webhook subscriptions, callback URLs, and installation lifecycle. *M5: installation is verified with user authorization during installation; installation tokens are minted on demand and never stored; repositories may be shared by projects of one workspace; registration settings and permissions are listed. The live install flow was confirmed on 2026-11-06. M6: webhook subscriptions (push, pull request, pull request review, release, plus installation lifecycle), signature checking, and inline processing with a cron-driven retry. See `Docs/decisions/0005-github-app-setup.md` and `0006-github-events.md`.*
 6. ~~**Task deletion policy:**~~ **Resolved in M3.** Soft deletion (`tasks.deleted_at`), by the reporter or a workspace Admin/Owner. See `Docs/decisions/0003-projects-and-tasks.md`.
-7. **Activity retention:** Define retention and payload minimization for raw webhook deliveries and activity records. *M4: payloads are minimized (no comment or description text); everything is kept for the MVP and pruning is decided in M8. See `Docs/decisions/0004-collaboration.md`.*
+7. **Activity retention:** Define retention and payload minimization for raw webhook deliveries and activity records. *M4: payloads are minimized (no comment or description text); everything is kept for the MVP and pruning is decided in M8. M6: raw webhook payloads are cleared once a delivery is processed or ignored (kept only on failures, for retry). See `Docs/decisions/0004-collaboration.md` and `0006-github-events.md`.*
 
 Do not guess these details. Validate them during the relevant implementation milestone and document the final decision.
 

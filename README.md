@@ -5,7 +5,7 @@ DevTrack is an internal engineering project management platform with first-class
 - **Architecture reference:** [DEVTRACK_ARCHITECTURE.md](DEVTRACK_ARCHITECTURE.md)
 - **Decision records:** [Docs/decisions/](Docs/decisions/)
 
-**Status:** M1–M3 are complete. M4 (comments, mentions, activity feed and notifications) is on the `m4-collaboration` branch, and M5 (GitHub App installation and repository selection) is on `m5-github-setup`.
+**Status:** M1–M3 are complete. M4 (collaboration), M5 (GitHub App installation and repository selection) and M6 (GitHub webhooks, pull requests, commits, reviews and task links) are on the `m4-collaboration`, `m5-github-setup` and `m6-github-events` branches.
 
 ## Repository layout
 
@@ -65,6 +65,30 @@ In development, emails (verification and password reset) are printed to the API 
 3. Set `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET` in `.env`.
 
 The DevTrack GitHub App, which grants repository access, is set up separately (below).
+
+### GitHub App and webhooks (optional in development)
+
+Repository access and GitHub activity come from a **GitHub App**, not from sign-in. Full settings are in [0005](Docs/decisions/0005-github-app-setup.md) §8 and [0006](Docs/decisions/0006-github-events.md) §9.
+
+1. Create a GitHub App at <https://github.com/settings/apps/new>.
+   - **Callback URL:** `http://localhost:3000/api/v1/github/install/callback`
+   - Turn on **Request user authorization (OAuth) during installation**.
+   - **Repository permissions** (all read-only): Metadata, Contents, Pull requests.
+   - **Events:** Push, Pull request, Pull request review, Release.
+2. GitHub can't reach `localhost`, so forward webhooks through a channel:
+   - Create one at <https://smee.io>.
+   - Set it as the app's **Webhook URL**, with a random **Webhook secret**.
+   - Run `npx smee-client --url https://smee.io/<channel> --target http://localhost:4000/api/v1/webhooks/github`.
+3. Set these in `.env`:
+   - `GITHUB_APP_ID`
+   - `GITHUB_APP_SLUG`
+   - `GITHUB_APP_CLIENT_ID`
+   - `GITHUB_APP_CLIENT_SECRET`
+   - `GITHUB_APP_PRIVATE_KEY` (the downloaded `.pem`, or its base64)
+   - `GITHUB_APP_WEBHOOK_SECRET`
+4. Optionally set `CRON_SECRET` to enable `GET /api/v1/internal/github/deliveries/retry`, which retries failed deliveries.
+
+Admins install the app from **Workspace settings → GitHub** and connect repositories from **Project settings → Repositories**. Pull requests whose branch or title contains a task key (e.g. `feature/dev-12-login`) are linked to that task automatically.
 
 ## Common commands
 
@@ -163,3 +187,17 @@ Rules: [Docs/decisions/0005-github-app-setup.md](Docs/decisions/0005-github-app-
 | GET    | `/projects/:id/repositories`             | Project access                                                         |
 | POST   | `/projects/:id/repositories`             | Admin, Owner. `{ installationId, githubRepositoryId }`                 |
 | DELETE | `/projects/:id/repositories/:repoId`     | Admin, Owner. History is kept                                          |
+
+## GitHub events API (M6)
+
+Rules: [Docs/decisions/0006-github-events.md](Docs/decisions/0006-github-events.md). GitHub events never change task status.
+
+| Method | Endpoint                            | Who                                                                    |
+| ------ | ----------------------------------- | ---------------------------------------------------------------------- |
+| POST   | `/webhooks/github`                  | GitHub (HMAC `X-Hub-Signature-256`). 202 once stored; failures retried |
+| GET    | `/internal/github/deliveries/retry` | Scheduler, `Authorization: Bearer $CRON_SECRET`                        |
+| GET    | `/repositories/:id/pull-requests`   | Project access (`?state=open\|closed\|merged\|all`, paginated)         |
+| GET    | `/tasks/:id/pull-requests`          | Task access                                                            |
+| POST   | `/tasks/:id/pull-requests`          | Task edit access. `{ pullRequestId }`                                  |
+| DELETE | `/tasks/:id/pull-requests/:prId`    | Task edit access                                                       |
+| GET    | `/projects/:id/github/activity`     | Project access. Commits, PRs, reviews and releases                     |

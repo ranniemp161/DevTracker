@@ -52,3 +52,35 @@ export interface ConnectedRepository {
   connectedBy: UserRef | null;
   connectedAt: string;
 }
+
+/** `merged` is derived: GitHub reports merged PRs as `closed` with `merged_at`. */
+export type PullRequestState = 'open' | 'closed' | 'merged';
+
+/** A pull request of a connected repository (architecture §11.9). */
+export interface PullRequest {
+  id: string;
+  repository: { id: string; fullName: string };
+  number: number;
+  title: string;
+  url: string;
+  authorLogin: string | null;
+  headBranch: string;
+  baseBranch: string;
+  state: PullRequestState;
+  isDraft: boolean;
+  openedAt: string;
+  mergedAt: string | null;
+  closedAt: string | null;
+}
+
+export type TaskLinkSource = 'MANUAL' | 'AUTO';
+
+/** A pull request linked to a task (§11.10). */
+export interface LinkedPullRequest extends PullRequest {
+  link: {
+    /** AUTO: the task key was found in the branch name or title (decision record 0006). */
+    source: TaskLinkSource;
+    linkedBy: UserRef | null;
+    linkedAt: string;
+  };
+}
