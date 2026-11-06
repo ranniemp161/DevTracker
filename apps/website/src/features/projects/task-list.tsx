@@ -1,0 +1,174 @@
+'use client';
+
+import { TASK_PRIORITIES, TASK_STATUSES, type Label, type Task } from '@devtrack/types';
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { Alert, Avatar, Badge, Button } from '@/components/ui';
+import { apiPage, ApiError } from '@/lib/api';
+import { useApiQuery } from '@/lib/use-api-query';
+import { LabelChip } from './label-chip';
+import { formatDate, PRIORITY_LABEL, PRIORITY_TONE, TASK_STATUS_LABEL } from './labels';
+import { useProject } from './project-context';
+
+/** List view: newest first, filterable, cursor-paginated (M3 rule 9). */
+export function TaskList() {
+  const { project, members } = useProject();
+  const labels = useApiQuery<Label[]>(`/workspaces/${project.workspaceId}/labels`);
+  const [filters, setFilters] = useState({ status: '', priority: '', assigneeId: '', labelId: '' });
+  const [rows, setRows] = useState<Task[] | null>(null);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const query = new URLSearchParams(
+    Object.entries(filters).filter(([, v]) => v !== '') as [string, string][],
+  );
+  query.set('limit', '50');
+  const base = `/projects/${project.id}/tasks?${query.toString()}`;
+
+  useEffect(() => {
+    let cancelled = false;
+    apiPage<Task>(base).then(
+      (page) => {
+        if (cancelled) return;
+        setRows(page.items);
+        setCursor(page.nextCursor);
+        setError(null);
+      },
+      (err: unknown) =>
+        !cancelled && setError(err instanceof ApiError ? err.message : 'Could not load tasks.'),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [base]);
+
+  async function loadMore() {
+    if (!cursor) return;
+    setLoadingMore(true);
+    try {
+      const page = await apiPage<Task>(`${base}&cursor=${encodeURIComponent(cursor)}`);
+      setRows((r) => [...(r ?? []), ...page.items]);
+      setCursor(page.nextCursor);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not load more tasks.');
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  const select = (name: keyof typeof filters, label: string, options: [string, string][]) => (
+    <label className="text-sm">
+      <span className="sr-only">{label}</span>
+      <select
+        value={filters[name]}
+        onChange={(e) => setFilters((f) => ({ ...f, [name]: e.target.value }))}
+        className="rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-sm"
+      >
+        <option value="">{label}: all</option>
+        {options.map(([value, text]) => (
+          <option key={value} value={value}>
+            {text}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2">
+        {select(
+          'status',
+          'Status',
+          TASK_STATUSES.map((s) => [s, TASK_STATUS_LABEL[s]]),
+        )}
+        {select(
+          'priority',
+          'Priority',
+          TASK_PRIORITIES.map((p) => [p, PRIORITY_LABEL[p]]),
+        )}
+        {select(
+          'assigneeId',
+          'Assignee',
+          members.map((m) => [m.user.id, `@${m.user.username}`]),
+        )}
+        {select(
+          'labelId',
+          'Label',
+          (labels.data ?? []).map((l) => [l.id, l.name]),
+        )}
+      </div>
+      {error ? <Alert>{error}</Alert> : null}
+      <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
+        <table className="w-full text-left text-sm">
+          <thead className="border-b border-neutral-200 text-xs text-neutral-500 uppercase">
+            <tr>
+              <th className="px-4 py-2.5 font-medium">Key</th>
+              <th className="px-4 py-2.5 font-medium">Title</th>
+              <th className="px-4 py-2.5 font-medium">Status</th>
+              <th className="px-4 py-2.5 font-medium">Priority</th>
+              <th className="px-4 py-2.5 font-medium">Assignees</th>
+              <th className="px-4 py-2.5 font-medium">Due</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-neutral-100">
+            {rows?.map((t) => (
+              <tr key={t.id} className="hover:bg-neutral-50">
+                <td className="px-4 py-2.5 whitespace-nowrap text-neutral-500">{t.key}</td>
+                <td className="px-4 py-2.5">
+                  <Link
+                    href={`/projects/${project.id}/tasks/${t.id}`}
+                    className="font-medium hover:underline"
+                  >
+                    {t.title}
+                  </Link>
+                  {t.labels.length > 0 ? (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {t.labels.map((l) => (
+                        <LabelChip key={l.id} label={l} />
+                      ))}
+                    </div>
+                  ) : null}
+                </td>
+                <td className="px-4 py-2.5 whitespace-nowrap">{TASK_STATUS_LABEL[t.status]}</td>
+                <td className="px-4 py-2.5">
+                  <Badge tone={PRIORITY_TONE[t.priority]}>{PRIORITY_LABEL[t.priority]}</Badge>
+                </td>
+                <td className="px-4 py-2.5">
+                  <div className="flex -space-x-1.5">
+                    {t.assignees.map((a) => (
+                      <span
+                        key={a.id}
+                        title={`@${a.username}`}
+                        className="rounded-full ring-2 ring-white"
+                      >
+                        <Avatar name={a.username} url={a.avatarUrl} size="sm" />
+                      </span>
+                    ))}
+                  </div>
+                </td>
+                <td className="px-4 py-2.5 whitespace-nowrap text-neutral-600">
+                  {formatDate(t.dueDate)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {rows && rows.length === 0 ? (
+          <p className="px-4 py-8 text-center text-sm text-neutral-500">
+            No tasks match these filters.
+          </p>
+        ) : null}
+        {!rows && !error ? (
+          <p className="px-4 py-8 text-center text-sm text-neutral-500">Loading…</p>
+        ) : null}
+      </div>
+      {cursor ? (
+        <Button onClick={loadMore} disabled={loadingMore}>
+          {loadingMore ? 'Loading…' : 'Load more'}
+        </Button>
+      ) : null}
+    </div>
+  );
+}

@@ -1,5 +1,16 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { and, eq, users, workspaceMembers, type Database } from '@devtrack/database';
+import {
+  and,
+  eq,
+  inArray,
+  projectMembers,
+  projects,
+  taskAssignees,
+  tasks,
+  users,
+  workspaceMembers,
+  type Database,
+} from '@devtrack/database';
 import { ErrorCode, type AssignableWorkspaceRole, type WorkspaceMember } from '@devtrack/types';
 import { AppException } from '../common/errors/app.exception';
 import { DATABASE } from '../database/database.module';
@@ -76,7 +87,37 @@ export class MembersService {
     const { membership: actor } = await this.access.require(actorId, workspaceId);
     const target = await this.findMember(workspaceId, targetUserId);
     enforce(canRemoveMember(actor, target.membership));
-    await this.db.delete(workspaceMembers).where(eq(workspaceMembers.id, target.membership.id));
+    // Leaving a workspace also removes the person from its projects and unassigns their
+    // tasks there (M3 rule 7), so no access or assignment outlives the membership.
+    const workspaceProjects = this.db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(eq(projects.workspaceId, workspaceId));
+    await this.db.transaction(async (tx) => {
+      await tx
+        .delete(taskAssignees)
+        .where(
+          and(
+            eq(taskAssignees.userId, targetUserId),
+            inArray(
+              taskAssignees.taskId,
+              tx
+                .select({ id: tasks.id })
+                .from(tasks)
+                .where(inArray(tasks.projectId, workspaceProjects)),
+            ),
+          ),
+        );
+      await tx
+        .delete(projectMembers)
+        .where(
+          and(
+            eq(projectMembers.userId, targetUserId),
+            inArray(projectMembers.projectId, workspaceProjects),
+          ),
+        );
+      await tx.delete(workspaceMembers).where(eq(workspaceMembers.id, target.membership.id));
+    });
   }
 
   private async findMember(workspaceId: string, userId: string): Promise<MemberRow> {

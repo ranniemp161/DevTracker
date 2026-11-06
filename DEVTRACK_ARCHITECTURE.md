@@ -1,7 +1,7 @@
 # DevTrack — MVP Architecture & Engineering Overview
 
 **Document status:** Architecture baseline for MVP implementation  
-**Version:** 1.2 (M1 and M2 decisions recorded; see `Docs/decisions/`)  
+**Version:** 1.3 (M1–M3 decisions recorded; see `Docs/decisions/`)  
 **Last updated:** 2026-11-06  
 **Purpose:** Give Claude and other engineering agents a self-contained overview of the DevTrack product, architecture, constraints, and implementation plan.
 
@@ -548,6 +548,7 @@ Use PostgreSQL with Drizzle ORM. The list below is the logical model; exact Driz
 - `created_by` FK
 - timestamps
 - Unique `(workspace_id, key)`
+- `next_task_number` (M3): per-project counter for safe task-number allocation
 
 **project_members**
 - `id`
@@ -568,6 +569,7 @@ Use PostgreSQL with Drizzle ORM. The list below is the logical model; exact Driz
 - `due_date`
 - timestamps
 - `completed_at`
+- `deleted_at` nullable (M3: soft deletion)
 - Unique `(project_id, task_number)`
 
 **task_assignees**
@@ -1456,7 +1458,7 @@ These are intentionally not hard-coded into the architecture yet.
 3. **Real-time hosting validation:** Verify current Vercel WebSocket/runtime behavior and choose direct Socket.IO hosting or managed real-time delivery accordingly.
 4. ~~**Session implementation:**~~ **Resolved in M1.** Opaque, database-backed sessions, with no session library. See `Docs/decisions/0001-authentication-and-sessions.md`. The Vercel proxy and client-IP behaviour still need checking in M8.
 5. **GitHub App details:** Register the app, validate exact permissions, webhook subscriptions, callback URLs, and installation lifecycle.
-6. **Task deletion policy:** Decide between archive-only and soft deletion for tasks.
+6. ~~**Task deletion policy:**~~ **Resolved in M3.** Soft deletion (`tasks.deleted_at`), by the reporter or a workspace Admin/Owner. See `Docs/decisions/0003-projects-and-tasks.md`.
 7. **Activity retention:** Define retention and payload minimization for raw webhook deliveries and activity records.
 
 Do not guess these details. Validate them during the relevant implementation milestone and document the final decision.

@@ -5,7 +5,7 @@ DevTrack is an internal engineering project management platform with first-class
 - **Architecture reference:** [DEVTRACK_ARCHITECTURE.md](DEVTRACK_ARCHITECTURE.md)
 - **Decision records:** [Docs/decisions/](Docs/decisions/)
 
-**Status:** M1 (Foundation) is complete. M2 (workspaces, membership, roles and invitations) is implemented on the `m2-workspaces` branch.
+**Status:** M1 (Foundation) and M2 (workspaces) are complete. M3 (projects, tasks, Kanban and List views, labels and milestones) is implemented on the `m3-projects-tasks` branch.
 
 ## Repository layout
 
@@ -114,3 +114,23 @@ All routes need a session and a verified email. Non-members get `404` for every 
 | GET    | `/workspaces/:id/invitations`     | Admin, Owner (open invitations)                                           |
 | POST   | `/invitations/accept`             | The invited email's account                                               |
 | POST   | `/invitations/:id/revoke`         | Admin, Owner of that workspace                                            |
+
+## Projects and tasks API (M3)
+
+Owners and Admins can access every project in their workspace; Members only the projects they belong to. Everyone else gets `404`. Rules: [Docs/decisions/0003-projects-and-tasks.md](Docs/decisions/0003-projects-and-tasks.md).
+
+| Method               | Endpoint                                               | Who                                                                                |
+| -------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| POST / GET           | `/workspaces/:id/projects`                             | Create: Admin, Owner. List: members (`?includeArchived=true`)                      |
+| GET / PATCH / DELETE | `/projects/:id`                                        | Read: project access. Update and archive: Admin, Owner                             |
+| GET / POST           | `/projects/:id/members`                                | Read: project access. Add: Admin, Owner                                            |
+| DELETE               | `/projects/:id/members/:userId`                        | Admin, Owner (also unassigns their tasks)                                          |
+| POST / GET           | `/projects/:id/tasks`                                  | Project access. List: cursor-paginated, filters `status`, `priority`, `assigneeId` |
+| GET / PATCH          | `/tasks/:id`                                           | Project access                                                                     |
+| PATCH                | `/tasks/:id/status`                                    | Project access                                                                     |
+| DELETE               | `/tasks/:id`                                           | The reporter, or Admin/Owner (soft delete)                                         |
+| POST / DELETE        | `/tasks/:id/assignees`, `/tasks/:id/assignees/:userId` | Project access; assignees must be project members                                  |
+| GET / POST           | `/workspaces/:id/labels`                               | Members (create); Admin/Owner rename and delete via `PATCH/DELETE /labels/:id`     |
+| POST / DELETE        | `/tasks/:id/labels`, `/tasks/:id/labels/:labelId`      | Project access; the label must belong to the same workspace                        |
+| GET / POST           | `/projects/:id/milestones`                             | Read: project access. Create: Admin, Owner                                         |
+| PATCH / DELETE       | `/milestones/:id`                                      | Admin, Owner                                                                       |

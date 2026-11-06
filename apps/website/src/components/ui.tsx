@@ -140,7 +140,7 @@ export function Badge({
   tone = 'neutral',
   children,
 }: {
-  tone?: 'neutral' | 'green' | 'amber' | 'blue';
+  tone?: 'neutral' | 'green' | 'amber' | 'blue' | 'red';
   children: ReactNode;
 }) {
   const styles = {
@@ -148,9 +148,12 @@ export function Badge({
     green: 'bg-green-100 text-green-800',
     amber: 'bg-amber-100 text-amber-800',
     blue: 'bg-blue-100 text-blue-800',
+    red: 'bg-red-100 text-red-800',
   }[tone];
   return (
-    <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${styles}`}>{children}</span>
+    <span className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ${styles}`}>
+      {children}
+    </span>
   );
 }
 
