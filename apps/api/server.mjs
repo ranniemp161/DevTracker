@@ -5,4 +5,4 @@
 
 // Vercel's NestJS preset only accepts an entrypoint that imports NestJS.
 import '@nestjs/core';
-import './dist/esm/bootstrap.js';
+import './dist/esm/bootstrap.mjs';

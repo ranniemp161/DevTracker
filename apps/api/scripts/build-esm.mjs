@@ -3,9 +3,9 @@
 // NestJS 12 ships as ES modules only. `nest build` emits CommonJS, which loads Nest with
 // require(); Node allows that locally, but Vercel's function runtime refuses it (ERR_REQUIRE_ESM).
 // SWC compiles the same sources to ES modules, with decorator metadata for Nest's dependency
-// injection and `.js` extensions on relative imports. Type-checking stays with `nest build`.
+// injection, written as .mjs files (unambiguous ES modules, see below). Type-checking stays with `nest build`.
 import { mkdir, readdir, writeFile } from 'node:fs/promises';
-import { dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { transformFile } from '@swc/core';
 
 const srcDir = resolve('src');
@@ -21,7 +21,7 @@ async function* sources(dir) {
 
 let count = 0;
 for await (const file of sources(srcDir)) {
-  const outFile = join(outDir, relative(srcDir, file)).replace(/\.ts$/, '.js');
+  const outFile = join(outDir, relative(srcDir, file)).replace(/\.ts$/, '.mjs');
   const { code, map } = await transformFile(file, {
     swcrc: false,
     sourceMaps: true,
@@ -31,16 +31,16 @@ for await (const file of sources(srcDir)) {
       transform: { legacyDecorator: true, decoratorMetadata: true },
       target: 'es2023',
       keepClassNames: true,
-      // Absolute, so `resolveFully` can add `.js` to every relative import.
+      // Absolute, so `resolveFully` can add the extension to every relative import.
       baseUrl: srcDir,
     },
-    module: { type: 'es6', resolveFully: true },
+    // .mjs is unambiguous: Vercel's packager rewrote ESM .js files to CommonJS (it follows the
+    // package's CommonJS type, not a nested type marker), which then crashed at runtime.
+    module: { type: 'es6', resolveFully: true, outFileExtension: 'mjs' },
   });
   await mkdir(dirname(outFile), { recursive: true });
-  await writeFile(outFile, `${code}\n//# sourceMappingURL=${outFile.split(/[\/]/).pop()}.map\n`);
+  await writeFile(outFile, `${code}\n//# sourceMappingURL=${basename(outFile)}.map\n`);
   if (map) await writeFile(`${outFile}.map`, map);
   count++;
 }
-// Mark the folder as ES modules (the package itself stays CommonJS for `nest build`).
-await writeFile(join(outDir, 'package.json'), '{ "type": "module" }\n');
 console.log(`build-esm: compiled ${count} files to dist/esm`);
