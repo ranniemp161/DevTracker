@@ -104,7 +104,7 @@ The socket path is `/api/v1/realtime/socket`. Socket.IO answers every URL under 
   - tickets, rooms and the publisher;
   - the after-response interceptor and the controller.
 
-  `setupRealtime()` connects Redis before the app starts, from both `main.ts` and the tests.
+  `setupRealtime()` connects Redis before the app starts, from both `bootstrap.ts` (formerly `main.ts`) and the tests.
 
 - **HTTP-only pieces made explicit:**
   - The global response-envelope interceptor now skips non-HTTP contexts, so socket acknowledgements aren't wrapped.

@@ -29,6 +29,16 @@ export class GithubInstallationUnavailableError extends Error {
   }
 }
 
+/**
+ * The parts of a `fetch` response this client uses. Declared here instead of relying on the global
+ * `Response` type, which Vercel's NestJS build resolves to an empty placeholder (TS2339).
+ */
+interface FetchResponse {
+  ok: boolean;
+  status: number;
+  json(): Promise<unknown>;
+}
+
 const API = 'https://api.github.com';
 const TIMEOUT_MS = 10_000;
 /** Upper bound on repositories listed per installation (10 pages of 100). */
@@ -231,7 +241,7 @@ export class GithubAppClient {
     });
   }
 
-  private async installationGet(installationId: number, path: string): Promise<Response> {
+  private async installationGet(installationId: number, path: string): Promise<FetchResponse> {
     const token = await this.installationToken(installationId);
     const res = await this.fetch(`${API}${path}`, {
       headers: { ...API_HEADERS, Authorization: `Bearer ${token}` },
@@ -274,11 +284,12 @@ export class GithubAppClient {
     return parsed.data.token;
   }
 
-  private async fetch(url: string, init: RequestInit): Promise<Response> {
+  private async fetch(url: string, init: RequestInit): Promise<FetchResponse> {
     const res = await fetch(url, { ...init, signal: AbortSignal.timeout(TIMEOUT_MS) }).catch(
       () => null,
     );
     if (!res) throw githubApiError();
-    return res;
+    // Cast through unknown: see FetchResponse. At runtime this is Node's real Response.
+    return res as unknown as FetchResponse;
   }
 }
