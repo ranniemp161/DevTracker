@@ -22,11 +22,11 @@ export function CreateWorkspaceForm() {
 
   return (
     <div className="mx-auto max-w-md">
-      <Link href="/" className="text-sm text-neutral-600 hover:underline">
+      <Link href="/" className="text-sm text-fg-muted hover:underline">
         ← Workspaces
       </Link>
       <h1 className="mt-2 text-2xl font-semibold tracking-tight">New workspace</h1>
-      <p className="mt-1 text-sm text-neutral-600">
+      <p className="mt-1 text-sm text-fg-muted">
         A workspace holds your team, projects and GitHub connections. You will be its owner.
       </p>
       <form onSubmit={form.onSubmit} noValidate className="mt-6 space-y-4">

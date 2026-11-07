@@ -178,6 +178,7 @@
   --dt-control-xl: 44px; /* auth forms (touch-friendly) */
   --dt-sidebar-width: 248px;
   --dt-board-column-width: 272px;
+  --dt-card-min-width: 320px; /* project cards */
   --dt-task-aside-width: 320px; /* task detail properties panel */
 
   /* ---------- Radius ---------- */
@@ -235,8 +236,6 @@ html {
        progress, review, done, blocked)
      rounded-chip / rounded-control / rounded-card / rounded-panel
      shadow-card / shadow-raised / shadow-overlay
-   LEGACY names (already used ~500 times in apps/website): mapped onto the new
-   palette below. Replace them screen by screen, then delete the block.
    ========================================================================== */
 @theme inline {
   --font-sans: var(--dt-font-sans);
@@ -308,6 +307,7 @@ html {
   --text-2xs: 10px;
   --text-pill: 11px;
   --text-title: var(--dt-text-2xl);
+  --text-hero: var(--dt-text-3xl);
 
   --color-pr-open: var(--dt-pr-open);
   --color-pr-merged: var(--dt-pr-merged);
@@ -320,18 +320,4 @@ html {
   --shadow-card: var(--dt-shadow-xs);
   --shadow-raised: var(--dt-shadow-md);
   --shadow-overlay: var(--dt-shadow-lg);
-
-  /* ---- Legacy aliases (current globals.css names → new palette) ---- */
-  --color-canvas: var(--dt-bg);
-  --color-subtle: var(--dt-surface-muted);
-  --color-subtle-hover: var(--dt-border);
-  --color-border: var(--dt-border);
-  --color-border-strong: var(--dt-border-control);
-  --color-accent: var(--dt-primary);
-  --color-accent-hover: var(--dt-primary-hover);
-  --color-accent-tint: var(--dt-primary-soft);
-  --color-accent-text: var(--dt-primary-soft-text);
-  --color-graphite: var(--dt-text);
-  --color-mineral: var(--dt-text-muted);
-  --color-mineral-muted: var(--dt-text-subtle);
 }

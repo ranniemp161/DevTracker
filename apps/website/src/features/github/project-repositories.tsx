@@ -7,7 +7,7 @@ import type {
 } from '@devtrack/types';
 import Link from 'next/link';
 import { useState } from 'react';
-import { Alert, Badge, Button, Card, Select } from '@/components/ui';
+import { Alert, Badge, Button, SettingsSection, Select } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useApiQuery } from '@/lib/use-api-query';
 import { useProject } from '../projects/project-context';
@@ -58,8 +58,9 @@ export function ProjectRepositories() {
   }
 
   return (
-    <Card
-      title="Repositories"
+    <SettingsSection
+      id="repository"
+      title="Repository"
       description="GitHub activity from connected repositories will appear in this project. Disconnecting keeps past activity."
     >
       <div className="space-y-4">
@@ -67,9 +68,9 @@ export function ProjectRepositories() {
         {notice ? <Alert tone="success">{notice}</Alert> : null}
         {connected.error ? <Alert>{connected.error.message}</Alert> : null}
         {connected.data?.length === 0 ? (
-          <p className="text-sm text-neutral-500">No repositories connected yet.</p>
+          <p className="text-sm text-fg-subtle">No repositories connected yet.</p>
         ) : null}
-        <ul className="divide-y divide-neutral-100">
+        <ul className="divide-y divide-line-subtle">
           {connected.data?.map((r) => (
             <li key={r.id} className="flex items-center justify-between gap-3 py-2.5">
               <div className="min-w-0">
@@ -81,7 +82,7 @@ export function ProjectRepositories() {
                 >
                   {r.fullName}
                 </a>
-                <p className="text-xs text-neutral-500">
+                <p className="text-xs text-fg-subtle">
                   {r.visibility} · default branch {r.defaultBranch}
                   {r.connectedBy ? ` · connected by @${r.connectedBy.username}` : ''}
                 </p>
@@ -110,7 +111,7 @@ export function ProjectRepositories() {
           onConnected={connected.reload}
         />
       </div>
-    </Card>
+    </SettingsSection>
   );
 }
 
@@ -173,7 +174,7 @@ function ConnectForm({
   }
 
   return (
-    <form onSubmit={connect} className="space-y-3 border-t border-neutral-100 pt-4">
+    <form onSubmit={connect} className="space-y-3 border-t border-line-subtle pt-4">
       <h3 className="text-sm font-medium">Connect a repository</h3>
       {error ? <Alert>{error}</Alert> : null}
       {repos.error ? <Alert>{repos.error.message}</Alert> : null}
@@ -217,7 +218,7 @@ function ConnectForm({
           ))}
         </Select>
       </div>
-      <p className="text-xs text-neutral-500">
+      <p className="text-xs text-fg-subtle">
         Only repositories the GitHub App was given access to are listed. Change that on GitHub, then
         reload this page.
       </p>

@@ -4,10 +4,11 @@ import { updateProjectSchema } from '@devtrack/validators';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { z } from 'zod';
-import { Alert, Button, Card, Field, Select, SubmitButton } from '@/components/ui';
+import { Alert, Button, SettingsSection, Field, Select, SubmitButton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useAuthForm } from '../auth/use-auth-form';
 import { ProjectRepositories } from '../github/project-repositories';
+import { ProjectMembers } from './project-members';
 import { PROJECT_STATUS_LABEL } from './labels';
 import { useProject } from './project-context';
 
@@ -17,8 +18,9 @@ export function ProjectSettings() {
     return <Alert>Only workspace admins can change project settings.</Alert>;
   if (readOnly) return <Alert tone="info">Archived projects cannot be edited.</Alert>;
   return (
-    <div className="space-y-6">
+    <div>
       <GeneralCard />
+      <ProjectMembers />
       <ProjectRepositories />
       <ArchiveCard />
     </div>
@@ -55,10 +57,21 @@ function GeneralCard() {
   const v = form.values;
 
   return (
-    <Card title="General" description={`The project key (${project.key}) cannot be changed.`}>
+    <SettingsSection
+      id="general"
+      title="General"
+      description="Name, description, status and dates for this project."
+    >
       <form onSubmit={form.onSubmit} noValidate className="max-w-lg space-y-4">
         {form.formError ? <Alert>{form.formError}</Alert> : null}
         {saved ? <Alert tone="success">Saved.</Alert> : null}
+        <Field
+          label="Project key"
+          name="key"
+          value={project.key}
+          readOnly
+          hint="Keys can't be changed."
+        />
         <Field
           label="Name"
           name="name"
@@ -102,7 +115,7 @@ function GeneralCard() {
           <SubmitButton pending={form.pending}>Save</SubmitButton>
         </div>
       </form>
-    </Card>
+    </SettingsSection>
   );
 }
 
@@ -126,9 +139,10 @@ function ArchiveCard() {
   }
 
   return (
-    <Card
-      title="Archive project"
-      description="Archived projects become read-only and are hidden from the project list."
+    <SettingsSection
+      danger
+      title="Danger zone"
+      description="Archiving makes the project read-only and hides it from the project list."
     >
       <div className="max-w-md space-y-3">
         {error ? <Alert>{error}</Alert> : null}
@@ -143,6 +157,6 @@ function ArchiveCard() {
           Archive project
         </Button>
       </div>
-    </Card>
+    </SettingsSection>
   );
 }

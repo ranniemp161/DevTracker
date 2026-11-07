@@ -29,7 +29,7 @@ export function CreateProjectForm() {
     <div className="max-w-lg">
       <Link
         href={`/workspaces/${workspace.id}/projects`}
-        className="text-sm text-neutral-600 hover:underline"
+        className="text-sm text-fg-muted hover:underline"
       >
         ← Projects
       </Link>

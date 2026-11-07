@@ -26,10 +26,7 @@ export function ResetPasswordForm() {
       title="Choose a new password"
       subtitle="You will be signed out everywhere and asked to sign in again."
       footer={
-        <Link
-          href="/login"
-          className="font-medium text-neutral-900 underline-offset-4 hover:underline"
-        >
+        <Link href="/login" className="font-medium text-fg underline-offset-4 hover:underline">
           Back to sign in
         </Link>
       }

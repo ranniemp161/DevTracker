@@ -1,8 +1,9 @@
 'use client';
 
 import type { WorkspaceMember } from '@devtrack/types';
-import { useState } from 'react';
-import { Alert, Avatar, Button, Card } from '@/components/ui';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { Alert, Avatar, Button, SettingsSection } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useApiQuery } from '@/lib/use-api-query';
 import { useProject } from './project-context';
@@ -35,18 +36,19 @@ export function ProjectMembers() {
   );
 
   return (
-    <Card
-      title="Project members"
+    <SettingsSection
+      id="members"
+      title="Members"
       description="Workspace members can only see projects they belong to. Workspace admins see every project."
     >
       {error ? <Alert>{error}</Alert> : null}
-      <ul className="divide-y divide-neutral-100">
+      <ul className="divide-y divide-line-subtle">
         {members.map((m) => (
           <li key={m.user.id} className="flex items-center gap-3 py-2.5">
             <Avatar name={m.user.username} url={m.user.avatarUrl} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">@{m.user.username}</p>
-              <p className="truncate text-sm text-neutral-500">{m.user.email}</p>
+              <p className="truncate text-sm text-fg-subtle">{m.user.email}</p>
             </div>
             {canManage ? (
               <Button
@@ -67,7 +69,7 @@ export function ProjectMembers() {
       </ul>
       {canManage ? (
         <label className="mt-4 block max-w-sm text-sm">
-          <span className="mb-1.5 block font-medium text-neutral-800">Add a workspace member</span>
+          <span className="mb-1.5 block font-medium text-fg-secondary">Add a workspace member</span>
           <select
             value=""
             disabled={busy || addable.length === 0}
@@ -77,7 +79,7 @@ export function ProjectMembers() {
                 api(`/projects/${project.id}/members`, { body: { userId: e.target.value } }),
               )
             }
-            className="w-full rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm"
+            className="w-full rounded-control border border-line-control bg-surface px-2 py-2 text-sm"
           >
             <option value="">
               {addable.length === 0 ? 'Everyone is already a member' : 'Choose a person…'}
@@ -90,6 +92,20 @@ export function ProjectMembers() {
           </select>
         </label>
       ) : null}
-    </Card>
+    </SettingsSection>
   );
+}
+
+/**
+ * The /members route. Admins manage members from Settings (#members), so they are sent there;
+ * everyone else keeps this read-only list, because project settings are admin-only.
+ */
+export function ProjectMembersPage() {
+  const router = useRouter();
+  const { project, readOnly } = useProject();
+  const toSettings = project.viewerCanManage && !readOnly;
+  useEffect(() => {
+    if (toSettings) router.replace(`/projects/${project.id}/settings#members`);
+  }, [toSettings, router, project.id]);
+  return toSettings ? null : <ProjectMembers />;
 }

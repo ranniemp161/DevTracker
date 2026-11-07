@@ -35,7 +35,7 @@ export function ProjectList() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
-        <label className="flex items-center gap-2 text-sm text-neutral-600">
+        <label className="flex items-center gap-2 text-sm text-fg-muted">
           <input
             type="checkbox"
             checked={showArchived}
@@ -46,7 +46,7 @@ export function ProjectList() {
         {isAdmin(workspace.role) ? (
           <Link
             href={`/workspaces/${workspace.id}/projects/new`}
-            className="rounded-md bg-neutral-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-neutral-800"
+            className="inline-flex h-9 items-center rounded-control bg-primary px-3.5 text-sm font-medium text-fg-on-inverse transition-colors hover:bg-primary-hover"
           >
             New project
           </Link>
@@ -55,42 +55,50 @@ export function ProjectList() {
 
       {projects.error ? <Alert>{projects.error.message}</Alert> : null}
       {projects.data && projects.data.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-neutral-300 bg-white p-10 text-center text-sm text-neutral-600">
+        <div className="rounded-panel border border-dashed border-line-control bg-surface p-10 text-center text-sm text-fg-muted">
           {isAdmin(workspace.role)
             ? 'No projects yet. Create one to start tracking tasks.'
             : 'You have not been added to any projects yet. Ask a workspace admin.'}
         </div>
       ) : null}
 
-      <ul className="grid gap-4 sm:grid-cols-2">
+      <ul className="grid grid-cols-cards gap-4">
         {projects.data?.map((p) => {
           const unread = unreadQuery.data?.find((u) => u.projectId === p.id)?.unreadCount ?? 0;
           return (
             <li key={p.id}>
               <Link
                 href={`/projects/${p.id}`}
-                className="block rounded-xl border border-neutral-200 bg-white p-5 hover:border-neutral-400"
+                className="block rounded-panel border border-line bg-surface p-5 transition-colors hover:border-line-control"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold tracking-wide text-neutral-500">{p.key}</p>
-                    <p className="truncate font-medium">{p.name}</p>
+                    <p className="truncate text-lg font-semibold text-fg">{p.name}</p>
+                    <p className="font-mono text-xs text-fg-subtle">{p.key}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     {unread > 0 ? (
-                      <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">
+                      <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-fg-on-inverse">
                         {unread} unread
                       </span>
                     ) : null}
-                    <Badge tone={p.status === 'ACTIVE' ? 'green' : 'neutral'}>
+                    <Badge
+                      tone={
+                        p.status === 'ACTIVE' || p.status === 'PLANNING'
+                          ? 'blue'
+                          : p.status === 'COMPLETED'
+                            ? 'green'
+                            : 'neutral'
+                      }
+                    >
                       {PROJECT_STATUS_LABEL[p.status]}
                     </Badge>
                   </div>
                 </div>
                 {p.description ? (
-                  <p className="mt-2 line-clamp-2 text-sm text-neutral-600">{p.description}</p>
+                  <p className="mt-2 line-clamp-2 text-sm text-fg-muted">{p.description}</p>
                 ) : null}
-                <p className="mt-3 text-xs text-neutral-500">
+                <p className="mt-3 text-xs text-fg-subtle">
                   {p.memberCount} {p.memberCount === 1 ? 'member' : 'members'}
                   {p.targetDate ? ` · target ${formatDate(p.targetDate)}` : ''}
                 </p>

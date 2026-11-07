@@ -133,7 +133,7 @@ export function TaskList() {
                     ))}
                   </div>
                 </td>
-                <td className="px-4 py-2.5 whitespace-nowrap text-neutral-600">
+                <td className="px-4 py-2.5 whitespace-nowrap text-fg-muted">
                   {formatDate(t.dueDate)}
                 </td>
               </tr>

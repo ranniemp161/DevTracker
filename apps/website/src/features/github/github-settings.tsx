@@ -2,7 +2,7 @@
 
 import type { GithubInstallation, GithubInstallationList } from '@devtrack/types';
 import { useSearchParams } from 'next/navigation';
-import { Alert, Badge, Card } from '@/components/ui';
+import { Alert, Badge, SettingsSection } from '@/components/ui';
 import { useApiQuery } from '@/lib/use-api-query';
 import { useWorkspace } from '../workspaces/workspace-context';
 import { githubErrorMessage } from './error-messages';
@@ -31,14 +31,15 @@ export function GithubSettings() {
   const installHref = `/api/v1/github/install?workspaceId=${encodeURIComponent(workspace.id)}`;
 
   return (
-    <Card
+    <SettingsSection
+      id="github"
       title="GitHub"
       description="Install the DevTrack GitHub App on an account or organization, then connect its repositories to projects from each project's settings. Signing in with GitHub does not grant repository access."
       actions={
         query.data?.appConfigured ? (
           <a
             href={installHref}
-            className="inline-flex items-center rounded-md bg-neutral-900 px-3.5 py-2 text-sm font-medium whitespace-nowrap text-white hover:bg-neutral-800"
+            className="inline-flex items-center rounded-control bg-fg px-3.5 py-2 text-sm font-medium whitespace-nowrap text-fg-on-inverse hover:bg-fg-secondary"
           >
             Install GitHub App
           </a>
@@ -66,14 +67,14 @@ export function GithubSettings() {
           </Alert>
         ) : null}
         {query.data?.installations.length === 0 && query.data.appConfigured ? (
-          <p className="text-sm text-neutral-500">No GitHub installations yet.</p>
+          <p className="text-sm text-fg-subtle">No GitHub installations yet.</p>
         ) : null}
-        <ul className="divide-y divide-neutral-100">
+        <ul className="divide-y divide-line-subtle">
           {query.data?.installations.map((i) => (
             <li key={i.id} className="flex items-center justify-between gap-3 py-2.5">
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">{i.accountLogin}</p>
-                <p className="text-xs text-neutral-500">
+                <p className="text-xs text-fg-subtle">
                   {i.accountType} · installed{' '}
                   {new Date(i.installedAt).toLocaleDateString(undefined, { dateStyle: 'medium' })}
                   {i.installedBy ? ` by @${i.installedBy.username}` : ''}
@@ -84,6 +85,6 @@ export function GithubSettings() {
           ))}
         </ul>
       </div>
-    </Card>
+    </SettingsSection>
   );
 }

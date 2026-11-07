@@ -4,7 +4,16 @@ import type { Invitation, WorkspaceMember, WorkspaceRole } from '@devtrack/types
 import { createInvitationSchema } from '@devtrack/validators';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { Alert, Avatar, Badge, Button, Card, Field, Select, SubmitButton } from '@/components/ui';
+import {
+  Alert,
+  Avatar,
+  Badge,
+  Button,
+  SettingsSection,
+  Field,
+  Select,
+  SubmitButton,
+} from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useApiQuery } from '@/lib/use-api-query';
 import { useAuthForm } from '../auth/use-auth-form';
@@ -24,18 +33,21 @@ export function MembersPage() {
       {isAdmin(workspace.role) ? (
         <InvitePanel onInvited={invitations.reload} invitations={invitations} />
       ) : null}
-      <Card title="Members" description={`${members.data?.length ?? workspace.memberCount} people`}>
+      <SettingsSection
+        title="Members"
+        description={`${members.data?.length ?? workspace.memberCount} people`}
+      >
         {members.error ? <Alert>{members.error.message}</Alert> : null}
         {!members.data ? (
-          <p className="text-sm text-neutral-500">Loading…</p>
+          <p className="text-sm text-fg-subtle">Loading…</p>
         ) : (
-          <ul className="divide-y divide-neutral-100">
+          <ul className="divide-y divide-line-subtle">
             {members.data.map((m) => (
               <MemberRow key={m.user.id} member={m} onChanged={members.reload} />
             ))}
           </ul>
         )}
-      </Card>
+      </SettingsSection>
     </div>
   );
 }
@@ -95,10 +107,10 @@ function MemberRow({ member, onChanged }: { member: WorkspaceMember; onChanged: 
       <Avatar name={member.user.username} url={member.user.avatarUrl} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">
-          @{member.user.username} {isSelf ? <span className="text-neutral-500">(you)</span> : null}
+          @{member.user.username} {isSelf ? <span className="text-fg-subtle">(you)</span> : null}
         </p>
-        <p className="truncate text-sm text-neutral-500">{member.user.email}</p>
-        {error ? <p className="mt-1 text-sm text-red-700">{error}</p> : null}
+        <p className="truncate text-sm text-fg-subtle">{member.user.email}</p>
+        {error ? <p className="mt-1 text-sm text-danger">{error}</p> : null}
       </div>
 
       {canManage && !isSelf ? (
@@ -108,7 +120,7 @@ function MemberRow({ member, onChanged }: { member: WorkspaceMember; onChanged: 
             value={member.role}
             disabled={busy}
             onChange={(e) => changeRole(e.target.value as WorkspaceRole)}
-            className="rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm"
+            className="rounded-control border border-line-control bg-surface px-2 py-1 text-sm"
           >
             <option value="ADMIN">Admin</option>
             <option value="MEMBER">Member</option>
@@ -158,7 +170,7 @@ function InvitePanel({
   );
 
   return (
-    <Card
+    <SettingsSection
       title="Invite people"
       description="Invitations are sent by email and expire after 7 days. Only the invited address can accept."
     >
@@ -191,17 +203,17 @@ function InvitePanel({
         ) : null}
       </div>
 
-      <h3 className="mt-6 text-sm font-medium text-neutral-800">Pending invitations</h3>
+      <h3 className="mt-6 text-sm font-medium text-fg-secondary">Pending invitations</h3>
       {invitations.error ? <Alert>{invitations.error.message}</Alert> : null}
       {invitations.data && invitations.data.length === 0 ? (
-        <p className="mt-2 text-sm text-neutral-500">No pending invitations.</p>
+        <p className="mt-2 text-sm text-fg-subtle">No pending invitations.</p>
       ) : null}
-      <ul className="mt-2 divide-y divide-neutral-100">
+      <ul className="mt-2 divide-y divide-line-subtle">
         {invitations.data?.map((inv) => (
           <InvitationRow key={inv.id} invitation={inv} onChanged={invitations.reload} />
         ))}
       </ul>
-    </Card>
+    </SettingsSection>
   );
 }
 
@@ -234,11 +246,11 @@ function InvitationRow({
     <li className="flex flex-wrap items-center gap-3 py-2.5">
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm">{invitation.email}</p>
-        <p className="text-xs text-neutral-500">
+        <p className="text-xs text-fg-subtle">
           {ROLE_LABEL[invitation.role]} · invited by @{invitation.invitedBy?.username ?? 'unknown'}{' '}
           · {invitation.status === 'EXPIRED' ? 'expired' : `expires ${expires}`}
         </p>
-        {error ? <p className="text-sm text-red-700">{error}</p> : null}
+        {error ? <p className="text-sm text-danger">{error}</p> : null}
       </div>
       {invitation.status === 'EXPIRED' ? (
         <Badge tone="amber">Expired</Badge>

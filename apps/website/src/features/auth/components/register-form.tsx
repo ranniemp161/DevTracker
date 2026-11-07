@@ -29,7 +29,7 @@ export function RegisterForm() {
           Already have an account?{' '}
           <Link
             href={`/login?next=${encodeURIComponent(next)}`}
-            className="font-medium text-neutral-900 underline-offset-4 hover:underline"
+            className="font-medium text-fg underline-offset-4 hover:underline"
           >
             Sign in
           </Link>

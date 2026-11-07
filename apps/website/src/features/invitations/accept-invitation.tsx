@@ -66,24 +66,24 @@ export function AcceptInvitation() {
   return (
     <AuthCard title="Join a workspace" subtitle="You have been invited to a DevTrack workspace.">
       <div className="space-y-4">
-        {me.loading ? <p className="text-sm text-neutral-500">Checking your session…</p> : null}
+        {me.loading ? <p className="text-sm text-fg-subtle">Checking your session…</p> : null}
         {me.error && !signedOut ? <Alert>{me.error.message}</Alert> : null}
 
         {signedOut ? (
           <>
-            <p className="text-sm text-neutral-700">
+            <p className="text-sm text-fg-secondary">
               Sign in, or create an account, with the email address the invitation was sent to.
             </p>
             <div className="flex gap-3">
               <Link
                 href={`/login?next=${NEXT}`}
-                className="flex-1 rounded-md bg-neutral-900 px-4 py-2 text-center text-sm font-medium text-white hover:bg-neutral-800"
+                className="flex-1 rounded-control bg-fg px-4 py-2 text-center text-sm font-medium text-fg-on-inverse hover:bg-fg-secondary"
               >
                 Sign in
               </Link>
               <Link
                 href={`/register?next=${NEXT}`}
-                className="flex-1 rounded-md border border-neutral-300 px-4 py-2 text-center text-sm font-medium hover:bg-neutral-50"
+                className="flex-1 rounded-control border border-line-control px-4 py-2 text-center text-sm font-medium hover:bg-surface-sunken"
               >
                 Create account
               </Link>
@@ -100,7 +100,7 @@ export function AcceptInvitation() {
 
         {user && user.emailVerified ? (
           <>
-            <p className="text-sm text-neutral-700">
+            <p className="text-sm text-fg-secondary">
               Signed in as <strong>@{user.username}</strong> ({user.email}).
             </p>
             {typeof state === 'object' ? (

@@ -52,7 +52,7 @@ export function VerifyEmail() {
       {state.status === 'failed' ? (
         <div className="space-y-4">
           <Alert>{state.message}</Alert>
-          <p className="text-sm text-neutral-600">
+          <p className="text-sm text-fg-muted">
             Sign in and use “Resend verification email” to get a new link.
           </p>
           <Link

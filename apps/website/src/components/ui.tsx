@@ -503,3 +503,48 @@ export function PanelSection({ title, children }: { title: string; children: Rea
     </section>
   );
 }
+
+/** Two-column settings block: title and description on the left, content on the right. */
+export function SettingsSection({
+  id,
+  title,
+  description,
+  actions,
+  danger = false,
+  children,
+}: {
+  id?: string;
+  title: string;
+  description?: ReactNode;
+  actions?: ReactNode;
+  danger?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      id={id}
+      aria-labelledby={id ? `${id}-title` : undefined}
+      className="flex scroll-mt-6 flex-col gap-4 border-b border-line py-7 first:pt-0 last:border-b-0 lg:flex-row lg:gap-10"
+    >
+      <div className="lg:w-64 lg:shrink-0">
+        <h2
+          id={id ? `${id}-title` : undefined}
+          className={`text-md font-semibold ${danger ? 'text-danger' : 'text-fg'}`}
+        >
+          {title}
+        </h2>
+        {description ? <p className="mt-1 text-label text-fg-muted">{description}</p> : null}
+        {actions ? <div className="mt-3">{actions}</div> : null}
+      </div>
+      <div className="min-w-0 flex-1">
+        {danger ? (
+          <div className="rounded-card border border-danger-line bg-danger-soft p-4.5">
+            {children}
+          </div>
+        ) : (
+          children
+        )}
+      </div>
+    </section>
+  );
+}

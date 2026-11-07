@@ -23,13 +23,14 @@ export function LoginForm() {
 
   return (
     <AuthCard
-      title="Sign in to DevTrack"
+      title="Sign in"
+      subtitle="Welcome back. Pick up where your team left off."
       footer={
         <>
           New to DevTrack?{' '}
           <Link
             href={`/register?next=${encodeURIComponent(next)}`}
-            className="font-medium text-neutral-900 underline-offset-4 hover:underline"
+            className="font-medium text-fg underline-offset-4 hover:underline"
           >
             Create an account
           </Link>
@@ -67,7 +68,7 @@ export function LoginForm() {
         <div className="text-right text-sm">
           <Link
             href="/forgot-password"
-            className="text-neutral-600 underline-offset-4 hover:underline"
+            className="text-fg-muted underline-offset-4 hover:underline"
           >
             Forgot password?
           </Link>

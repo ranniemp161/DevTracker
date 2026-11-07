@@ -13,3 +13,8 @@ body {
 @utility grid-cols-task {
   grid-template-columns: minmax(0, 1fr) var(--dt-task-aside-width);
 }
+
+/* All projects: responsive card grid, 320px minimum per card. */
+@utility grid-cols-cards {
+  grid-template-columns: repeat(auto-fill, minmax(var(--dt-card-min-width), 1fr));
+}

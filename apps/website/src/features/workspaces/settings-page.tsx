@@ -4,7 +4,7 @@ import type { WorkspaceDetails } from '@devtrack/types';
 import { updateWorkspaceSchema } from '@devtrack/validators';
 import { useRouter } from 'next/navigation';
 import { Suspense, useState } from 'react';
-import { Alert, Button, Card, Field, SubmitButton } from '@/components/ui';
+import { Alert, Button, SettingsSection, Field, SubmitButton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useAuthForm } from '../auth/use-auth-form';
 import { useSession } from '../session/session-context';
@@ -19,7 +19,7 @@ export function SettingsPage() {
     return <Alert>Only workspace admins can change settings.</Alert>;
   }
   return (
-    <div className="space-y-6">
+    <div>
       <RenameCard />
       <LabelsSettings />
       {/* GithubSettings reads ?github= via useSearchParams, which needs a Suspense boundary. */}
@@ -47,7 +47,11 @@ function RenameCard() {
   });
 
   return (
-    <Card title="General" description={`The workspace slug (${workspace.slug}) does not change.`}>
+    <SettingsSection
+      id="general"
+      title="General"
+      description={`The workspace slug (${workspace.slug}) does not change.`}
+    >
       <form onSubmit={form.onSubmit} noValidate className="max-w-md space-y-4">
         {form.formError ? <Alert>{form.formError}</Alert> : null}
         {saved ? <Alert tone="success">Saved.</Alert> : null}
@@ -62,7 +66,7 @@ function RenameCard() {
           <SubmitButton pending={form.pending}>Save</SubmitButton>
         </div>
       </form>
-    </Card>
+    </SettingsSection>
   );
 }
 
@@ -88,8 +92,9 @@ function ArchiveCard() {
   }
 
   return (
-    <Card
-      title="Archive workspace"
+    <SettingsSection
+      danger
+      title="Danger zone"
       description="Archiving hides the workspace from every member. Only the owner can do this."
     >
       <div className="max-w-md space-y-3">
@@ -109,6 +114,6 @@ function ArchiveCard() {
           Archive workspace
         </Button>
       </div>
-    </Card>
+    </SettingsSection>
   );
 }

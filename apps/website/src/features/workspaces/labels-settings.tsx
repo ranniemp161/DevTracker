@@ -2,7 +2,7 @@
 
 import type { Label } from '@devtrack/types';
 import { useState } from 'react';
-import { Alert, Button, Card } from '@/components/ui';
+import { Alert, Button, SettingsSection } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useApiQuery } from '@/lib/use-api-query';
 import { LABEL_COLORS, LabelChip } from '../projects/label-chip';
@@ -35,17 +35,18 @@ export function LabelsSettings() {
   }
 
   return (
-    <Card
+    <SettingsSection
+      id="labels"
       title="Labels"
       description="Shared by every project in this workspace. Deleting a label removes it from all tasks."
     >
       {error ? <Alert>{error}</Alert> : null}
       {labels.data?.length === 0 ? (
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-fg-subtle">
           No labels yet. Members can create labels from any task.
         </p>
       ) : null}
-      <ul className="divide-y divide-neutral-100">
+      <ul className="divide-y divide-line-subtle">
         {labels.data?.map((l) =>
           editing?.id === l.id ? (
             <li key={l.id} className="flex flex-wrap items-center gap-2 py-2.5">
@@ -54,7 +55,7 @@ export function LabelsSettings() {
                 maxLength={40}
                 aria-label="Label name"
                 onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-                className="rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm"
+                className="rounded-control border border-line-control bg-surface px-2 py-1 text-sm"
               />
               <div className="flex gap-1" role="radiogroup" aria-label="Label color">
                 {LABEL_COLORS.map((c) => (
@@ -65,7 +66,7 @@ export function LabelsSettings() {
                     aria-checked={editing.color === c}
                     aria-label={c}
                     onClick={() => setEditing({ ...editing, color: c })}
-                    className={`size-5 rounded-full ${editing.color === c ? 'ring-2 ring-neutral-900 ring-offset-1' : ''}`}
+                    className={`size-5 rounded-full ${editing.color === c ? 'ring-2 ring-fg ring-offset-1' : ''}`}
                     style={{ backgroundColor: c }}
                   />
                 ))}
@@ -112,6 +113,6 @@ export function LabelsSettings() {
           ),
         )}
       </ul>
-    </Card>
+    </SettingsSection>
   );
 }
