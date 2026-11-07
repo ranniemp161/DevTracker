@@ -234,8 +234,8 @@ export function Board() {
               onClose={closeTask}
               isDrawer={true}
               onTaskUpdated={(updated) => {
-                setTasks((current) =>
-                  current?.map((t) => (t.id === updated.id ? updated : t)) ?? null,
+                setTasks(
+                  (current) => current?.map((t) => (t.id === updated.id ? updated : t)) ?? null,
                 );
               }}
             />
