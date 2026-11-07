@@ -2,7 +2,7 @@
 
 import type { Comment, Task } from '@devtrack/types';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { Alert, Avatar, Button, Skeleton } from '@/components/ui';
+import { Alert, Avatar, Button } from '@/components/ui';
 import { api, apiPage, ApiError } from '@/lib/api';
 import { useRealtimeRefresh } from '@/lib/realtime';
 import { useProject } from '../projects/project-context';
@@ -10,7 +10,7 @@ import { useSession } from '../session/session-context';
 import { timeAgo } from './describe-activity';
 
 const textareaClass =
-  'block w-full rounded-lg border border-border bg-white px-3 py-2 text-xs sm:text-sm text-graphite shadow-xs outline-none placeholder:text-mineral-muted focus:border-accent focus:ring-2 focus:ring-accent/15 transition-colors';
+  'block w-full rounded-control border border-line-control bg-surface px-3 py-2 text-sm placeholder:text-fg-subtle focus-visible:border-primary';
 
 /**
  * Renders plain text (never HTML) and highlights `@mentions` that resolved to real people.
@@ -25,10 +25,7 @@ function CommentBody({ comment }: { comment: Comment }) {
     if (!known.has(username)) continue;
     parts.push(comment.body!.slice(last, match.index));
     parts.push(
-      <span
-        key={match.index}
-        className="rounded-md bg-accent-tint px-1 font-semibold text-accent-text"
-      >
+      <span key={match.index} className="font-medium text-primary">
         {match[0]}
       </span>,
     );
@@ -36,7 +33,7 @@ function CommentBody({ comment }: { comment: Comment }) {
   }
   parts.push((comment.body ?? '').slice(last));
   return (
-    <p className="text-xs sm:text-sm break-words whitespace-pre-wrap text-graphite leading-relaxed">
+    <p className="text-sm leading-relaxed break-words whitespace-pre-wrap text-fg-secondary">
       {parts}
     </p>
   );
@@ -52,7 +49,6 @@ export function CommentThread({ task, onActivity }: { task: Task; onActivity: ()
   const [posting, setPosting] = useState(false);
   const [editing, setEditing] = useState<{ id: string; body: string } | null>(null);
   const [version, setVersion] = useState(0);
-
   // Live updates (M7): comments posted or deleted by others.
   useRealtimeRefresh(
     (e) => e.type.startsWith('comment.') && e.payload.taskId === task.id,
@@ -117,19 +113,13 @@ export function CommentThread({ task, onActivity }: { task: Task; onActivity: ()
 
   return (
     <section aria-labelledby="comments-heading" className="space-y-4">
-      <h2 id="comments-heading" className="text-base font-semibold text-graphite tracking-tight">
-        Discussion
+      <h2 id="comments-heading" className="text-md font-semibold">
+        Comments
       </h2>
-      {error ? <Alert tone="error">{error}</Alert> : null}
-      {!comments ? (
-        <div className="space-y-3">
-          <Skeleton className="h-16 w-full rounded-xl" />
-        </div>
-      ) : null}
-      {comments?.length === 0 ? (
-        <p className="text-xs text-mineral-muted">No comments yet. Start the discussion below.</p>
-      ) : null}
-      <ol className="space-y-3">
+      {error ? <Alert>{error}</Alert> : null}
+      {!comments ? <p className="text-sm text-fg-subtle">Loading comments…</p> : null}
+      {comments?.length === 0 ? <p className="text-sm text-fg-subtle">No comments yet.</p> : null}
+      <ol className="space-y-4">
         {comments?.map((c) => {
           const mine = c.author?.id === user.id;
           const canDelete = !readOnly && !c.deleted && (mine || project.viewerCanManage);
@@ -138,53 +128,20 @@ export function CommentThread({ task, onActivity }: { task: Task; onActivity: ()
               <Avatar
                 name={c.author?.username ?? '?'}
                 url={c.author?.avatarUrl ?? null}
+                seed={c.author?.id}
                 size="sm"
               />
-              <div className="min-w-0 flex-1 rounded-xl border border-border bg-surface p-3.5 shadow-xs">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs text-mineral">
-                    <span className="font-semibold text-graphite">
-                      @{c.author?.username ?? 'deleted user'}
-                    </span>{' '}
-                    ·{' '}
-                    <span title={new Date(c.createdAt).toLocaleString()}>
-                      {timeAgo(c.createdAt)}
-                    </span>
-                    {c.edited && !c.deleted ? ' · edited' : ''}
-                  </p>
-                  {!c.deleted && editing?.id !== c.id && (mine || canDelete) && !readOnly ? (
-                    <div className="flex items-center gap-1">
-                      {mine ? (
-                        <button
-                          type="button"
-                          onClick={() => setEditing({ id: c.id, body: c.body ?? '' })}
-                          className="rounded px-1.5 py-0.5 text-xs text-mineral hover:text-graphite cursor-pointer"
-                        >
-                          Edit
-                        </button>
-                      ) : null}
-                      {canDelete ? (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            run(async () => {
-                              await api(`/comments/${c.id}`, { method: 'DELETE' });
-                              replace({ ...c, body: null, deleted: true, mentions: [] });
-                            })
-                          }
-                          className="rounded px-1.5 py-0.5 text-xs text-red-600 hover:bg-red-50 cursor-pointer"
-                        >
-                          Delete
-                        </button>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-
+              <div className="min-w-0 flex-1 rounded-card border border-line bg-surface px-3.5 py-2.5">
+                <p className="text-xs text-fg-muted">
+                  <span className="text-label font-semibold text-fg">
+                    @{c.author?.username ?? 'deleted user'}
+                  </span>{' '}
+                  ·{' '}
+                  <span title={new Date(c.createdAt).toLocaleString()}>{timeAgo(c.createdAt)}</span>
+                  {c.edited && !c.deleted ? ' · edited' : ''}
+                </p>
                 {c.deleted ? (
-                  <p className="mt-1 text-xs text-mineral-muted italic">
-                    This comment was deleted.
-                  </p>
+                  <p className="mt-1 text-sm text-fg-subtle italic">This comment was deleted.</p>
                 ) : editing?.id === c.id ? (
                   <form
                     className="mt-2 space-y-2"
@@ -211,36 +168,61 @@ export function CommentThread({ task, onActivity }: { task: Task; onActivity: ()
                     <div className="flex gap-2">
                       <Button
                         type="submit"
-                        size="xs"
+                        size="sm"
                         variant="primary"
                         disabled={!editing.body.trim()}
                       >
                         Save
                       </Button>
-                      <Button size="xs" variant="ghost" onClick={() => setEditing(null)}>
+                      <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>
                         Cancel
                       </Button>
                     </div>
                   </form>
                 ) : (
-                  <div className="mt-1.5">
+                  <div className="mt-1">
                     <CommentBody comment={c} />
                   </div>
                 )}
+                {!c.deleted && editing?.id !== c.id && (mine || canDelete) && !readOnly ? (
+                  <div className="mt-1 flex gap-1">
+                    {mine ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setEditing({ id: c.id, body: c.body ?? '' })}
+                      >
+                        Edit
+                      </Button>
+                    ) : null}
+                    {canDelete ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          run(async () => {
+                            await api(`/comments/${c.id}`, { method: 'DELETE' });
+                            replace({ ...c, body: null, deleted: true, mentions: [] });
+                          })
+                        }
+                      >
+                        Delete
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </li>
           );
         })}
       </ol>
-
       {cursor ? (
-        <Button size="xs" variant="secondary" onClick={loadMore}>
+        <Button size="sm" onClick={loadMore}>
           Load older comments
         </Button>
       ) : null}
-
       {readOnly ? null : (
-        <form onSubmit={post} className="space-y-2.5 pt-2">
+        <form onSubmit={post} className="space-y-2">
           <label htmlFor="new-comment" className="sr-only">
             Add a comment
           </label>
@@ -249,12 +231,12 @@ export function CommentThread({ task, onActivity }: { task: Task; onActivity: ()
             rows={3}
             value={draft}
             maxLength={10_000}
-            placeholder="Add a comment… (Use @username to mention someone)"
+            placeholder="Add a comment… Use @username to mention someone on this project."
             onChange={(e) => setDraft(e.target.value)}
             className={textareaClass}
           />
-          <Button type="submit" variant="primary" size="sm" disabled={posting || !draft.trim()}>
-            {posting ? 'Posting…' : 'Post comment'}
+          <Button type="submit" variant="primary" disabled={posting || !draft.trim()}>
+            {posting ? 'Posting…' : 'Comment'}
           </Button>
         </form>
       )}

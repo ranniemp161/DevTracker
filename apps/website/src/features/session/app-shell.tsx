@@ -1,30 +1,31 @@
 'use client';
 
-import type { PublicUser, WorkspaceSummary } from '@devtrack/types';
+import type { Project, ProjectChatUnreadSummary, PublicUser } from '@devtrack/types';
 import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Alert, Avatar, Button, ErrorState, Skeleton } from '@/components/ui';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { DevtrackMark, MenuIcon } from '@/components/icons';
+import { Alert, Avatar, Button, ErrorState, IconButton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
-import { RealtimeProvider } from '@/lib/realtime';
+import { RealtimeProvider, useRealtimeRefresh, type RealtimeEvent } from '@/lib/realtime';
 import { useApiQuery } from '@/lib/use-api-query';
 import { NotificationBell } from '../collaboration/notification-bell';
 import { usePendingInvitation } from '../invitations/pending-invitation';
 import { clearChatDrafts } from '../chat/chat-drafts';
 import { SessionContext, type Session } from './session-context';
+import { ShellDataContext } from './shell-data';
+import { Sidebar } from './sidebar';
 
-/** Layout for signed-in pages: loads the session, renders the header, guards access. */
+/** Layout for signed-in pages: loads the session, renders the navigation, guards access. */
 export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const me = useApiQuery<{ user: PublicUser }>('/auth/me');
   const verified = me.data?.user.emailVerified ?? false;
-  const workspaces = useApiQuery<WorkspaceSummary[]>(verified ? '/workspaces' : null);
+  const workspaces = useApiQuery<Session['workspaces']>(verified ? '/workspaces' : null);
 
   useEffect(() => {
-    if (me.error?.status === 401) {
-      router.replace(`/login?next=${encodeURIComponent(pathname)}`);
-    }
+    if (me.error?.status === 401) router.replace(`/login?next=${encodeURIComponent(pathname)}`);
   }, [me.error, pathname, router]);
 
   const reloadWorkspaces = workspaces.reload;
@@ -36,7 +37,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   if (me.error && me.error.status !== 401) {
     return (
-      <div className="mx-auto max-w-xl p-6 sm:p-12">
+      <div className="mx-auto max-w-xl p-8">
         <ErrorState
           message={me.error.message || 'Unable to connect to your account session.'}
           onRetry={() => {
@@ -47,55 +48,26 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
     );
   }
-
   if (!session || (verified && workspaces.loading)) {
-    return (
-      <div className="min-h-dvh bg-canvas">
-        {/* Header skeleton */}
-        <div className="border-b border-border bg-surface px-4 sm:px-6 py-3">
-          <div className="mx-auto flex max-w-[1600px] items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Skeleton className="h-6 w-24 rounded" />
-              <Skeleton className="h-8 w-36 rounded-lg" />
-            </div>
-            <div className="flex items-center gap-3">
-              <Skeleton className="size-8 rounded-full" />
-              <Skeleton className="h-8 w-16 rounded-lg" />
-            </div>
-          </div>
-        </div>
-        {/* Main content skeleton */}
-        <main className="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-          <Skeleton className="h-8 w-48 rounded-lg" />
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Skeleton className="h-32 rounded-xl" />
-            <Skeleton className="h-32 rounded-xl" />
-            <Skeleton className="h-32 rounded-xl" />
-          </div>
-        </main>
-      </div>
-    );
+    return <p className="p-8 text-sm text-fg-subtle">Loading…</p>;
   }
 
-  // Work surfaces (Board, List, Chat, Tasks) utilize wide 1600px container; forms constrain themselves.
-  const page = (
-    <div className="min-h-dvh bg-canvas flex flex-col">
-      {/* Accessible skip link */}
-      <a
-        href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-accent focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white focus:shadow-md"
-      >
-        Skip to content
-      </a>
-
-      <Header user={session.user} workspaces={session.workspaces} />
-
-      <main
-        id="main-content"
-        className="mx-auto w-full max-w-[1600px] flex-1 px-4 sm:px-6 lg:px-8 py-6 space-y-6"
-      >
+  const page = verified ? (
+    <VerifiedFrame session={session}>{children}</VerifiedFrame>
+  ) : (
+    <div className="min-h-dvh bg-bg">
+      <header className="flex h-13 items-center justify-between border-b border-line bg-surface px-4">
+        <span className="flex items-center gap-2 font-semibold tracking-tight">
+          <DevtrackMark size={24} />
+          DevTrack
+        </span>
+        <Button variant="ghost" size="sm" onClick={() => signOut(router)}>
+          Sign out
+        </Button>
+      </header>
+      <main className="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-7">
         <PendingInvitationBanner />
-        {verified ? children : <VerifyEmailNotice user={session.user} />}
+        <VerifyEmailNotice user={session.user} />
       </main>
     </div>
   );
@@ -108,130 +80,239 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
-function Header({ user, workspaces }: { user: PublicUser; workspaces: WorkspaceSummary[] }) {
+async function signOut(router: ReturnType<typeof useRouter>) {
+  clearChatDrafts();
+  await api('/auth/logout', { method: 'POST' }).catch(() => undefined);
+  router.replace('/login');
+  router.refresh();
+}
+
+const DESKTOP_QUERY = '(min-width: 1024px)';
+
+function useIsDesktop() {
+  return useSyncExternalStore(
+    (notify) => {
+      const mq = window.matchMedia(DESKTOP_QUERY);
+      mq.addEventListener('change', notify);
+      return () => mq.removeEventListener('change', notify);
+    },
+    () => window.matchMedia(DESKTOP_QUERY).matches,
+    () => true,
+  );
+}
+
+function isProjectEvent(e: RealtimeEvent): boolean {
+  const action = (e.payload as { action?: string }).action ?? '';
+  return e.type === 'activity.created' && action.startsWith('project.');
+}
+
+/** Sidebar + inset main panel (desktop), or a top bar with a drawer (below 1024px). */
+function VerifiedFrame({ session, children }: { session: Session; children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useParams<{ id?: string }>();
-  const isProjectRoute = pathname.startsWith('/projects/') && Boolean(params.id);
-  const projectQuery = useApiQuery<{
-    project: { id: string; name: string; key: string; workspaceId: string };
-  }>(isProjectRoute ? `/projects/${params.id}` : null);
+  const isDesktop = useIsDesktop();
+  const [drawerPath, setDrawerPath] = useState<string | null>(null);
+  const { user, workspaces } = session;
 
+  const isProjectRoute = pathname.startsWith('/projects/') && Boolean(params.id);
+  const projectQuery = useApiQuery<{ project: { workspaceId: string } }>(
+    isProjectRoute ? `/projects/${params.id}` : null,
+  );
   const activeWorkspaceId = useMemo(() => {
-    if (pathname.startsWith('/workspaces/') && params.id) {
-      return params.id;
-    }
+    if (pathname.startsWith('/workspaces/') && params.id) return params.id;
     if (isProjectRoute && projectQuery.data?.project.workspaceId) {
       return projectQuery.data.project.workspaceId;
     }
     return '';
   }, [pathname, params.id, isProjectRoute, projectQuery.data]);
+  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);
 
-  async function logout() {
-    clearChatDrafts();
-    await api('/auth/logout', { method: 'POST' }).catch(() => undefined);
-    router.replace('/login');
-    router.refresh();
-  }
+  const projects = useApiQuery<Project[]>(
+    activeWorkspace ? `/workspaces/${activeWorkspace.id}/projects` : null,
+  );
+  const chatUnread = useApiQuery<ProjectChatUnreadSummary[]>(
+    activeWorkspace ? `/workspaces/${activeWorkspace.id}/chat/unread` : null,
+  );
+  const reloadProjects = projects.reload;
+  const reloadChatUnread = chatUnread.reload;
+  useRealtimeRefresh(isProjectEvent, reloadProjects);
+  useRealtimeRefresh((e) => e.type.startsWith('chat.'), reloadChatUnread);
+  const shellData = useMemo(() => ({ reloadChatUnread }), [reloadChatUnread]);
+
+  // The drawer is open only for the page it was opened on, so navigating closes it.
+  const drawerOpen = !isDesktop && drawerPath === pathname;
+  const closeDrawer = () => setDrawerPath(null);
+
+  const sidebar = (showBell: boolean) => (
+    <Sidebar
+      user={user}
+      workspaces={workspaces}
+      activeWorkspaceId={activeWorkspaceId}
+      projects={projects.data ?? []}
+      chatUnread={chatUnread.data ?? []}
+      currentProjectId={isProjectRoute ? (params.id ?? null) : null}
+      onWorkspaceChange={(id) => router.push(id ? `/workspaces/${id}` : '/')}
+      onLogout={() => signOut(router)}
+      onNavigate={closeDrawer}
+      showBell={showBell}
+    />
+  );
+
+  const content = (
+    <div className="px-4 py-6 sm:px-7">
+      <div className="space-y-6">
+        <PendingInvitationBanner />
+        {children}
+      </div>
+    </div>
+  );
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-surface/95 backdrop-blur-xs">
-      <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8 py-2.5">
-        {/* Brand & Workspace switcher & Breadcrumb */}
-        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-          <Link
-            href="/"
-            className="flex items-center gap-2 group shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 rounded-lg p-1"
-          >
-            <div className="flex size-7 items-center justify-center rounded-lg bg-accent text-white font-bold text-xs tracking-wider shadow-xs group-hover:bg-accent-hover transition-colors">
-              DT
-            </div>
-            <span className="font-semibold tracking-tight text-graphite text-base sm:text-lg">
-              DevTrack
-            </span>
-          </Link>
-
-          {workspaces.length > 0 ? (
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-border-strong hidden sm:inline" aria-hidden="true">
-                /
-              </span>
-              <label className="flex items-center gap-1.5 text-xs">
-                <span className="sr-only">Active workspace</span>
-                <div className="relative">
-                  <select
-                    value={activeWorkspaceId}
-                    onChange={(e) =>
-                      router.push(e.target.value ? `/workspaces/${e.target.value}` : '/')
-                    }
-                    className="appearance-none rounded-lg border border-border bg-subtle/50 hover:bg-subtle py-1.5 pl-2.5 pr-7 text-xs font-medium text-graphite transition-colors focus:border-accent focus:bg-white focus:outline-none focus:ring-2 focus:ring-accent/15 cursor-pointer max-w-[140px] sm:max-w-[200px] truncate"
-                  >
-                    <option value="">All workspaces</option>
-                    {workspaces.map((w) => (
-                      <option key={w.id} value={w.id}>
-                        {w.name}
-                      </option>
-                    ))}
-                  </select>
-                  <svg
-                    aria-hidden="true"
-                    className="pointer-events-none absolute right-2 top-1/2 size-3.5 -translate-y-1/2 text-mineral"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                </div>
-              </label>
-
-              {/* Breadcrumb to project if inside project */}
-              {isProjectRoute && projectQuery.data?.project ? (
-                <div className="hidden md:flex items-center gap-2 min-w-0 text-xs">
-                  <span className="text-border-strong" aria-hidden="true">
-                    /
+    <ShellDataContext.Provider value={shellData}>
+      <a
+        href="#main-content"
+        className="sr-only z-50 rounded-control bg-surface px-3 py-2 text-sm font-medium text-fg shadow-overlay focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
+      >
+        Skip to content
+      </a>
+      {pathname === '/' ? (
+        <div className="min-h-dvh bg-bg">
+          <header className="border-b border-line bg-surface">
+            <div className="mx-auto flex min-h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-7">
+              <Link
+                href="/"
+                aria-label="DevTrack home"
+                className="flex shrink-0 items-center gap-2 rounded-control font-semibold tracking-tight"
+              >
+                <DevtrackMark size={28} />
+                DevTrack
+              </Link>
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <NotificationBell align="end" />
+                <div
+                  className="flex min-w-0 items-center gap-2 border-l border-line pl-3"
+                  title={`Signed in as @${user.username}`}
+                >
+                  <Avatar name={user.username} url={user.avatarUrl} seed={user.id} size="sm" />
+                  <span className="sr-only sm:not-sr-only sm:max-w-40 sm:truncate sm:text-sm sm:text-fg-secondary">
+                    @{user.username}
                   </span>
-                  <Link
-                    href={`/projects/${projectQuery.data.project.id}`}
-                    className="truncate font-medium text-mineral hover:text-graphite transition-colors"
-                  >
-                    {projectQuery.data.project.name}
-                  </Link>
                 </div>
-              ) : null}
+                <Button variant="ghost" size="sm" onClick={() => signOut(router)}>
+                  Sign out
+                </Button>
+              </div>
             </div>
-          ) : null}
-        </div>
-
-        {/* Right controls: Notifications, User profile, Sign out */}
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          {user.emailVerified ? (
-            <div className="flex items-center justify-center min-w-[36px] min-h-[36px]">
-              <NotificationBell />
-            </div>
-          ) : null}
-
-          <div className="flex items-center gap-2 pl-1 border-l border-border/80">
-            <Avatar name={user.username} url={user.avatarUrl} size="sm" />
-            <span className="hidden text-xs font-medium text-graphite sm:inline">
-              @{user.username}
-            </span>
-          </div>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={logout}
-            className="text-xs text-mineral hover:text-graphite min-h-[36px] px-2 sm:px-3"
+          </header>
+          <main
+            id="main-content"
+            tabIndex={-1}
+            className="mx-auto max-w-3xl space-y-6 px-4 py-10 focus-visible:shadow-none sm:py-16"
           >
-            Sign out
-          </Button>
+            <PendingInvitationBanner />
+            {children}
+          </main>
         </div>
+      ) : isDesktop ? (
+        <div className="flex h-dvh bg-bg">
+          <aside className="w-62 shrink-0">{sidebar(true)}</aside>
+          <main
+            id="main-content"
+            tabIndex={-1}
+            className="my-2 mr-2 min-w-0 flex-1 overflow-y-auto rounded-panel border border-line bg-surface focus-visible:shadow-none"
+          >
+            {content}
+          </main>
+        </div>
+      ) : (
+        <div className="flex h-dvh flex-col bg-surface">
+          <header className="flex h-13 shrink-0 items-center gap-2 border-b border-line px-3">
+            <IconButton
+              aria-label="Open navigation"
+              aria-expanded={drawerOpen}
+              onClick={() => setDrawerPath(pathname)}
+            >
+              <MenuIcon size={18} />
+            </IconButton>
+            <DevtrackMark size={24} />
+            <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+              {activeWorkspace?.name ?? 'DevTrack'}
+            </span>
+            <NotificationBell />
+          </header>
+          <main
+            id="main-content"
+            tabIndex={-1}
+            className="min-h-0 flex-1 overflow-y-auto focus-visible:shadow-none"
+          >
+            {content}
+          </main>
+          {drawerOpen ? <Drawer onClose={closeDrawer}>{sidebar(false)}</Drawer> : null}
+        </div>
+      )}
+    </ShellDataContext.Provider>
+  );
+}
+
+/** Left sheet with a scrim. Closes on Escape or a scrim click and traps focus while open. */
+function Drawer({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+  const panel = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    const focusables = () =>
+      Array.from(
+        panel.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), select, input, [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      );
+    focusables()[0]?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') return onCloseRef.current();
+      if (e.key !== 'Tab') return;
+      const items = focusables();
+      if (items.length === 0) return;
+      const first = items[0]!;
+      const last = items[items.length - 1]!;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      previous?.focus();
+    };
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-40">
+      <button
+        type="button"
+        aria-label="Close navigation"
+        tabIndex={-1}
+        onClick={onClose}
+        className="absolute inset-0 cursor-default bg-fg/40"
+      />
+      <div
+        ref={panel}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Navigation"
+        className="absolute inset-y-0 left-0 w-72 max-w-[85vw] bg-bg shadow-overlay"
+      >
+        {children}
       </div>
-    </header>
+    </div>
   );
 }
 
@@ -242,7 +323,7 @@ function PendingInvitationBanner() {
   return (
     <Alert tone="info">
       You have a pending workspace invitation.{' '}
-      <Link href="/invitations/accept" className="font-semibold underline hover:text-sky-950">
+      <Link href="/invitations/accept" className="font-medium underline">
         Review it
       </Link>
     </Alert>
@@ -263,24 +344,22 @@ function VerifyEmailNotice({ user }: { user: PublicUser }) {
   }
 
   return (
-    <section className="mx-auto max-w-lg rounded-xl border border-border bg-surface p-6 shadow-xs">
-      <h1 className="text-lg font-semibold text-graphite">Verify your email</h1>
-      <p className="mt-2 text-sm text-mineral leading-relaxed">
-        We sent a verification link to <strong className="text-graphite">{user.email}</strong>.
-        Verify it to create or join workspaces.
+    <section className="mx-auto max-w-lg rounded-panel border border-line bg-surface p-6">
+      <h1 className="text-lg font-semibold">Verify your email</h1>
+      <p className="mt-2 text-sm text-fg-muted">
+        We sent a verification link to <strong>{user.email}</strong>. Verify it to create or join
+        workspaces.
       </p>
-      <div className="mt-5 flex items-center gap-3">
+      <div className="mt-4 flex items-center gap-3">
         {state === 'sent' ? (
-          <span className="text-sm font-medium text-emerald-700">Sent — check your inbox.</span>
+          <span className="text-sm font-medium text-status-done-fg">Sent — check your inbox.</span>
         ) : (
-          <Button variant="primary" onClick={resend} disabled={state === 'sending'}>
+          <Button onClick={resend} loading={state === 'sending'}>
             {state === 'sending' ? 'Sending…' : 'Resend verification email'}
           </Button>
         )}
       </div>
-      {typeof state === 'object' ? (
-        <p className="mt-2 text-sm text-red-700">{state.error}</p>
-      ) : null}
+      {typeof state === 'object' ? <p className="mt-2 text-sm text-danger">{state.error}</p> : null}
     </section>
   );
 }

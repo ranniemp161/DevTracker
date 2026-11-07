@@ -3,7 +3,8 @@
 import type { ProjectMessage, PublicUser } from '@devtrack/types';
 import Link from 'next/link';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Avatar, Badge, Button } from '@/components/ui';
+import { ChevronRightIcon } from '@/components/icons';
+import { Avatar, Button, StatusDot } from '@/components/ui';
 import { TASK_STATUS_LABEL } from '../projects/labels';
 
 export interface OptimisticChatMessage extends ProjectMessage {
@@ -101,8 +102,8 @@ export function ChatMessageItem({
     <div
       ref={itemRef}
       id={`message-${message.id}`}
-      className={`group flex items-start gap-3 rounded-xl p-3 transition-colors ${
-        highlighted ? 'bg-amber-50/80 ring-2 ring-amber-400/80' : 'hover:bg-subtle/40'
+      className={`group flex items-start gap-3 rounded-card p-2.5 transition-colors ${
+        highlighted ? 'bg-status-todo-bg ring-2 ring-status-todo' : 'hover:bg-surface-sunken'
       }`}
     >
       <div className="shrink-0 pt-0.5">
@@ -110,31 +111,32 @@ export function ChatMessageItem({
           name={message.author?.username ?? 'User'}
           url={message.author?.avatarUrl ?? null}
           size="sm"
+          seed={message.author?.id}
         />
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-2 flex-wrap">
-          <span className="text-xs font-semibold text-graphite">
+        <div className="flex items-baseline gap-2">
+          <span className="text-sm font-semibold text-fg">
             {message.author ? `@${message.author.username}` : 'Former member'}
           </span>
-          <span className="text-[11px] text-mineral-muted">{formattedTime}</span>
+          <span className="text-xs text-fg-subtle">{formattedTime}</span>
           {message.edited && !message.deleted ? (
-            <span className="text-[11px] text-mineral-muted italic">(edited)</span>
+            <span className="text-xs text-fg-subtle">(edited)</span>
           ) : null}
 
           {message.status === 'sending' ? (
-            <span className="text-[11px] font-medium text-mineral-muted">Sending…</span>
+            <span className="text-xs font-medium text-fg-muted">Sending…</span>
           ) : null}
 
           {message.status === 'failed' ? (
-            <span className="flex items-center gap-1 text-[11px] font-semibold text-red-600">
+            <span className="flex items-center gap-1 text-xs font-medium text-danger">
               Failed
               {onRetry ? (
                 <button
                   type="button"
                   onClick={() => onRetry(message)}
-                  className="font-bold underline hover:text-red-800 cursor-pointer"
+                  className="font-semibold underline hover:text-danger"
                 >
                   Retry
                 </button>
@@ -142,9 +144,9 @@ export function ChatMessageItem({
             </span>
           ) : null}
 
-          {/* Action buttons on hover/focus */}
+          {/* Action buttons on hover */}
           {!isEditing && (canEdit || canDelete) ? (
-            <div className="ml-auto opacity-0 group-hover:opacity-100 focus-within:opacity-100 flex items-center gap-1 transition-opacity">
+            <div className="ml-auto opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
               {canEdit ? (
                 <button
                   type="button"
@@ -152,7 +154,7 @@ export function ChatMessageItem({
                     setEditBody(message.body ?? '');
                     setIsEditing(true);
                   }}
-                  className="rounded px-1.5 py-0.5 text-xs text-mineral hover:bg-subtle hover:text-graphite cursor-pointer"
+                  className="rounded px-1.5 py-0.5 text-xs text-fg-muted hover:bg-surface-muted"
                 >
                   Edit
                 </button>
@@ -161,7 +163,7 @@ export function ChatMessageItem({
                 <button
                   type="button"
                   onClick={() => setConfirmDelete(true)}
-                  className="rounded px-1.5 py-0.5 text-xs text-red-600 hover:bg-red-50 cursor-pointer"
+                  className="rounded px-1.5 py-0.5 text-xs text-danger hover:bg-status-blocked-bg"
                 >
                   Delete
                 </button>
@@ -172,22 +174,22 @@ export function ChatMessageItem({
 
         {/* Message body / edit / deleted placeholder */}
         {message.deleted ? (
-          <p className="mt-1 text-xs italic text-mineral-muted">This message was deleted.</p>
+          <p className="mt-1 text-sm italic text-fg-muted">This message was deleted.</p>
         ) : isEditing ? (
           <div className="mt-2 space-y-2">
             <textarea
               rows={2}
               value={editBody}
               onChange={(e) => setEditBody(e.target.value)}
-              className="w-full rounded-lg border border-border p-2.5 text-xs text-graphite outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+              className="w-full rounded border border-line-control p-2 text-sm outline-none focus:border-fg"
             />
-            {editError ? <p className="text-xs text-red-600">{editError}</p> : null}
+            {editError ? <p className="text-xs text-danger">{editError}</p> : null}
             <div className="flex items-center gap-2">
-              <Button size="xs" variant="primary" disabled={savingEdit} onClick={handleSaveEdit}>
+              <Button size="sm" variant="primary" disabled={savingEdit} onClick={handleSaveEdit}>
                 {savingEdit ? 'Saving…' : 'Save'}
               </Button>
               <Button
-                size="xs"
+                size="sm"
                 variant="secondary"
                 disabled={savingEdit}
                 onClick={() => setIsEditing(false)}
@@ -197,38 +199,42 @@ export function ChatMessageItem({
             </div>
           </div>
         ) : (
-          <div className="mt-1 text-sm text-graphite break-words whitespace-pre-wrap leading-relaxed">
+          <div className="mt-1 text-md leading-relaxed text-fg-secondary break-words whitespace-pre-wrap">
             {renderMessageWithMentions(message.body ?? '')}
           </div>
         )}
 
-        {/* Linked task compact preview */}
+        {/* Linked task badge */}
         {!message.deleted && message.task ? (
           <div className="mt-2">
             <Link
               href={`/projects/${message.projectId}/tasks/${message.task.id}`}
-              className="inline-flex items-center gap-2 rounded-lg border border-border bg-subtle/50 px-2.5 py-1 text-xs hover:border-accent hover:bg-accent-tint/30 transition-colors"
+              className="flex max-w-md items-center gap-3 rounded-card border border-line bg-surface-sunken px-3 py-2 transition-colors hover:border-line-control"
             >
-              <span className="font-mono font-semibold text-accent">{message.task.key}</span>
-              <span className="max-w-[200px] truncate text-mineral sm:max-w-xs">
-                {message.task.title}
+              <StatusDot status={message.task.status} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-fg">
+                  {message.task.title}
+                </span>
+                <span className="block text-xs text-fg-muted">
+                  <span className="font-mono">{message.task.key}</span> ·{' '}
+                  {TASK_STATUS_LABEL[message.task.status]}
+                </span>
               </span>
-              <Badge tone={message.task.status === 'DONE' ? 'green' : 'neutral'}>
-                {TASK_STATUS_LABEL[message.task.status]}
-              </Badge>
+              <ChevronRightIcon size={14} className="shrink-0 text-fg-subtle" />
             </Link>
           </div>
         ) : null}
 
         {/* Delete confirmation prompt */}
         {confirmDelete ? (
-          <div className="mt-2 flex items-center gap-2 rounded-lg bg-red-50 p-2.5 text-xs text-red-800 border border-red-200">
+          <div className="mt-2 flex items-center gap-2 rounded bg-status-blocked-bg p-2 text-xs text-danger">
             <span>Delete this message?</span>
             <button
               type="button"
               disabled={deleting}
               onClick={handleDelete}
-              className="font-bold underline hover:text-red-950 cursor-pointer"
+              className="font-bold underline hover:text-danger"
             >
               {deleting ? 'Deleting…' : 'Confirm'}
             </button>
@@ -236,7 +242,7 @@ export function ChatMessageItem({
               type="button"
               disabled={deleting}
               onClick={() => setConfirmDelete(false)}
-              className="text-mineral hover:text-graphite cursor-pointer"
+              className="text-fg-muted hover:text-fg"
             >
               Cancel
             </button>
@@ -264,10 +270,7 @@ function renderMessageWithMentions(text: string): ReactNode[] {
     const leadingSpace = fullMatch.startsWith(' ') ? ' ' : '';
     parts.push(leadingSpace);
     parts.push(
-      <span
-        key={`${matchIndex}-${username}`}
-        className="font-semibold text-accent-text bg-accent-tint/80 px-1.5 py-0.5 rounded-md"
-      >
+      <span key={`${matchIndex}-${username}`} className="font-medium text-primary">
         @{username}
       </span>,
     );

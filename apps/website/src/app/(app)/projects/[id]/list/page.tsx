@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: 'Tasks' };
 
 export default function Page() {
   return (
-    <Suspense fallback={<p className="text-sm text-neutral-500">Loading tasks…</p>}>
+    <Suspense fallback={<p className="text-sm text-fg-subtle">Loading tasks…</p>}>
       <TaskList />
     </Suspense>
   );

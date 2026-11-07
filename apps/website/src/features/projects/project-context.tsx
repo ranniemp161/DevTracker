@@ -1,12 +1,13 @@
 'use client';
 
-import type { Project, ProjectMember, ProjectChatUnreadSummary } from '@devtrack/types';
+import type { Project, ProjectMember } from '@devtrack/types';
 import Link from 'next/link';
-import { useParams, usePathname, useSearchParams } from 'next/navigation';
-import { createContext, useContext, Suspense, type ReactNode } from 'react';
-import { Alert, Badge, ErrorState, Skeleton } from '@/components/ui';
+import { useParams, usePathname } from 'next/navigation';
+import { createContext, useContext, type ReactNode } from 'react';
+import { Alert, Badge, ErrorState, KeyBadge } from '@/components/ui';
 import { useRealtimeRefresh, useRealtimeRoom, type RealtimeEvent } from '@/lib/realtime';
 import { useApiQuery } from '@/lib/use-api-query';
+import { useShellData } from '../session/shell-data';
 import { PROJECT_STATUS_LABEL } from './labels';
 
 interface ProjectContextValue {
@@ -32,27 +33,21 @@ export function ProjectLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const project = useApiQuery<{ project: Project }>(`/projects/${id}`);
   const members = useApiQuery<ProjectMember[]>(`/projects/${id}/members`);
-  const workspaceId = project.data?.project.workspaceId;
-  const chatUnread = useApiQuery<ProjectChatUnreadSummary[]>(
-    workspaceId ? `/workspaces/${workspaceId}/chat/unread` : null,
-  );
+  const { reloadChatUnread } = useShellData();
 
   // Every page of a project follows the project room (M7); individual views react to events.
   useRealtimeRoom(`project:${id}`);
   useRealtimeRefresh(
-    (e) =>
-      (e.projectId === id && e.type === 'activity.created' && isProjectChange(e)) ||
-      e.type.startsWith('chat.'),
+    (e) => e.projectId === id && e.type === 'activity.created' && isProjectChange(e),
     () => {
       project.reload();
       members.reload();
-      chatUnread.reload();
     },
   );
 
   if (project.error) {
     return (
-      <div className="space-y-4 max-w-xl mx-auto py-8">
+      <div className="space-y-4">
         <ErrorState
           message={
             project.error.status === 404
@@ -61,51 +56,19 @@ export function ProjectLayout({ children }: { children: ReactNode }) {
           }
           onRetry={project.reload}
         />
-        <div className="text-center">
-          <Link
-            href="/"
-            className="text-xs font-medium text-accent hover:underline hover:text-accent-hover"
-          >
-            ← Back to workspaces
-          </Link>
-        </div>
+        <Link href="/" className="text-sm underline">
+          Back to workspaces
+        </Link>
       </div>
     );
   }
-
-  if (!project.data || !members.data) {
-    return (
-      <div className="space-y-6">
-        <div className="space-y-2">
-          <Skeleton className="h-4 w-20" />
-          <div className="flex items-center gap-3">
-            <Skeleton className="h-6 w-16 rounded" />
-            <Skeleton className="h-8 w-64 rounded-lg" />
-          </div>
-          <Skeleton className="h-10 w-full rounded-lg mt-4" />
-        </div>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Skeleton className="h-48 rounded-xl" />
-          <Skeleton className="h-48 rounded-xl" />
-          <Skeleton className="h-48 rounded-xl" />
-        </div>
-      </div>
-    );
-  }
+  if (!project.data || !members.data)
+    return <p className="text-sm text-fg-subtle">Loading project…</p>;
 
   const p = project.data.project;
-  const base = `/projects/${p.id}`;
-  const unreadCount = chatUnread.data?.find((u) => u.projectId === p.id)?.unreadCount ?? 0;
-  const tabs = [
-    { href: base, label: 'Board' },
-    { href: `${base}/list`, label: 'List' },
-    { href: `${base}/chat`, label: 'Chat', count: unreadCount },
-    { href: `${base}/milestones`, label: 'Milestones' },
-    { href: `${base}/activity`, label: 'Activity' },
-    { href: `${base}/members`, label: 'Members' },
-    ...(p.viewerCanManage ? [{ href: `${base}/settings`, label: 'Settings' }] : []),
-  ];
   const readOnly = p.status === 'ARCHIVED';
+  // The task page has its own header bar and runs edge to edge.
+  const isTaskPage = pathname.includes('/tasks/');
 
   return (
     <ProjectContext.Provider
@@ -115,101 +78,43 @@ export function ProjectLayout({ children }: { children: ReactNode }) {
         readOnly,
         reload: project.reload,
         reloadMembers: members.reload,
-        reloadChatUnread: chatUnread.reload,
+        reloadChatUnread,
       }}
     >
       <div className="space-y-6">
-        <div>
-          <nav aria-label="Breadcrumb" className="mb-2">
+        {isTaskPage ? null : (
+          <div>
             <Link
               href={`/workspaces/${p.workspaceId}/projects`}
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-mineral hover:text-graphite transition-colors"
+              className="text-label text-fg-muted hover:underline"
             >
-              <svg aria-hidden="true" className="size-3.5" viewBox="0 0 20 20" fill="currentColor">
-                <path
-                  fillRule="evenodd"
-                  d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              Projects
+              ← Projects
             </Link>
-          </nav>
-
-          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
-            <span className="font-mono text-xs font-semibold tracking-wider text-mineral bg-subtle px-2 py-0.5 rounded-md border border-border">
-              {p.key}
-            </span>
-            <h1 className="text-xl sm:text-2xl lg:text-3xl font-semibold tracking-tight text-graphite">
-              {p.name}
-            </h1>
-            <Badge tone={p.status === 'ACTIVE' ? 'green' : 'neutral'}>
-              {PROJECT_STATUS_LABEL[p.status]}
-            </Badge>
-          </div>
-
-          {readOnly ? (
-            <div className="mt-3">
-              <Alert tone="info">This project is archived and read-only.</Alert>
+            <div className="mt-1 flex flex-wrap items-center gap-3">
+              <KeyBadge>{p.key}</KeyBadge>
+              <h1 className="text-2xl font-semibold tracking-tight">{p.name}</h1>
+              <Badge
+                tone={
+                  p.status === 'ACTIVE' || p.status === 'PLANNING'
+                    ? 'blue'
+                    : p.status === 'COMPLETED'
+                      ? 'green'
+                      : 'neutral'
+                }
+              >
+                {PROJECT_STATUS_LABEL[p.status]}
+              </Badge>
             </div>
-          ) : null}
-
-          <Suspense fallback={null}>
-            <ProjectTabs tabs={tabs} base={base} pathname={pathname} />
-          </Suspense>
-        </div>
-
+            {readOnly ? (
+              <div className="mt-3">
+                <Alert tone="info">This project is archived and read-only.</Alert>
+              </div>
+            ) : null}
+          </div>
+        )}
         {children}
       </div>
     </ProjectContext.Provider>
-  );
-}
-
-function ProjectTabs({
-  tabs,
-  base,
-  pathname,
-}: {
-  tabs: { href: string; label: string; count?: number }[];
-  base: string;
-  pathname: string;
-}) {
-  const searchParams = useSearchParams();
-  const searchStr = searchParams.toString();
-
-  return (
-    <nav
-      className="mt-5 flex gap-1 overflow-x-auto border-b border-border custom-scrollbar pb-px"
-      aria-label="Project views and navigation"
-    >
-      {tabs.map((tab) => {
-        const active = tab.href === base ? pathname === base : pathname.startsWith(tab.href);
-        const targetHref =
-          (tab.label === 'Board' || tab.label === 'List') && searchStr
-            ? `${tab.href}?${searchStr}`
-            : tab.href;
-
-        return (
-          <Link
-            key={tab.href}
-            href={targetHref}
-            aria-current={active ? 'page' : undefined}
-            className={`-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3.5 py-2.5 text-xs sm:text-sm font-medium transition-colors ${
-              active
-                ? 'border-accent text-accent font-semibold'
-                : 'border-transparent text-mineral hover:border-border hover:text-graphite'
-            }`}
-          >
-            <span>{tab.label}</span>
-            {tab.count !== undefined && tab.count > 0 ? (
-              <span className="rounded-full bg-accent px-1.5 py-0.2 text-[10px] font-bold text-white leading-none">
-                {tab.count}
-              </span>
-            ) : null}
-          </Link>
-        );
-      })}
-    </nav>
   );
 }
 

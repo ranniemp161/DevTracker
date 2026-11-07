@@ -3,7 +3,8 @@
 import type { Label, Task } from '@devtrack/types';
 import { createLabelSchema } from '@devtrack/validators';
 import { useState, type FormEvent } from 'react';
-import { Button, Card } from '@/components/ui';
+import { Button, PanelSection } from '@/components/ui';
+import { PlusIcon, XIcon } from '@/components/icons';
 import { api, ApiError } from '@/lib/api';
 import { useApiQuery } from '@/lib/use-api-query';
 import { LABEL_COLORS, LabelChip } from './label-chip';
@@ -54,7 +55,7 @@ export function TaskLabels({ task, onChanged }: { task: Task; onChanged: () => v
   const available = (all.data ?? []).filter((l) => !task.labels.some((t) => t.id === l.id));
 
   return (
-    <Card title="Labels">
+    <PanelSection title="Labels">
       <div className="flex flex-wrap gap-1.5">
         {task.labels.map((l) => (
           <LabelChip key={l.id} label={l}>
@@ -66,25 +67,23 @@ export function TaskLabels({ task, onChanged }: { task: Task; onChanged: () => v
                 onClick={() =>
                   call(() => api(`/tasks/${task.id}/labels/${l.id}`, { method: 'DELETE' }))
                 }
-                className="ml-1 text-mineral-muted hover:text-red-700 cursor-pointer font-bold"
+                className="-mr-0.5 inline-flex size-4.5 items-center justify-center rounded-xs text-fg-subtle hover:bg-surface-muted hover:text-fg"
               >
-                ×
+                <XIcon size={12} />
               </button>
             )}
           </LabelChip>
         ))}
         {task.labels.length === 0 ? (
-          <span className="text-xs text-mineral-muted">No labels assigned.</span>
+          <span className="text-sm text-fg-subtle">No labels.</span>
         ) : null}
       </div>
-
-      {error ? <p className="mt-2 text-xs text-red-600 font-medium">{error}</p> : null}
-
+      {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
       {readOnly ? null : (
-        <div className="mt-3.5 space-y-2.5 pt-2.5 border-t border-border/70">
+        <div className="mt-3 space-y-2">
           {available.length > 0 ? (
-            <label className="block text-xs">
-              <span className="sr-only">Add an existing label</span>
+            <label className="block text-sm">
+              <span className="sr-only">Add a label</span>
               <select
                 value=""
                 disabled={busy}
@@ -92,9 +91,9 @@ export function TaskLabels({ task, onChanged }: { task: Task; onChanged: () => v
                   e.target.value &&
                   call(() => api(`/tasks/${task.id}/labels`, { body: { labelId: e.target.value } }))
                 }
-                className="w-full rounded-lg border border-border bg-subtle/50 px-2.5 py-1.5 text-xs text-graphite hover:bg-white focus:border-accent focus:outline-none cursor-pointer"
+                className="h-8 w-full cursor-pointer rounded-control border border-dashed border-line-control bg-transparent px-2 text-label text-fg-muted hover:bg-surface-muted"
               >
-                <option value="">+ Add an existing label…</option>
+                <option value="">Add a label…</option>
                 {available.map((l) => (
                   <option key={l.id} value={l.id}>
                     {l.name}
@@ -103,19 +102,15 @@ export function TaskLabels({ task, onChanged }: { task: Task; onChanged: () => v
               </select>
             </label>
           ) : null}
-
           {creating ? (
-            <form
-              onSubmit={createAndAttach}
-              className="space-y-2.5 rounded-lg border border-border bg-subtle/30 p-2.5"
-            >
+            <form onSubmit={createAndAttach} className="space-y-2">
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="New label name"
+                placeholder="Label name"
                 maxLength={40}
                 aria-label="New label name"
-                className="w-full rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs text-graphite focus:border-accent focus:outline-none"
+                className="h-8 w-full rounded-control border border-line-control bg-surface px-2.5 text-sm placeholder:text-fg-subtle focus-visible:border-primary"
               />
               <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Label color">
                 {LABEL_COLORS.map((c) => (
@@ -126,29 +121,32 @@ export function TaskLabels({ task, onChanged }: { task: Task; onChanged: () => v
                     aria-checked={color === c}
                     aria-label={c}
                     onClick={() => setColor(c)}
-                    className={`size-5 rounded-full cursor-pointer transition-transform ${
-                      color === c ? 'ring-2 ring-accent ring-offset-1 scale-110' : 'hover:scale-105'
-                    }`}
+                    className={`size-6 rounded-full ${color === c ? 'ring-2 ring-fg ring-offset-2' : ''}`}
                     style={{ backgroundColor: c }}
                   />
                 ))}
               </div>
               <div className="flex gap-2">
-                <Button type="submit" size="xs" variant="primary" disabled={busy || !name.trim()}>
+                <Button type="submit" size="sm" variant="primary" disabled={busy || !name.trim()}>
                   Create & add
                 </Button>
-                <Button size="xs" variant="ghost" onClick={() => setCreating(false)}>
+                <Button size="sm" variant="ghost" onClick={() => setCreating(false)}>
                   Cancel
                 </Button>
               </div>
             </form>
           ) : (
-            <Button size="xs" variant="ghost" onClick={() => setCreating(true)}>
-              + Create new label
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<PlusIcon size={14} />}
+              onClick={() => setCreating(true)}
+            >
+              New label
             </Button>
           )}
         </div>
       )}
-    </Card>
+    </PanelSection>
   );
 }

@@ -8,7 +8,7 @@ import type {
   Task,
 } from '@devtrack/types';
 import { useState } from 'react';
-import { Alert, Badge, Button, Card, Select } from '@/components/ui';
+import { Alert, Badge, Button, PanelSection, Select } from '@/components/ui';
 import { api, apiPage, ApiError } from '@/lib/api';
 import { useRealtimeRefresh } from '@/lib/realtime';
 import { useApiQuery } from '@/lib/use-api-query';
@@ -24,7 +24,16 @@ const STATE: Record<PullRequestState, { label: string; tone: 'green' | 'blue' | 
  * Task → Pull requests (decision record 0006). Linking never changes the task's status: the
  * team moves tasks to Done themselves.
  */
-export function TaskPullRequests({ task, onChange }: { task: Task; onChange?: () => void }) {
+export function TaskPullRequests({
+  task,
+  branchTip,
+  onChange,
+}: {
+  task: Task;
+  /** Suggested branch name shown when nothing is linked yet. */
+  branchTip?: string;
+  onChange?: () => void;
+}) {
   const { readOnly } = useProject();
   const linked = useApiQuery<LinkedPullRequest[]>(`/tasks/${task.id}/pull-requests`);
   // Live updates (M7): links made elsewhere (e.g. automatically) and PR state changes.
@@ -54,29 +63,36 @@ export function TaskPullRequests({ task, onChange }: { task: Task; onChange?: ()
   }
 
   return (
-    <Card title="Pull requests">
+    <PanelSection title="Pull requests">
       <div className="space-y-3">
-        {error ? <Alert tone="error">{error}</Alert> : null}
-        {linked.error ? <Alert tone="error">{linked.error.message}</Alert> : null}
+        {error ? <Alert>{error}</Alert> : null}
+        {linked.error ? <Alert>{linked.error.message}</Alert> : null}
         {linked.data?.length === 0 ? (
-          <p className="text-xs text-mineral-muted">
-            No linked pull requests. Mention {task.key} in a branch name or PR title to link one
-            automatically.
-          </p>
+          <div className="space-y-2 text-label text-fg-muted">
+            <p>
+              No linked pull requests. Mention {task.key} in a branch name or PR title to link one
+              automatically.
+            </p>
+            {branchTip ? (
+              <code className="block overflow-x-auto rounded-control border border-line bg-surface px-2.5 py-1.5 text-xs whitespace-nowrap text-fg-secondary">
+                git checkout -b {branchTip}
+              </code>
+            ) : null}
+          </div>
         ) : null}
-        <ul className="divide-y divide-border/60">
+        <ul className="divide-y divide-line-subtle">
           {linked.data?.map((pr) => (
-            <li key={pr.id} className="flex items-start justify-between gap-3 py-2.5">
+            <li key={pr.id} className="flex items-start justify-between gap-3 py-2">
               <div className="min-w-0">
                 <a
                   href={pr.url}
                   target="_blank"
                   rel="noreferrer noopener"
-                  className="block truncate text-xs font-semibold text-graphite hover:text-accent hover:underline"
+                  className="block truncate text-sm font-medium hover:underline"
                 >
                   #{pr.number} {pr.title}
                 </a>
-                <p className="text-[11px] text-mineral">
+                <p className="text-xs text-fg-muted">
                   {pr.repository.fullName} · {pr.headBranch}
                   {pr.link.source === 'AUTO'
                     ? ' · linked automatically'
@@ -85,12 +101,12 @@ export function TaskPullRequests({ task, onChange }: { task: Task; onChange?: ()
                       : ''}
                 </p>
               </div>
-              <div className="flex shrink-0 items-center gap-1.5">
+              <div className="flex shrink-0 items-center gap-2">
                 <Badge tone={STATE[pr.state].tone}>
                   {pr.isDraft && pr.state === 'open' ? 'Draft' : STATE[pr.state].label}
                 </Badge>
                 {readOnly ? null : (
-                  <Button size="xs" variant="ghost" disabled={busy} onClick={() => unlink(pr)}>
+                  <Button size="sm" variant="ghost" disabled={busy} onClick={() => unlink(pr)}>
                     Unlink
                   </Button>
                 )}
@@ -109,7 +125,7 @@ export function TaskPullRequests({ task, onChange }: { task: Task; onChange?: ()
           />
         )}
       </div>
-    </Card>
+    </PanelSection>
   );
 }
 
@@ -134,8 +150,8 @@ function LinkForm({
   if (!repos.data || repos.data.length === 0) return null;
   if (!open) {
     return (
-      <Button size="xs" variant="secondary" onClick={() => setOpen(true)}>
-        + Link a pull request
+      <Button size="sm" onClick={() => setOpen(true)}>
+        Link a PR manually
       </Button>
     );
   }
@@ -173,8 +189,8 @@ function LinkForm({
   const options = prs?.filter((p) => !linkedIds.has(p.id)) ?? [];
 
   return (
-    <form onSubmit={link} className="space-y-3 border-t border-border/70 pt-3">
-      {error ? <Alert tone="error">{error}</Alert> : null}
+    <form onSubmit={link} className="space-y-3 border-t border-line-subtle pt-3">
+      {error ? <Alert>{error}</Alert> : null}
       <Select
         label="Repository"
         name="repository"
@@ -211,10 +227,10 @@ function LinkForm({
         </Select>
       ) : null}
       <div className="flex gap-2">
-        <Button type="submit" variant="primary" size="xs" disabled={busy || !prId}>
+        <Button type="submit" variant="primary" size="sm" disabled={busy || !prId}>
           {busy ? 'Linking…' : 'Link'}
         </Button>
-        <Button size="xs" variant="ghost" onClick={() => setOpen(false)}>
+        <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
           Cancel
         </Button>
       </div>

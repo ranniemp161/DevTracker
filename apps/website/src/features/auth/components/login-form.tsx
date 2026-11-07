@@ -23,14 +23,14 @@ export function LoginForm() {
 
   return (
     <AuthCard
-      title="Sign in to DevTrack"
-      subtitle="Welcome back. Enter your credentials to access your engineering workspace."
+      title="Sign in"
+      subtitle="Welcome back. Pick up where your team left off."
       footer={
         <>
           New to DevTrack?{' '}
           <Link
             href={`/register?next=${encodeURIComponent(next)}`}
-            className="font-semibold text-accent hover:underline underline-offset-2"
+            className="font-medium text-fg underline-offset-4 hover:underline"
           >
             Create an account
           </Link>
@@ -41,12 +41,12 @@ export function LoginForm() {
         {reset ? (
           <Alert tone="success">Your password was reset. Sign in with your new password.</Alert>
         ) : null}
-        {oauthError ? <Alert tone="error">{oauthError}</Alert> : null}
+        {oauthError ? <Alert>{oauthError}</Alert> : null}
         <GithubButton redirectTo={next} />
       </div>
-      <Divider label="or continue with email" />
+      <Divider label="or with email" />
       <form onSubmit={form.onSubmit} noValidate className="space-y-4">
-        {form.formError ? <Alert tone="error">{form.formError}</Alert> : null}
+        {form.formError ? <Alert>{form.formError}</Alert> : null}
         <Field
           label="Email"
           name="email"
@@ -65,17 +65,15 @@ export function LoginForm() {
           onChange={form.onChange}
           error={form.fieldErrors.password}
         />
-        <div className="text-right text-xs">
+        <div className="text-right text-sm">
           <Link
             href="/forgot-password"
-            className="text-mineral hover:text-accent font-medium hover:underline underline-offset-2"
+            className="text-fg-muted underline-offset-4 hover:underline"
           >
             Forgot password?
           </Link>
         </div>
-        <div className="pt-1">
-          <SubmitButton pending={form.pending}>Sign in</SubmitButton>
-        </div>
+        <SubmitButton pending={form.pending}>Sign in</SubmitButton>
       </form>
     </AuthCard>
   );

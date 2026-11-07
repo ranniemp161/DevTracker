@@ -4,21 +4,23 @@ import { updateProjectSchema } from '@devtrack/validators';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { z } from 'zod';
-import { Alert, Button, Card, Field, Select, SubmitButton } from '@/components/ui';
+import { Alert, Button, SettingsSection, Field, Select, SubmitButton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useAuthForm } from '../auth/use-auth-form';
 import { ProjectRepositories } from '../github/project-repositories';
+import { ProjectMembers } from './project-members';
 import { PROJECT_STATUS_LABEL } from './labels';
 import { useProject } from './project-context';
 
 export function ProjectSettings() {
   const { project, readOnly } = useProject();
   if (!project.viewerCanManage)
-    return <Alert tone="warning">Only workspace admins can change project settings.</Alert>;
+    return <Alert>Only workspace admins can change project settings.</Alert>;
   if (readOnly) return <Alert tone="info">Archived projects cannot be edited.</Alert>;
   return (
-    <div className="space-y-6">
+    <div>
       <GeneralCard />
+      <ProjectMembers />
       <ProjectRepositories />
       <ArchiveCard />
     </div>
@@ -55,39 +57,36 @@ function GeneralCard() {
   const v = form.values;
 
   return (
-    <Card title="General" description={`The project key (${project.key}) cannot be changed.`}>
+    <SettingsSection
+      id="general"
+      title="General"
+      description="Name, description, status and dates for this project."
+    >
       <form onSubmit={form.onSubmit} noValidate className="max-w-lg space-y-4">
-        {form.formError ? <Alert tone="error">{form.formError}</Alert> : null}
-        {saved ? <Alert tone="success">Project settings saved.</Alert> : null}
+        {form.formError ? <Alert>{form.formError}</Alert> : null}
+        {saved ? <Alert tone="success">Saved.</Alert> : null}
+        <Field
+          label="Project key"
+          name="key"
+          value={project.key}
+          readOnly
+          hint="Keys can't be changed."
+        />
         <Field
           label="Name"
           name="name"
           value={v.name}
-          onChange={(e) => {
-            setSaved(false);
-            form.onChange(e);
-          }}
+          onChange={form.onChange}
           error={form.fieldErrors.name}
         />
         <Field
           label="Description"
           name="description"
           value={v.description}
-          onChange={(e) => {
-            setSaved(false);
-            form.onChange(e);
-          }}
+          onChange={form.onChange}
           error={form.fieldErrors.description}
         />
-        <Select
-          label="Status"
-          name="status"
-          value={v.status}
-          onChange={(e) => {
-            setSaved(false);
-            form.onChange(e);
-          }}
-        >
+        <Select label="Status" name="status" value={v.status} onChange={form.onChange}>
           {(['PLANNING', 'ACTIVE', 'ON_HOLD', 'COMPLETED'] as const).map((s) => (
             <option key={s} value={s}>
               {PROJECT_STATUS_LABEL[s]}
@@ -100,10 +99,7 @@ function GeneralCard() {
             name="startDate"
             type="date"
             value={v.startDate}
-            onChange={(e) => {
-              setSaved(false);
-              form.onChange(e);
-            }}
+            onChange={form.onChange}
             error={form.fieldErrors.startDate}
           />
           <Field
@@ -111,18 +107,15 @@ function GeneralCard() {
             name="targetDate"
             type="date"
             value={v.targetDate}
-            onChange={(e) => {
-              setSaved(false);
-              form.onChange(e);
-            }}
+            onChange={form.onChange}
             error={form.fieldErrors.targetDate}
           />
         </div>
-        <div className="w-40 pt-2">
-          <SubmitButton pending={form.pending}>Save changes</SubmitButton>
+        <div className="w-40">
+          <SubmitButton pending={form.pending}>Save</SubmitButton>
         </div>
       </form>
-    </Card>
+    </SettingsSection>
   );
 }
 
@@ -146,32 +139,24 @@ function ArchiveCard() {
   }
 
   return (
-    <Card
-      title="Archive project"
-      description="Archived projects become read-only and are hidden from the standard project list."
-      className="border-red-200/80"
+    <SettingsSection
+      danger
+      title="Danger zone"
+      description="Archiving makes the project read-only and hides it from the project list."
     >
-      <div className="max-w-md space-y-4">
-        {error ? <Alert tone="error">{error}</Alert> : null}
-        <p className="text-xs text-mineral leading-relaxed">
-          This operation will disable new task creation and comment activity.
-        </p>
+      <div className="max-w-md space-y-3">
+        {error ? <Alert>{error}</Alert> : null}
         <Field
-          label={`Type "${project.key}" to confirm`}
+          label={`Type ${project.key} to confirm`}
           name="confirm"
           value={confirm}
           autoComplete="off"
           onChange={(e) => setConfirm(e.target.value)}
         />
-        <Button
-          variant="danger"
-          size="sm"
-          disabled={busy || confirm !== project.key}
-          onClick={archive}
-        >
-          {busy ? 'Archiving…' : 'Archive project'}
+        <Button variant="danger" disabled={busy || confirm !== project.key} onClick={archive}>
+          Archive project
         </Button>
       </div>
-    </Card>
+    </SettingsSection>
   );
 }

@@ -2,32 +2,35 @@
 
 import { TASK_STATUSES, type Task, type TaskStatus } from '@devtrack/types';
 import Link from 'next/link';
-import { useState, type DragEvent, type FormEvent } from 'react';
-import { Alert, Avatar, Badge, Button, Skeleton } from '@/components/ui';
-import { api, ApiError } from '@/lib/api';
+import { useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react';
+import { CalendarIcon, PlusIcon } from '@/components/icons';
 import {
-  formatDate,
-  PRIORITY_LABEL,
-  PRIORITY_RANK,
-  PRIORITY_TONE,
-  TASK_STATUS_LABEL,
-} from './labels';
+  Alert,
+  Avatar,
+  Button,
+  ErrorState,
+  IconButton,
+  PriorityIcon,
+  Skeleton,
+  StatusDot,
+} from '@/components/ui';
+import { api, ApiError } from '@/lib/api';
+import { formatDate, PRIORITY_RANK, TASK_STATUS_LABEL } from './labels';
 import { LabelChip } from './label-chip';
 import { useProject } from './project-context';
 import { filterTask, TaskFilterBar, useTaskFilters } from './task-filters';
+import { TaskStatusMenu } from './task-status-menu';
 import { useProjectTasks } from './use-project-tasks';
 
 const byPriorityThenAge = (a: Task, b: Task) =>
   PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority] || a.createdAt.localeCompare(b.createdAt);
 
-const STATUS_DOT_COLORS: Record<TaskStatus, string> = {
-  BACKLOG: 'bg-neutral-400',
-  TODO: 'bg-amber-500',
-  IN_PROGRESS: 'bg-sky-500',
-  IN_REVIEW: 'bg-indigo-500',
-  DONE: 'bg-emerald-500',
-  BLOCKED: 'bg-red-500',
-};
+/** Today as a local YYYY-MM-DD string, comparable with calendar-date strings. */
+function todayIso() {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 
 /** Kanban view: one column per status; dropping a card in a column changes its status (M3 rule 8). */
 export function Board() {
@@ -36,6 +39,7 @@ export function Board() {
   const { filters } = useTaskFilters();
   const [dropError, setDropError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<TaskStatus | null>(null);
+  const [addingIn, setAddingIn] = useState<TaskStatus | null>(null);
 
   async function moveTask(taskId: string, status: TaskStatus) {
     const before = tasks;
@@ -62,75 +66,41 @@ export function Board() {
     if (taskId) void moveTask(taskId, status);
   }
 
-  if (error) {
-    return (
-      <div className="space-y-4">
-        <Alert>{error}</Alert>
-        <Button size="sm" variant="secondary" onClick={reload}>
-          Retry
-        </Button>
-      </div>
-    );
-  }
+  if (error) return <ErrorState message={error} onRetry={reload} />;
+  if (!tasks) return <BoardSkeleton />;
 
-  if (!tasks) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-10 w-full rounded-xl" />
-        <div className="flex gap-4 overflow-x-hidden pb-4">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <div
-              key={i}
-              className="w-[280px] shrink-0 rounded-xl border border-border bg-subtle/50 p-3 space-y-3"
-            >
-              <Skeleton className="h-6 w-24 rounded" />
-              <Skeleton className="h-28 rounded-lg" />
-              <Skeleton className="h-28 rounded-lg" />
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
+  const doneCount = tasks.filter((t) => t.status === 'DONE').length;
 
   return (
-    <div className="space-y-5">
-      {/* Consolidated toolbar: Filters + Refresh action */}
-      <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-3.5 shadow-xs sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
         <TaskFilterBar workspaceId={project.workspaceId} members={members} />
-        <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={reload}
-            className="text-xs text-mineral hover:text-graphite"
-            title="Refresh tasks"
-          >
-            <svg aria-hidden="true" className="size-3.5" viewBox="0 0 20 20" fill="currentColor">
-              <path
-                fillRule="evenodd"
-                d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h2.433a.75.75 0 000-1.5H3.75a.75.75 0 00-.75.75v4.482a.75.75 0 001.5 0v-2.433l.311.313a7 7 0 0011.712-3.138.75.75 0 00-1.21-.629zM4.688 8.576a5.5 5.5 0 019.201-2.466l.312.311H11.77a.75.75 0 000 1.5h4.482a.75.75 0 00.75-.75V2.689a.75.75 0 00-1.5 0v2.433l-.311-.313A7 7 0 003.478 7.947a.75.75 0 001.21.629z"
-                clipRule="evenodd"
-              />
-            </svg>
-            <span>Refresh</span>
+        <div className="flex items-center gap-3">
+          <p className="text-label text-fg-muted">
+            {doneCount} of {tasks.length} done
+          </p>
+          <Button variant="ghost" size="sm" onClick={reload}>
+            Refresh
           </Button>
+          {readOnly ? null : (
+            <Button
+              variant="primary"
+              size="sm"
+              icon={<PlusIcon size={14} />}
+              onClick={() => setAddingIn('TODO')}
+            >
+              New task
+            </Button>
+          )}
         </div>
       </div>
-
-      {/* Quick Add Bar */}
-      {readOnly ? null : <QuickAdd onCreated={(t) => setTasks((c) => [t, ...(c ?? [])])} />}
-
       {dropError ? <Alert>{dropError}</Alert> : null}
-
-      {/* Board columns container: scrollable horizontally, keeping comfortable 280px column width */}
-      <div className="-mx-4 sm:-mx-6 lg:-mx-8 overflow-x-auto px-4 sm:px-6 lg:px-8 pb-4 custom-scrollbar">
-        <div className="flex items-start gap-3.5 min-w-max">
+      <div className="-mx-4 overflow-x-auto px-4 pb-2 sm:-mx-7 sm:px-7">
+        <div className="flex w-max gap-3.5">
           {TASK_STATUSES.map((status) => {
             const column = tasks
               .filter((t) => t.status === status && filterTask(t, filters))
               .sort(byPriorityThenAge);
-
             return (
               <section
                 key={status}
@@ -142,49 +112,79 @@ export function Board() {
                 }}
                 onDragLeave={() => setDragOver((s) => (s === status ? null : s))}
                 onDrop={(e) => onDrop(e, status)}
-                className={`flex w-[280px] sm:w-[290px] shrink-0 flex-col rounded-xl border p-2.5 transition-colors duration-150 ${
+                className={`flex min-h-64 w-68 flex-none flex-col rounded-panel border p-2 transition-colors ${
                   dragOver === status
-                    ? 'border-accent bg-accent-tint/40 shadow-xs'
-                    : 'border-border/90 bg-subtle/50'
+                    ? 'border-primary bg-primary-soft'
+                    : 'border-line bg-surface-sunken'
                 }`}
               >
-                {/* Column header */}
-                <div className="flex items-center justify-between px-2 py-1.5 mb-2">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`size-2 rounded-full ${STATUS_DOT_COLORS[status]}`}
-                      aria-hidden="true"
+                <header className="flex h-8 items-center gap-2 px-1.5">
+                  <StatusDot status={status} />
+                  <h2 className="text-label font-semibold text-fg">{TASK_STATUS_LABEL[status]}</h2>
+                  <span className="text-xs text-fg-muted">{column.length}</span>
+                  {readOnly ? null : (
+                    <IconButton
+                      size="sm"
+                      aria-label={`Add task to ${TASK_STATUS_LABEL[status]}`}
+                      onClick={() => setAddingIn(status)}
+                      className="ml-auto"
+                    >
+                      <PlusIcon size={14} />
+                    </IconButton>
+                  )}
+                </header>
+                <div className="mt-1 flex flex-1 flex-col gap-2">
+                  {addingIn === status && !readOnly ? (
+                    <ColumnQuickAdd
+                      status={status}
+                      onCancel={() => setAddingIn(null)}
+                      onCreated={(t) => {
+                        setTasks((c) => [t, ...(c ?? [])]);
+                        setAddingIn(null);
+                      }}
                     />
-                    <h2 className="text-xs font-semibold text-graphite tracking-tight">
-                      {TASK_STATUS_LABEL[status]}
-                    </h2>
-                  </div>
-                  <span className="rounded-full border border-border bg-surface px-2 py-0.5 text-[11px] font-semibold text-mineral shadow-xs">
-                    {column.length}
-                  </span>
-                </div>
-
-                {/* Cards list */}
-                <ul className="space-y-2.5 min-h-[120px]">
-                  {column.map((task) => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      draggable={!readOnly}
-                      onMove={moveTask}
-                      readOnly={readOnly}
-                    />
-                  ))}
-                  {column.length === 0 ? (
-                    <li className="flex h-24 items-center justify-center rounded-lg border border-dashed border-border text-center text-xs text-mineral-muted">
-                      No tasks in {TASK_STATUS_LABEL[status].toLowerCase()}
-                    </li>
                   ) : null}
-                </ul>
+                  {column.length === 0 && addingIn !== status ? (
+                    <div className="flex h-22 items-center justify-center rounded-card border border-dashed border-line-dashed text-label text-fg-subtle">
+                      No tasks
+                    </div>
+                  ) : null}
+                  <ul className="space-y-2">
+                    {column.map((task) => (
+                      <TaskCard
+                        key={task.id}
+                        task={task}
+                        draggable={!readOnly}
+                        onMove={moveTask}
+                        readOnly={readOnly}
+                      />
+                    ))}
+                  </ul>
+                </div>
               </section>
             );
           })}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function BoardSkeleton() {
+  return (
+    <div role="status" aria-label="Loading tasks" className="space-y-4">
+      <Skeleton className="h-7.5 w-72" />
+      <div className="flex gap-3.5 overflow-hidden">
+        {TASK_STATUSES.map((s) => (
+          <div
+            key={s}
+            className="w-68 flex-none space-y-2 rounded-panel border border-line bg-surface-sunken p-2"
+          >
+            <Skeleton className="h-6 w-24" />
+            <Skeleton className="h-24 bg-surface" />
+            <Skeleton className="h-24 bg-surface" />
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -202,6 +202,11 @@ function TaskCard({
   readOnly: boolean;
 }) {
   const { project } = useProject();
+  const overdue =
+    Boolean(task.dueDate) && task.status !== 'DONE' && task.dueDate!.slice(0, 10) < todayIso();
+  const shownLabels = task.labels.slice(0, 2);
+  const extraLabels = task.labels.length - shownLabels.length;
+  const assignees = task.assignees.slice(0, 3);
 
   return (
     <li
@@ -210,87 +215,91 @@ function TaskCard({
         e.dataTransfer.setData('text/devtrack-task', task.id);
         e.dataTransfer.effectAllowed = 'move';
       }}
-      className="group rounded-xl border border-border bg-surface p-3 shadow-xs transition-all duration-150 hover:border-border-strong hover:shadow-sm"
+      className={`relative flex flex-col gap-2.5 rounded-card border border-line bg-surface p-3.5 shadow-card transition-colors hover:border-line-control ${
+        task.status === 'DONE' ? 'opacity-75' : ''
+      }`}
     >
-      {/* Header: Key & Accessible Status changer */}
       <div className="flex items-center justify-between gap-2">
-        <Link
-          href={`/projects/${project.id}/tasks/${task.id}`}
-          className="font-mono text-xs font-semibold text-mineral group-hover:text-accent transition-colors"
-        >
-          {task.key}
-        </Link>
-        {!readOnly ? (
-          <label className="text-xs shrink-0">
-            <span className="sr-only">Change status for {task.key}</span>
-            <select
-              value={task.status}
-              onChange={(e) => onMove(task.id, e.target.value as TaskStatus)}
-              className="rounded-md border border-border/80 bg-subtle/50 px-1.5 py-0.5 text-[11px] font-medium text-mineral transition-colors hover:border-border-strong hover:bg-white focus:border-accent focus:outline-none cursor-pointer"
-              title="Move to status"
-            >
-              {TASK_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {TASK_STATUS_LABEL[s]}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-      </div>
-
-      {/* Body: Title, Labels, Priority, Assignees */}
-      <Link href={`/projects/${project.id}/tasks/${task.id}`} className="mt-2 block space-y-2.5">
-        <p className="text-sm font-medium leading-snug text-graphite group-hover:text-accent-text transition-colors">
-          {task.title}
-        </p>
-
-        {task.labels.length > 0 ? (
-          <div className="flex flex-wrap gap-1">
-            {task.labels.map((l) => (
-              <LabelChip key={l.id} label={l} />
-            ))}
-          </div>
-        ) : null}
-
-        <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/50">
-          <Badge tone={PRIORITY_TONE[task.priority]}>{PRIORITY_LABEL[task.priority]}</Badge>
-          <div className="flex items-center gap-2">
-            {task.dueDate ? (
-              <span className="text-[11px] text-mineral-muted font-medium">
-                {formatDate(task.dueDate)}
-              </span>
-            ) : null}
-            <div className="flex -space-x-1">
-              {task.assignees.slice(0, 3).map((a) => (
+        <span className="font-mono text-xs text-fg-muted">{task.key}</span>
+        <div className="relative z-10 flex items-center gap-1.5">
+          {readOnly ? (
+            <StatusDot status={task.status} />
+          ) : (
+            <TaskStatusMenu status={task.status} onSelect={(s) => onMove(task.id, s)} />
+          )}
+          {assignees.length > 0 ? (
+            <div className="flex -space-x-1.5">
+              {assignees.map((a) => (
                 <span
                   key={a.id}
                   title={`@${a.username}`}
-                  className="rounded-full ring-1 ring-surface"
+                  className="rounded-full ring-2 ring-surface"
                 >
-                  <Avatar name={a.username} url={a.avatarUrl} size="xs" />
+                  <Avatar name={a.username} url={a.avatarUrl} seed={a.id} size="xs" />
                 </span>
               ))}
             </div>
-          </div>
+          ) : (
+            <span
+              role="img"
+              aria-label="Unassigned"
+              className="inline-block size-5 rounded-full border border-dashed border-line-control"
+            />
+          )}
         </div>
+      </div>
+      {/* Stretched link: the whole card opens the task, the status menu sits above it. */}
+      <Link
+        href={`/projects/${project.id}/tasks/${task.id}`}
+        className="line-clamp-3 rounded-chip text-sm leading-snug font-medium text-fg after:absolute after:inset-0 after:rounded-card"
+      >
+        {task.title}
       </Link>
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+        <PriorityIcon priority={task.priority} />
+        {shownLabels.map((l) => (
+          <LabelChip key={l.id} label={l} />
+        ))}
+        {extraLabels > 0 ? <span className="text-xs text-fg-muted">+{extraLabels}</span> : null}
+      </div>
+      {task.dueDate ? (
+        <div className="border-t border-line-subtle pt-2 text-xs text-fg-muted">
+          <span
+            className={`inline-flex items-center gap-1.5 ${overdue ? 'font-medium text-danger' : ''}`}
+          >
+            <CalendarIcon size={14} />
+            {overdue ? 'Overdue · ' : ''}
+            {formatDate(task.dueDate)}
+          </span>
+        </div>
+      ) : null}
     </li>
   );
 }
 
-function QuickAdd({ onCreated }: { onCreated: (task: Task) => void }) {
+/** Inline quick-add in a column; the task is created with that column's status. */
+function ColumnQuickAdd({
+  status,
+  onCreated,
+  onCancel,
+}: {
+  status: TaskStatus;
+  onCreated: (task: Task) => void;
+  onCancel: () => void;
+}) {
   const { project } = useProject();
   const draftKey = `devtrack_task_draft_${project.id}`;
+  const input = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState(() => {
     if (typeof window !== 'undefined') {
       return sessionStorage.getItem(draftKey) ?? '';
     }
     return '';
   });
-  const [status, setStatus] = useState<TaskStatus>('TODO');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => input.current?.focus(), []);
 
   function handleTitleChange(val: string) {
     setTitle(val);
@@ -312,8 +321,8 @@ function QuickAdd({ onCreated }: { onCreated: (task: Task) => void }) {
       const { task } = await api<{ task: Task }>(`/projects/${project.id}/tasks`, {
         body: { title, status },
       });
-      onCreated(task);
       handleTitleChange('');
+      onCreated(task);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not create the task.');
     } finally {
@@ -324,38 +333,40 @@ function QuickAdd({ onCreated }: { onCreated: (task: Task) => void }) {
   return (
     <form
       onSubmit={submit}
-      className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface p-2.5 shadow-xs"
+      onKeyDown={(e) => e.key === 'Escape' && onCancel()}
+      className="space-y-2 rounded-card border border-line-control bg-surface p-2.5 shadow-raised"
     >
-      <label className="sr-only" htmlFor="quick-add-title">
-        New task title
+      <label className="sr-only" htmlFor={`quick-add-${status}`}>
+        New task title for {TASK_STATUS_LABEL[status]}
       </label>
       <input
-        id="quick-add-title"
+        ref={input}
+        id={`quick-add-${status}`}
         value={title}
         onChange={(e) => handleTitleChange(e.target.value)}
-        placeholder={`Add a task to ${project.key}…`}
+        placeholder="Task title"
         maxLength={200}
-        className="min-w-64 flex-1 rounded-lg border border-border bg-subtle/30 px-3 py-1.5 text-xs text-graphite placeholder:text-mineral-muted focus:border-accent focus:bg-white focus:outline-none focus:ring-2 focus:ring-accent/15"
+        className="h-8 w-full rounded-control border border-line-control bg-surface px-2.5 text-sm placeholder:text-fg-subtle focus-visible:border-primary"
       />
-      <label className="sr-only" htmlFor="quick-add-status">
-        Status
-      </label>
-      <select
-        id="quick-add-status"
-        value={status}
-        onChange={(e) => setStatus(e.target.value as TaskStatus)}
-        className="rounded-lg border border-border bg-white px-2 py-1.5 text-xs font-medium text-graphite focus:border-accent focus:outline-none cursor-pointer"
-      >
-        {TASK_STATUSES.map((s) => (
-          <option key={s} value={s}>
-            {TASK_STATUS_LABEL[s]}
-          </option>
-        ))}
-      </select>
-      <Button type="submit" variant="primary" size="sm" disabled={pending || !title.trim()}>
-        {pending ? 'Adding…' : 'Add task'}
-      </Button>
-      {error ? <p className="w-full text-xs font-medium text-red-600 px-1">{error}</p> : null}
+      {error ? (
+        <p role="alert" className="text-xs text-danger">
+          {error}
+        </p>
+      ) : null}
+      <div className="flex justify-end gap-1.5">
+        <Button variant="ghost" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button
+          type="submit"
+          variant="primary"
+          size="sm"
+          loading={pending}
+          disabled={!title.trim()}
+        >
+          {pending ? 'Adding…' : 'Add task'}
+        </Button>
+      </div>
     </form>
   );
 }

@@ -23,13 +23,13 @@ export function RegisterForm() {
   return (
     <AuthCard
       title="Create your account"
-      subtitle="We will email you a verification link to activate your workspaces."
+      subtitle="We will email you a link to verify your address."
       footer={
         <>
           Already have an account?{' '}
           <Link
             href={`/login?next=${encodeURIComponent(next)}`}
-            className="font-semibold text-accent hover:underline underline-offset-2"
+            className="font-medium text-fg underline-offset-4 hover:underline"
           >
             Sign in
           </Link>
@@ -37,9 +37,9 @@ export function RegisterForm() {
       }
     >
       <GithubButton redirectTo={next} />
-      <Divider label="or register with email" />
+      <Divider label="or with email" />
       <form onSubmit={form.onSubmit} noValidate className="space-y-4">
-        {form.formError ? <Alert tone="error">{form.formError}</Alert> : null}
+        {form.formError ? <Alert>{form.formError}</Alert> : null}
         <Field
           label="Email"
           name="email"
@@ -66,11 +66,9 @@ export function RegisterForm() {
           value={form.values.password}
           onChange={form.onChange}
           error={form.fieldErrors.password}
-          hint={`At least ${PASSWORD_MIN_LENGTH} characters. Passphrases recommended.`}
+          hint={`At least ${PASSWORD_MIN_LENGTH} characters. A long passphrase is best.`}
         />
-        <div className="pt-1">
-          <SubmitButton pending={form.pending}>Create account</SubmitButton>
-        </div>
+        <SubmitButton pending={form.pending}>Create account</SubmitButton>
       </form>
     </AuthCard>
   );

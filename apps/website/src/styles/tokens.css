@@ -1,0 +1,323 @@
+/* ==========================================================================
+   DevTrack design tokens
+   --------------------------------------------------------------------------
+   Source of truth for every color, size, radius and shadow in DevTrack.
+   Copy to apps/website/src/styles/tokens.css and import it from
+   apps/website/src/app/globals.css right after `@import 'tailwindcss';`
+   (see design/SPEC.md, step 1). Geist is loaded in app/layout.tsx via next/font.
+
+   Layers:
+     1. Primitives  — raw palette. Don't use these directly in components.
+     2. Semantic    — what components use (--dt-bg, --dt-text, --dt-primary…).
+     3. Domain      — status, priority, labels, avatars.
+     4. Tailwind v4 — @theme block: new utilities + legacy aliases so the
+                      classes already in the app (text-graphite, bg-accent…)
+                      pick up the new palette with zero code changes.
+   ========================================================================== */
+
+:root {
+  /* ---------- 1. Primitives ---------- */
+  --dt-pine-50: #e7f3ee;
+  --dt-pine-100: #d3e8df;
+  --dt-pine-400: #3fc79a; /* "Mint" — accents on dark */
+  --dt-pine-600: #0f6b55; /* brand */
+  --dt-pine-700: #0b5a47;
+  --dt-pine-900: #0b2e26; /* "Forest" */
+
+  --dt-gray-0: #ffffff;
+  --dt-gray-25: #fcfdfc;
+  --dt-gray-50: #fafbfa;
+  --dt-gray-75: #f5f7f6;
+  --dt-gray-100: #f1f3f2;
+  --dt-gray-150: #e4e8e6;
+  --dt-gray-200: #dde2df;
+  --dt-gray-300: #cdd4d1;
+  --dt-gray-400: #b5beba;
+  --dt-gray-500: #8a9490;
+  --dt-gray-600: #66716c;
+  --dt-gray-700: #59645f;
+  --dt-gray-800: #3d4743;
+  --dt-gray-900: #101816;
+
+  --dt-red-50: #fcebeb;
+  --dt-red-100: #f1c9c9;
+  --dt-red-500: #d64545;
+  --dt-red-700: #a12c2c;
+
+  /* ---------- 2. Semantic ---------- */
+  /* Surfaces */
+  --dt-bg: var(--dt-gray-75); /* app canvas behind sidebar */
+  --dt-surface: var(--dt-gray-0); /* main panel, cards, inputs */
+  --dt-surface-sunken: var(--dt-gray-50); /* board lane area, group rows */
+  --dt-surface-muted: var(--dt-gray-100); /* chips, key badges, segmented bg */
+  --dt-surface-inverse: var(--dt-pine-900);
+
+  /* Text — every pair below passes 4.5:1 on --dt-surface and --dt-bg */
+  --dt-text: var(--dt-gray-900);
+  --dt-text-secondary: var(--dt-gray-800); /* nav items, secondary buttons */
+  --dt-text-muted: var(--dt-gray-700); /* descriptions, meta */
+  --dt-text-subtle: var(--dt-gray-600); /* timestamps, placeholders, hints */
+  --dt-text-on-primary: #ffffff;
+  --dt-text-on-inverse: #ffffff;
+  --dt-text-on-inverse-muted: #c9ddd6;
+
+  /* Borders */
+  --dt-border: var(--dt-gray-150); /* hairlines, cards */
+  --dt-border-subtle: var(--dt-gray-100); /* dividers inside cards */
+  --dt-border-control: var(--dt-gray-300); /* inputs, secondary buttons (3:1) */
+  --dt-border-dashed: var(--dt-gray-200); /* empty states */
+
+  /* Brand / actions */
+  --dt-primary: var(--dt-pine-600);
+  --dt-primary-hover: var(--dt-pine-700);
+  --dt-primary-soft: var(--dt-pine-50); /* active nav, Owner badge */
+  --dt-primary-soft-text: var(--dt-pine-700);
+  --dt-accent: var(--dt-pine-400);
+
+  /* Feedback */
+  --dt-danger: var(--dt-red-700);
+  --dt-danger-border: var(--dt-red-100);
+  --dt-danger-soft: #fffbfb;
+  --dt-success: #1f9d6b;
+  --dt-warning-text: #8a4b00;
+
+  /* Focus */
+  --dt-focus-ring: 0 0 0 2px var(--dt-surface), 0 0 0 4px var(--dt-primary);
+
+  /* ---------- 3. Domain ---------- */
+  /* Task status: dot / soft bg / text-on-soft */
+  --dt-status-backlog: #8a9490;
+  --dt-status-backlog-bg: #f1f3f2;
+  --dt-status-backlog-fg: #4b5551;
+  --dt-status-todo: #e0901f;
+  --dt-status-todo-bg: #fdf3e4;
+  --dt-status-todo-fg: #8a4b00;
+  --dt-status-progress: #2f6fdb;
+  --dt-status-progress-bg: #e8f0fd;
+  --dt-status-progress-fg: #1d4fb0;
+  --dt-status-review: #7a5ae0;
+  --dt-status-review-bg: #f0ebfd;
+  --dt-status-review-fg: #5a3bb8;
+  --dt-status-done: #1f9d6b;
+  --dt-status-done-bg: #e7f3ee;
+  --dt-status-done-fg: #0b5a47;
+  --dt-status-blocked: #d64545;
+  --dt-status-blocked-bg: #fcebeb;
+  --dt-status-blocked-fg: #a12c2c;
+
+  /* Priority bars (filled / empty) */
+  --dt-priority-bar: var(--dt-gray-800);
+  --dt-priority-bar-empty: var(--dt-gray-300);
+  --dt-priority-urgent: var(--dt-red-500);
+
+  /* Pull requests */
+  --dt-pr-open: #1f7a5c;
+  --dt-pr-merged: #5a3bb8;
+
+  /* Avatars (bg / fg) — assign by hashing the user id */
+  --dt-avatar-1-bg: #e7f3ee;
+  --dt-avatar-1-fg: #0b5a47;
+  --dt-avatar-2-bg: #dcebfa;
+  --dt-avatar-2-fg: #1d4fb0;
+  --dt-avatar-3-bg: #f6e6f1;
+  --dt-avatar-3-fg: #8b2d6e;
+  --dt-avatar-4-bg: #fdf3e4;
+  --dt-avatar-4-fg: #8a4b00;
+  --dt-avatar-5-bg: #f0ebfd;
+  --dt-avatar-5-fg: #5a3bb8;
+
+  /* Label swatches users can pick from */
+  --dt-label-orange: #e8590c;
+  --dt-label-blue: #2f6fdb;
+  --dt-label-purple: #7a5ae0;
+  --dt-label-teal: #12807a;
+  --dt-label-red: #d64545;
+  --dt-label-amber: #e0901f;
+  --dt-label-green: #1f9d6b;
+  --dt-label-gray: #8a9490;
+
+  /* ---------- Typography ---------- */
+  --dt-font-sans: var(--font-geist-sans), 'Geist', 'Helvetica Neue', Arial, sans-serif;
+  --dt-font-mono:
+    var(--font-geist-mono), 'Geist Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+  --dt-text-xs: 12px; /* meta, chips, timestamps */
+  --dt-text-sm: 13px; /* secondary UI, labels */
+  --dt-text-base: 14px; /* default UI */
+  --dt-text-md: 15px; /* section titles, long-form body */
+  --dt-text-lg: 16px; /* card titles */
+  --dt-text-xl: 24px; /* page titles */
+  --dt-text-2xl: 28px; /* task title, sign-in heading */
+  --dt-text-3xl: 40px; /* marketing / auth hero */
+
+  --dt-weight-regular: 400;
+  --dt-weight-medium: 500;
+  --dt-weight-semibold: 600;
+
+  --dt-leading-tight: 1.1;
+  --dt-leading-snug: 1.4;
+  --dt-leading-normal: 1.5;
+  --dt-tracking-tight: -0.02em; /* headings ≥ 24px */
+
+  /* ---------- Spacing (4px grid) ---------- */
+  --dt-space-1: 4px;
+  --dt-space-2: 8px;
+  --dt-space-3: 12px;
+  --dt-space-4: 16px;
+  --dt-space-5: 20px;
+  --dt-space-6: 24px;
+  --dt-space-7: 28px; /* page gutter */
+  --dt-space-8: 32px;
+  --dt-space-10: 40px;
+  --dt-space-12: 48px;
+
+  /* ---------- Sizing ---------- */
+  --dt-control-sm: 30px; /* filter chips, small buttons */
+  --dt-control-md: 36px; /* default buttons */
+  --dt-control-lg: 40px; /* inputs */
+  --dt-control-xl: 44px; /* auth forms (touch-friendly) */
+  --dt-sidebar-width: 248px;
+  --dt-board-column-width: 272px;
+  --dt-card-min-width: 320px; /* project cards */
+  --dt-task-aside-width: 320px; /* task detail properties panel */
+
+  /* ---------- Radius ---------- */
+  --dt-radius-xs: 4px; /* kbd, inline code */
+  --dt-radius-sm: 6px; /* chips, key badges, icon buttons */
+  --dt-radius-md: 8px; /* buttons, inputs, nav items */
+  --dt-radius-lg: 10px; /* task cards, list containers */
+  --dt-radius-xl: 12px; /* panels, project cards */
+  --dt-radius-full: 999px; /* pills, avatars */
+
+  /* ---------- Elevation ---------- */
+  --dt-shadow-xs: 0 1px 2px rgba(16, 24, 22, 0.05); /* task cards */
+  --dt-shadow-sm: 0 1px 2px rgba(16, 24, 22, 0.08); /* active segmented button */
+  --dt-shadow-md: 0 4px 16px rgba(16, 24, 22, 0.06); /* inline forms, popovers */
+  --dt-shadow-lg: 0 12px 32px rgba(16, 24, 22, 0.12); /* menus, modals */
+
+  /* ---------- Motion ---------- */
+  --dt-ease: cubic-bezier(0.2, 0, 0, 1);
+  --dt-duration-fast: 120ms;
+  --dt-duration-base: 180ms;
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dt-duration-fast: 0ms;
+    --dt-duration-base: 0ms;
+  }
+}
+
+/* Sensible base — remove if you already have a reset */
+html {
+  font-family: var(--dt-font-sans);
+  color: var(--dt-text);
+  background: var(--dt-bg);
+}
+:where(button, a, input, select, textarea):focus-visible {
+  outline: none;
+  box-shadow: var(--dt-focus-ring);
+}
+:where(code, kbd, .dt-mono) {
+  font-family: var(--dt-font-mono);
+}
+
+/* ==========================================================================
+   4. Tailwind v4 mapping
+   --------------------------------------------------------------------------
+   NEW names (use these in all new/edited code):
+     bg-bg, bg-surface, bg-surface-sunken, bg-surface-muted, bg-surface-inverse
+     text-fg, text-fg-secondary, text-fg-muted, text-fg-subtle
+     border-line, border-line-subtle, border-line-control
+     bg-primary, hover:bg-primary-hover, bg-primary-soft, text-primary-soft-fg
+     text-danger, border-danger-line, bg-danger-soft
+     bg-status-todo, bg-status-todo-bg, text-status-todo-fg  (same for backlog,
+       progress, review, done, blocked)
+     rounded-chip / rounded-control / rounded-card / rounded-panel
+     shadow-card / shadow-raised / shadow-overlay
+   ========================================================================== */
+@theme inline {
+  --font-sans: var(--dt-font-sans);
+  --font-mono: var(--dt-font-mono);
+
+  /* ---- New semantic utilities ---- */
+  --color-bg: var(--dt-bg);
+  --color-surface: var(--dt-surface);
+  --color-surface-sunken: var(--dt-surface-sunken);
+  --color-surface-muted: var(--dt-surface-muted);
+  --color-surface-inverse: var(--dt-surface-inverse);
+
+  --color-fg: var(--dt-text);
+  --color-fg-secondary: var(--dt-text-secondary);
+  --color-fg-muted: var(--dt-text-muted);
+  --color-fg-subtle: var(--dt-text-subtle);
+  --color-fg-on-inverse: var(--dt-text-on-inverse);
+  --color-fg-on-inverse-muted: var(--dt-text-on-inverse-muted);
+
+  --color-line: var(--dt-border);
+  --color-line-subtle: var(--dt-border-subtle);
+  --color-line-control: var(--dt-border-control);
+  --color-line-dashed: var(--dt-border-dashed);
+
+  --color-primary: var(--dt-primary);
+  --color-primary-hover: var(--dt-primary-hover);
+  --color-primary-soft: var(--dt-primary-soft);
+  --color-primary-soft-fg: var(--dt-primary-soft-text);
+  --color-mint: var(--dt-accent);
+
+  --color-danger: var(--dt-danger);
+  --color-danger-line: var(--dt-danger-border);
+  --color-danger-soft: var(--dt-danger-soft);
+  --color-success: var(--dt-success);
+  --color-warning-fg: var(--dt-warning-text);
+
+  --color-status-backlog: var(--dt-status-backlog);
+  --color-status-backlog-bg: var(--dt-status-backlog-bg);
+  --color-status-backlog-fg: var(--dt-status-backlog-fg);
+  --color-status-todo: var(--dt-status-todo);
+  --color-status-todo-bg: var(--dt-status-todo-bg);
+  --color-status-todo-fg: var(--dt-status-todo-fg);
+  --color-status-progress: var(--dt-status-progress);
+  --color-status-progress-bg: var(--dt-status-progress-bg);
+  --color-status-progress-fg: var(--dt-status-progress-fg);
+  --color-status-review: var(--dt-status-review);
+  --color-status-review-bg: var(--dt-status-review-bg);
+  --color-status-review-fg: var(--dt-status-review-fg);
+  --color-status-done: var(--dt-status-done);
+  --color-status-done-bg: var(--dt-status-done-bg);
+  --color-status-done-fg: var(--dt-status-done-fg);
+  --color-status-blocked: var(--dt-status-blocked);
+  --color-status-blocked-bg: var(--dt-status-blocked-bg);
+  --color-status-blocked-fg: var(--dt-status-blocked-fg);
+
+  --color-avatar-1-bg: var(--dt-avatar-1-bg);
+  --color-avatar-1-fg: var(--dt-avatar-1-fg);
+  --color-avatar-2-bg: var(--dt-avatar-2-bg);
+  --color-avatar-2-fg: var(--dt-avatar-2-fg);
+  --color-avatar-3-bg: var(--dt-avatar-3-bg);
+  --color-avatar-3-fg: var(--dt-avatar-3-fg);
+  --color-avatar-4-bg: var(--dt-avatar-4-bg);
+  --color-avatar-4-fg: var(--dt-avatar-4-fg);
+  --color-avatar-5-bg: var(--dt-avatar-5-bg);
+  --color-avatar-5-fg: var(--dt-avatar-5-fg);
+
+  --text-label: var(--dt-text-sm);
+  --text-md: var(--dt-text-md);
+  --text-2xs: 10px;
+  --text-pill: 11px;
+  --text-title: var(--dt-text-2xl);
+  --text-hero: var(--dt-text-3xl);
+
+  --color-pr-open: var(--dt-pr-open);
+  --color-pr-merged: var(--dt-pr-merged);
+
+  --radius-chip: var(--dt-radius-sm);
+  --radius-control: var(--dt-radius-md);
+  --radius-card: var(--dt-radius-lg);
+  --radius-panel: var(--dt-radius-xl);
+
+  --shadow-card: var(--dt-shadow-xs);
+  --shadow-raised: var(--dt-shadow-md);
+  --shadow-overlay: var(--dt-shadow-lg);
+}

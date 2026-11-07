@@ -19,11 +19,8 @@ export function ForgotPasswordForm() {
       title="Reset your password"
       subtitle="Enter your account email and we will send you a reset link."
       footer={
-        <Link
-          href="/login"
-          className="font-semibold text-accent hover:underline underline-offset-2"
-        >
-          ← Back to sign in
+        <Link href="/login" className="font-medium text-fg underline-offset-4 hover:underline">
+          Back to sign in
         </Link>
       }
     >
@@ -34,7 +31,7 @@ export function ForgotPasswordForm() {
         </Alert>
       ) : (
         <form onSubmit={form.onSubmit} noValidate className="space-y-4">
-          {form.formError ? <Alert tone="error">{form.formError}</Alert> : null}
+          {form.formError ? <Alert>{form.formError}</Alert> : null}
           <Field
             label="Email"
             name="email"
@@ -44,9 +41,7 @@ export function ForgotPasswordForm() {
             onChange={form.onChange}
             error={form.fieldErrors.email}
           />
-          <div className="pt-1">
-            <SubmitButton pending={form.pending}>Send reset link</SubmitButton>
-          </div>
+          <SubmitButton pending={form.pending}>Send reset link</SubmitButton>
         </form>
       )}
     </AuthCard>

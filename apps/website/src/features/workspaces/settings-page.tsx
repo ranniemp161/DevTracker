@@ -4,7 +4,7 @@ import type { WorkspaceDetails } from '@devtrack/types';
 import { updateWorkspaceSchema } from '@devtrack/validators';
 import { useRouter } from 'next/navigation';
 import { Suspense, useState } from 'react';
-import { Alert, Button, Card, Field, SubmitButton } from '@/components/ui';
+import { Alert, Button, SettingsSection, Field, SubmitButton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useAuthForm } from '../auth/use-auth-form';
 import { useSession } from '../session/session-context';
@@ -16,10 +16,10 @@ import { useWorkspace } from './workspace-context';
 export function SettingsPage() {
   const { workspace } = useWorkspace();
   if (!isAdmin(workspace.role)) {
-    return <Alert tone="warning">Only workspace admins can change settings.</Alert>;
+    return <Alert>Only workspace admins can change settings.</Alert>;
   }
   return (
-    <div className="space-y-6">
+    <div>
       <RenameCard />
       <LabelsSettings />
       {/* GithubSettings reads ?github= via useSearchParams, which needs a Suspense boundary. */}
@@ -47,25 +47,26 @@ function RenameCard() {
   });
 
   return (
-    <Card title="General" description={`The workspace slug (${workspace.slug}) does not change.`}>
+    <SettingsSection
+      id="general"
+      title="General"
+      description={`The workspace slug (${workspace.slug}) does not change.`}
+    >
       <form onSubmit={form.onSubmit} noValidate className="max-w-md space-y-4">
-        {form.formError ? <Alert tone="error">{form.formError}</Alert> : null}
-        {saved ? <Alert tone="success">Workspace name updated.</Alert> : null}
+        {form.formError ? <Alert>{form.formError}</Alert> : null}
+        {saved ? <Alert tone="success">Saved.</Alert> : null}
         <Field
           label="Workspace name"
           name="name"
           value={form.values.name}
-          onChange={(e) => {
-            setSaved(false);
-            form.onChange(e);
-          }}
+          onChange={form.onChange}
           error={form.fieldErrors.name}
         />
-        <div className="w-40 pt-1">
-          <SubmitButton pending={form.pending}>Save changes</SubmitButton>
+        <div className="w-40">
+          <SubmitButton pending={form.pending}>Save</SubmitButton>
         </div>
       </form>
-    </Card>
+    </SettingsSection>
   );
 }
 
@@ -91,13 +92,13 @@ function ArchiveCard() {
   }
 
   return (
-    <Card
-      title="Archive workspace"
-      description="Archiving hides the workspace from every member. Only the owner can perform this action."
-      className="border-red-200/80"
+    <SettingsSection
+      danger
+      title="Danger zone"
+      description="Archiving hides the workspace from every member. Only the owner can do this."
     >
-      <div className="max-w-md space-y-4">
-        {error ? <Alert tone="error">{error}</Alert> : null}
+      <div className="max-w-md space-y-3">
+        {error ? <Alert>{error}</Alert> : null}
         <Field
           label={`Type "${workspace.name}" to confirm`}
           name="confirm"
@@ -107,13 +108,12 @@ function ArchiveCard() {
         />
         <Button
           variant="danger"
-          size="sm"
           disabled={busy || confirmText !== workspace.name}
           onClick={archive}
         >
-          {busy ? 'Archiving…' : 'Archive workspace'}
+          Archive workspace
         </Button>
       </div>
-    </Card>
+    </SettingsSection>
   );
 }

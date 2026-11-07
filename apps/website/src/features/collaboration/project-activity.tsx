@@ -1,14 +1,16 @@
 'use client';
 
-import { Card } from '@/components/ui';
 import { useProject } from '../projects/project-context';
 import { ActivityFeed } from './activity-feed';
 
 export function ProjectActivity() {
   const { project } = useProject();
   return (
-    <Card title="Activity" description="Everything that happened in this project, newest first.">
-      <ActivityFeed projectId={project.id} />
-    </Card>
+    <div className="space-y-4">
+      <p className="text-sm text-fg-muted">
+        Everything that happened in this project, newest first.
+      </p>
+      <ActivityFeed projectId={project.id} groupByDay />
+    </div>
   );
 }

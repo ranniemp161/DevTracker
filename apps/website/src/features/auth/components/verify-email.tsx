@@ -43,7 +43,7 @@ export function VerifyEmail() {
           <Alert tone="success">Your email is verified.</Alert>
           <Link
             href="/"
-            className="block text-center text-xs font-semibold text-accent hover:underline underline-offset-2"
+            className="block text-center text-sm font-medium underline-offset-4 hover:underline"
           >
             Continue to DevTrack
           </Link>
@@ -51,13 +51,13 @@ export function VerifyEmail() {
       ) : null}
       {state.status === 'failed' ? (
         <div className="space-y-4">
-          <Alert tone="error">{state.message}</Alert>
-          <p className="text-xs text-mineral leading-relaxed">
-            Sign in and use &ldquo;Resend verification email&rdquo; to receive a new link.
+          <Alert>{state.message}</Alert>
+          <p className="text-sm text-fg-muted">
+            Sign in and use “Resend verification email” to get a new link.
           </p>
           <Link
             href="/"
-            className="block text-center text-xs font-semibold text-accent hover:underline underline-offset-2"
+            className="block text-center text-sm font-medium underline-offset-4 hover:underline"
           >
             Go to DevTrack
           </Link>

@@ -24,27 +24,24 @@ export function ResetPasswordForm() {
   return (
     <AuthCard
       title="Choose a new password"
-      subtitle="You will be signed out everywhere and asked to sign in again with your new password."
+      subtitle="You will be signed out everywhere and asked to sign in again."
       footer={
-        <Link
-          href="/login"
-          className="font-semibold text-accent hover:underline underline-offset-2"
-        >
-          ← Back to sign in
+        <Link href="/login" className="font-medium text-fg underline-offset-4 hover:underline">
+          Back to sign in
         </Link>
       }
     >
       {token === undefined ? null : !token ? (
-        <Alert tone="warning">
+        <Alert>
           This reset link is incomplete.{' '}
-          <Link href="/forgot-password" className="font-semibold underline text-amber-950">
+          <Link href="/forgot-password" className="underline">
             Request a new one
           </Link>
           .
         </Alert>
       ) : (
         <form onSubmit={form.onSubmit} noValidate className="space-y-4">
-          {form.formError ? <Alert tone="error">{form.formError}</Alert> : null}
+          {form.formError ? <Alert>{form.formError}</Alert> : null}
           <Field
             label="New password"
             name="password"
@@ -55,9 +52,7 @@ export function ResetPasswordForm() {
             error={form.fieldErrors.password ?? form.fieldErrors.token}
             hint={`At least ${PASSWORD_MIN_LENGTH} characters.`}
           />
-          <div className="pt-1">
-            <SubmitButton pending={form.pending}>Reset password</SubmitButton>
-          </div>
+          <SubmitButton pending={form.pending}>Reset password</SubmitButton>
         </form>
       )}
     </AuthCard>

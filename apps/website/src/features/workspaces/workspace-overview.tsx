@@ -14,37 +14,23 @@ export function WorkspaceOverview() {
   return (
     <div className="grid gap-4 sm:grid-cols-3">
       <Card>
-        <p className="text-xs font-medium text-mineral">Team members</p>
-        <p className="mt-2 text-3xl font-semibold tracking-tight text-graphite">
-          {workspace.memberCount}
-        </p>
+        <p className="text-sm text-fg-subtle">Members</p>
+        <p className="mt-1 text-2xl font-semibold">{workspace.memberCount}</p>
         <Link
           href={`/workspaces/${workspace.id}/members`}
-          className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-accent hover:text-accent-hover transition-colors"
+          className="mt-2 inline-block text-sm text-primary hover:underline"
         >
-          <span>View members</span>
-          <span>→</span>
+          View members
         </Link>
       </Card>
-
       <Card>
-        <p className="text-xs font-medium text-mineral">Your workspace role</p>
-        <p className="mt-2 text-3xl font-semibold tracking-tight text-graphite">
-          {ROLE_LABEL[workspace.role]}
-        </p>
-        <p className="mt-3 text-xs text-mineral-muted">
-          {workspace.role === 'OWNER'
-            ? 'Full administrative control'
-            : workspace.role === 'ADMIN'
-              ? 'Can manage projects and members'
-              : 'Standard contributor access'}
-        </p>
+        <p className="text-sm text-fg-subtle">Your role</p>
+        <p className="mt-1 text-2xl font-semibold">{ROLE_LABEL[workspace.role]}</p>
       </Card>
-
       <Card>
-        <p className="text-xs font-medium text-mineral">Created date</p>
-        <p className="mt-2 text-3xl font-semibold tracking-tight text-graphite">{created}</p>
-        <p className="mt-3 font-mono text-xs text-mineral-muted">Slug: {workspace.slug}</p>
+        <p className="text-sm text-fg-subtle">Created</p>
+        <p className="mt-1 text-2xl font-semibold">{created}</p>
+        <p className="mt-2 text-sm text-fg-subtle">Slug: {workspace.slug}</p>
       </Card>
     </div>
   );

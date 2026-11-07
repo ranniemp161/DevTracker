@@ -2,7 +2,7 @@
 
 import type { Label } from '@devtrack/types';
 import { useState } from 'react';
-import { Alert, Button, Card, EmptyState } from '@/components/ui';
+import { Alert, Button, SettingsSection } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useApiQuery } from '@/lib/use-api-query';
 import { LABEL_COLORS, LabelChip } from '../projects/label-chip';
@@ -35,29 +35,29 @@ export function LabelsSettings() {
   }
 
   return (
-    <Card
+    <SettingsSection
+      id="labels"
       title="Labels"
       description="Shared by every project in this workspace. Deleting a label removes it from all tasks."
     >
-      {error ? <Alert tone="error">{error}</Alert> : null}
+      {error ? <Alert>{error}</Alert> : null}
       {labels.data?.length === 0 ? (
-        <EmptyState
-          title="No labels yet"
-          description="Members can create tags and labels from any task details page."
-        />
+        <p className="text-sm text-fg-subtle">
+          No labels yet. Members can create labels from any task.
+        </p>
       ) : null}
-      <ul className="divide-y divide-border/60">
+      <ul className="divide-y divide-line-subtle">
         {labels.data?.map((l) =>
           editing?.id === l.id ? (
-            <li key={l.id} className="flex flex-wrap items-center gap-2.5 py-3">
+            <li key={l.id} className="flex flex-wrap items-center gap-2 py-2.5">
               <input
                 value={editing.name}
                 maxLength={40}
                 aria-label="Label name"
                 onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-                className="rounded-lg border border-border bg-surface px-2.5 py-1 text-xs font-medium text-graphite focus:border-accent focus:outline-none"
+                className="rounded-control border border-line-control bg-surface px-2 py-1 text-sm"
               />
-              <div className="flex gap-1.5" role="radiogroup" aria-label="Label color">
+              <div className="flex gap-1" role="radiogroup" aria-label="Label color">
                 {LABEL_COLORS.map((c) => (
                   <button
                     key={c}
@@ -66,17 +66,13 @@ export function LabelsSettings() {
                     aria-checked={editing.color === c}
                     aria-label={c}
                     onClick={() => setEditing({ ...editing, color: c })}
-                    className={`size-5 rounded-full cursor-pointer transition-transform ${
-                      editing.color === c
-                        ? 'ring-2 ring-accent ring-offset-1 scale-110'
-                        : 'hover:scale-105'
-                    }`}
+                    className={`size-5 rounded-full ${editing.color === c ? 'ring-2 ring-fg ring-offset-1' : ''}`}
                     style={{ backgroundColor: c }}
                   />
                 ))}
               </div>
               <Button
-                size="xs"
+                size="sm"
                 variant="primary"
                 disabled={busy}
                 onClick={() =>
@@ -90,35 +86,33 @@ export function LabelsSettings() {
               >
                 Save
               </Button>
-              <Button size="xs" variant="ghost" onClick={() => setEditing(null)}>
+              <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>
                 Cancel
               </Button>
             </li>
           ) : (
-            <li key={l.id} className="flex items-center justify-between gap-3 py-3">
+            <li key={l.id} className="flex items-center gap-2 py-2.5">
               <LabelChip label={l} />
-              <div className="flex items-center gap-1.5">
-                <Button
-                  size="xs"
-                  variant="ghost"
-                  onClick={() => setEditing({ id: l.id, name: l.name, color: l.color })}
-                >
-                  Edit
-                </Button>
-                <Button
-                  size="xs"
-                  variant="ghost"
-                  disabled={busy}
-                  onClick={() => call(() => api(`/labels/${l.id}`, { method: 'DELETE' }))}
-                  className="text-mineral hover:text-red-700"
-                >
-                  Delete
-                </Button>
-              </div>
+              <span className="flex-1" />
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setEditing({ id: l.id, name: l.name, color: l.color })}
+              >
+                Edit
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => call(() => api(`/labels/${l.id}`, { method: 'DELETE' }))}
+              >
+                Delete
+              </Button>
             </li>
           ),
         )}
       </ul>
-    </Card>
+    </SettingsSection>
   );
 }
