@@ -3,11 +3,20 @@
 import type { Task } from '@devtrack/types';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { Alert, Avatar, Badge, Button } from '@/components/ui';
+import {
+  Alert,
+  Avatar,
+  Button,
+  EmptyState,
+  PriorityIcon,
+  Skeleton,
+  StatusDot,
+  UnassignedAvatar,
+} from '@/components/ui';
 import { apiPage, ApiError } from '@/lib/api';
 import { useRealtimeRefresh } from '@/lib/realtime';
 import { LabelChip } from './label-chip';
-import { formatDate, PRIORITY_LABEL, PRIORITY_TONE, TASK_STATUS_LABEL } from './labels';
+import { formatDate, TASK_STATUS_LABEL } from './labels';
 import { useProject } from './project-context';
 import { TaskFilterBar, useTaskFilters } from './task-filters';
 
@@ -64,13 +73,13 @@ export function TaskList() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
         <TaskFilterBar workspaceId={project.workspaceId} members={members} />
       </div>
       {error ? <Alert>{error}</Alert> : null}
-      <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-neutral-200 text-xs text-neutral-500 uppercase">
+      <div className="overflow-x-auto rounded-card border border-line bg-surface">
+        <table className="w-full min-w-176 text-left text-sm">
+          <thead className="border-b border-line bg-surface-sunken text-xs text-fg-muted">
             <tr>
               <th className="px-4 py-2.5 font-medium">Key</th>
               <th className="px-4 py-2.5 font-medium">Title</th>
@@ -80,14 +89,16 @@ export function TaskList() {
               <th className="px-4 py-2.5 font-medium">Due</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-100">
+          <tbody className="divide-y divide-line-subtle">
             {rows?.map((t) => (
-              <tr key={t.id} className="hover:bg-neutral-50">
-                <td className="px-4 py-2.5 whitespace-nowrap text-neutral-500">{t.key}</td>
+              <tr key={t.id} className="transition-colors hover:bg-surface-sunken">
+                <td className="px-4 py-2.5 font-mono text-xs whitespace-nowrap text-fg-muted">
+                  {t.key}
+                </td>
                 <td className="px-4 py-2.5">
                   <Link
                     href={`/projects/${project.id}/tasks/${t.id}`}
-                    className="font-medium hover:underline"
+                    className="font-medium text-fg hover:underline"
                   >
                     {t.title}
                   </Link>
@@ -99,19 +110,25 @@ export function TaskList() {
                     </div>
                   ) : null}
                 </td>
-                <td className="px-4 py-2.5 whitespace-nowrap">{TASK_STATUS_LABEL[t.status]}</td>
+                <td className="px-4 py-2.5 whitespace-nowrap">
+                  <span className="inline-flex items-center gap-2">
+                    <StatusDot status={t.status} />
+                    {TASK_STATUS_LABEL[t.status]}
+                  </span>
+                </td>
                 <td className="px-4 py-2.5">
-                  <Badge tone={PRIORITY_TONE[t.priority]}>{PRIORITY_LABEL[t.priority]}</Badge>
+                  <PriorityIcon priority={t.priority} />
                 </td>
                 <td className="px-4 py-2.5">
                   <div className="flex -space-x-1.5">
+                    {t.assignees.length === 0 ? <UnassignedAvatar /> : null}
                     {t.assignees.map((a) => (
                       <span
                         key={a.id}
                         title={`@${a.username}`}
-                        className="rounded-full ring-2 ring-white"
+                        className="rounded-full ring-2 ring-surface"
                       >
-                        <Avatar name={a.username} url={a.avatarUrl} size="sm" />
+                        <Avatar name={a.username} url={a.avatarUrl} seed={a.id} size="xs" />
                       </span>
                     ))}
                   </div>
@@ -124,12 +141,16 @@ export function TaskList() {
           </tbody>
         </table>
         {rows && rows.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-neutral-500">
-            No tasks match these filters.
-          </p>
+          <div className="p-4">
+            <EmptyState>No tasks match these filters.</EmptyState>
+          </div>
         ) : null}
         {!rows && !error ? (
-          <p className="px-4 py-8 text-center text-sm text-neutral-500">Loading…</p>
+          <div role="status" aria-label="Loading tasks" className="space-y-2 p-4">
+            <Skeleton className="h-10" />
+            <Skeleton className="h-10" />
+            <Skeleton className="h-10" />
+          </div>
         ) : null}
       </div>
       {cursor ? (

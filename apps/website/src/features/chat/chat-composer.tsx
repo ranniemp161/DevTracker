@@ -162,20 +162,20 @@ export function ChatComposer({ projectId, members, readOnly, onSend, sending }: 
 
   if (readOnly) {
     return (
-      <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-center text-sm text-neutral-500">
+      <div className="rounded-card border border-line bg-surface-sunken p-4 text-center text-sm text-fg-subtle">
         This project is archived. New messages cannot be sent.
       </div>
     );
   }
 
   return (
-    <div className="relative rounded-lg border border-neutral-300 bg-white p-3 shadow-xs focus-within:border-neutral-900 focus-within:ring-1 focus-within:ring-neutral-900">
+    <div className="relative rounded-panel border border-line-control bg-surface p-3 shadow-card focus-within:border-primary">
       {/* Mention autocomplete dropdown */}
       {mentionQuery !== null && filteredMembers.length > 0 ? (
         <div
           role="listbox"
           aria-label="Mention suggestions"
-          className="absolute bottom-full mb-1 left-3 z-30 max-h-48 w-64 overflow-y-auto rounded-lg border border-neutral-200 bg-white py-1 shadow-lg"
+          className="absolute bottom-full mb-1 left-3 z-30 max-h-48 w-64 overflow-y-auto rounded-card border border-line bg-surface py-1 shadow-lg"
         >
           {filteredMembers.map((m, idx) => (
             <button
@@ -185,10 +185,10 @@ export function ChatComposer({ projectId, members, readOnly, onSend, sending }: 
               aria-selected={idx === mentionIndex}
               onClick={() => insertMention(m.user.username)}
               className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm ${
-                idx === mentionIndex ? 'bg-neutral-100 font-medium' : 'hover:bg-neutral-50'
+                idx === mentionIndex ? 'bg-surface-muted font-medium' : 'hover:bg-surface-sunken'
               }`}
             >
-              <span className="font-semibold text-neutral-900">@{m.user.username}</span>
+              <span className="font-semibold text-fg">@{m.user.username}</span>
             </button>
           ))}
         </div>
@@ -196,15 +196,15 @@ export function ChatComposer({ projectId, members, readOnly, onSend, sending }: 
 
       {/* Selected task preview */}
       {selectedTaskId ? (
-        <div className="mb-2 flex items-center justify-between gap-2 rounded bg-neutral-100 px-2.5 py-1 text-xs">
-          <span className="truncate font-medium text-neutral-700">
+        <div className="mb-2 flex items-center justify-between gap-2 rounded bg-surface-muted px-2.5 py-1 text-xs">
+          <span className="truncate font-medium text-fg-secondary">
             Linked Task:{' '}
             {selectedTask ? `${selectedTask.key} — ${selectedTask.title}` : selectedTaskId}
           </span>
           <button
             type="button"
             onClick={() => updateTaskId(undefined)}
-            className="shrink-0 text-neutral-500 hover:text-neutral-900"
+            className="shrink-0 text-fg-subtle hover:text-fg"
             aria-label="Remove linked task"
           >
             ✕
@@ -219,10 +219,10 @@ export function ChatComposer({ projectId, members, readOnly, onSend, sending }: 
         onChange={handleInputChange}
         onKeyDown={handleKeyDown}
         placeholder="Type a message… (Enter to send, Shift+Enter for new line, @ to mention)"
-        className="w-full resize-none border-0 bg-transparent p-0 text-sm outline-none placeholder:text-neutral-400 focus:ring-0"
+        className="w-full resize-none border-0 bg-transparent p-0 text-sm outline-none placeholder:text-fg-subtle focus:ring-0"
       />
 
-      <div className="mt-2 flex items-center justify-between gap-2 pt-1 border-t border-neutral-100">
+      <div className="mt-2 flex items-center justify-between gap-2 pt-1 border-t border-line-subtle">
         <div className="flex items-center gap-2">
           {showTaskPicker ? (
             <select
@@ -232,7 +232,7 @@ export function ChatComposer({ projectId, members, readOnly, onSend, sending }: 
                 updateTaskId(e.target.value || undefined);
                 setShowTaskPicker(false);
               }}
-              className="rounded border border-neutral-300 bg-white px-2 py-1 text-xs"
+              className="rounded border border-line-control bg-surface px-2 py-1 text-xs"
             >
               <option value="">No task linked</option>
               {projectTasks.map((t) => (
@@ -245,7 +245,7 @@ export function ChatComposer({ projectId, members, readOnly, onSend, sending }: 
             <button
               type="button"
               onClick={() => setShowTaskPicker(true)}
-              className="text-xs font-medium text-neutral-600 hover:text-neutral-900"
+              className="text-xs font-medium text-fg-muted hover:text-fg"
             >
               + Link task
             </button>

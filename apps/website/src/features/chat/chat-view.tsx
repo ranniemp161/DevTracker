@@ -364,10 +364,10 @@ export function ChatView() {
   }
 
   return (
-    <div className="flex h-[calc(100dvh-14rem)] min-h-[500px] flex-col rounded-xl border border-neutral-200 bg-white">
+    <div className="mx-auto flex h-[calc(100dvh-14rem)] min-h-[500px] max-w-3xl flex-col rounded-panel border border-line bg-surface">
       {/* Header bar / connection warning */}
       {!isConnected ? (
-        <div className="border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-xs text-amber-800">
+        <div className="border-b border-status-todo-bg bg-status-todo-bg px-4 py-1.5 text-xs text-status-todo-fg">
           Disconnected — reconnecting… polling for new messages every 15s.
         </div>
       ) : null}
@@ -387,9 +387,9 @@ export function ChatView() {
         ) : null}
 
         {loading ? (
-          <p className="py-8 text-center text-sm text-neutral-500">Loading chat history…</p>
+          <p className="py-8 text-center text-sm text-fg-subtle">Loading chat history…</p>
         ) : messages.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center py-16 text-center text-neutral-500">
+          <div className="flex h-full flex-col items-center justify-center py-16 text-center text-fg-subtle">
             <p className="text-sm font-medium">No messages yet.</p>
             <p className="mt-1 text-xs">Start the conversation with your team.</p>
           </div>
@@ -407,7 +407,7 @@ export function ChatView() {
               scrollToBottom('smooth');
               setShowNewMessagesBtn(false);
             }}
-            className="absolute bottom-3 right-6 z-10 flex items-center gap-1.5 rounded-full bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white shadow-md hover:bg-neutral-800"
+            className="absolute bottom-3 right-6 z-10 flex items-center gap-1.5 rounded-full bg-fg px-3 py-1.5 text-xs font-medium text-fg-on-inverse shadow-raised hover:bg-fg-secondary"
           >
             ↓ New messages
           </button>
@@ -415,7 +415,7 @@ export function ChatView() {
       ) : null}
 
       {/* Bottom composer */}
-      <div className="border-t border-neutral-200 p-3 bg-neutral-50/50">
+      <div className="border-t border-line p-3 bg-surface-sunken">
         <ChatComposer
           projectId={project.id}
           members={members}

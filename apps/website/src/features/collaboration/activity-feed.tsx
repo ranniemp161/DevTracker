@@ -14,12 +14,15 @@ export function ActivityFeed({
   taskId,
   limit = 30,
   refreshKey,
+  groupByDay = false,
 }: {
   projectId: string;
   taskId?: string;
   limit?: number;
   /** Change to re-fetch (e.g. after the task is edited). */
   refreshKey?: unknown;
+  /** Show "Today", "Yesterday" and date headings between entries. */
+  groupByDay?: boolean;
 }) {
   const base = `/projects/${projectId}/activity?limit=${limit}${taskId ? `&taskId=${taskId}` : ''}`;
   const [entries, setEntries] = useState<ActivityEntry[] | null>(null);
@@ -66,44 +69,58 @@ export function ActivityFeed({
   if (!entries) return <p className="text-sm text-fg-subtle">Loading activity…</p>;
   if (entries.length === 0) return <p className="text-sm text-fg-subtle">No activity yet.</p>;
 
+  const groups = groupByDay ? groupEntries(entries) : [{ label: '', items: entries }];
+
   return (
     <div className="space-y-3">
-      <ol className="space-y-3">
-        {entries.map((e) => (
-          <li key={e.id} className="flex gap-3 text-sm">
-            <Avatar
-              name={e.actor?.username ?? '?'}
-              url={e.actor?.avatarUrl ?? null}
-              seed={e.actor?.id}
-              size="sm"
-            />
-            <p className="min-w-0 flex-1 text-fg-secondary">
-              <span className="font-medium text-fg">{actorLabel(e)}</span> {describeActivity(e)}
-              {!taskId && e.task ? (
-                <>
-                  {' on '}
-                  {e.action === 'task.deleted' ? (
-                    <span className="font-medium">{e.task.key}</span>
-                  ) : (
-                    <Link
-                      href={`/projects/${projectId}/tasks/${e.task.id}`}
-                      className="font-medium hover:underline"
+      {groups.map((group) => (
+        <section key={group.label} aria-label={group.label || undefined} className="space-y-3">
+          {group.label ? (
+            <h3 className="border-b border-line-subtle pb-2 text-label font-semibold text-fg-muted">
+              {group.label}
+            </h3>
+          ) : null}
+          {((items) => (
+            <ol className="space-y-3">
+              {items.map((e) => (
+                <li key={e.id} className="flex gap-3 text-sm">
+                  <Avatar
+                    name={e.actor?.username ?? '?'}
+                    url={e.actor?.avatarUrl ?? null}
+                    seed={e.actor?.id}
+                    size="sm"
+                  />
+                  <p className="min-w-0 flex-1 text-fg-secondary">
+                    <span className="font-medium text-fg">{actorLabel(e)}</span>{' '}
+                    {describeActivity(e)}
+                    {!taskId && e.task ? (
+                      <>
+                        {' on '}
+                        {e.action === 'task.deleted' ? (
+                          <span className="font-mono text-xs font-medium">{e.task.key}</span>
+                        ) : (
+                          <Link
+                            href={`/projects/${projectId}/tasks/${e.task.id}`}
+                            className="font-mono text-xs font-medium text-primary hover:underline"
+                          >
+                            {e.task.key}
+                          </Link>
+                        )}
+                      </>
+                    ) : null}
+                    <span
+                      className="block text-xs text-fg-subtle"
+                      title={new Date(e.createdAt).toLocaleString()}
                     >
-                      {e.task.key}
-                    </Link>
-                  )}
-                </>
-              ) : null}
-              <span
-                className="block text-xs text-fg-subtle"
-                title={new Date(e.createdAt).toLocaleString()}
-              >
-                {timeAgo(e.createdAt)}
-              </span>
-            </p>
-          </li>
-        ))}
-      </ol>
+                      {timeAgo(e.createdAt)}
+                    </span>
+                  </p>
+                </li>
+              ))}
+            </ol>
+          ))(group.items)}
+        </section>
+      ))}
       {cursor ? (
         <Button size="sm" onClick={loadMore}>
           Load more
@@ -118,4 +135,25 @@ function actorLabel(e: ActivityEntry): string {
   if (e.actor) return `@${e.actor.username}`;
   const github = (e.metadata as { github?: { login?: string } | null }).github;
   return github?.login ? `${github.login} (GitHub)` : 'System';
+}
+
+function dayLabel(iso: string): string {
+  const d = new Date(iso);
+  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((startOf(new Date()) - startOf(d)) / 86_400_000);
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Yesterday';
+  return d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+/** Entries arrive newest first, so consecutive entries on the same day share a group. */
+function groupEntries(entries: ActivityEntry[]) {
+  const groups: { label: string; items: ActivityEntry[] }[] = [];
+  for (const entry of entries) {
+    const label = dayLabel(entry.createdAt);
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) last.items.push(entry);
+    else groups.push({ label, items: [entry] });
+  }
+  return groups;
 }

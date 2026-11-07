@@ -3,7 +3,8 @@
 import type { Milestone } from '@devtrack/types';
 import { createMilestoneSchema } from '@devtrack/validators';
 import { useState } from 'react';
-import { Alert, Badge, Button, Card, Field, SubmitButton } from '@/components/ui';
+import { FlagIcon, CheckIcon } from '@/components/icons';
+import { Alert, Button, EmptyState, Field, SubmitButton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useApiQuery } from '@/lib/use-api-query';
 import { useAuthForm, withoutBlanks } from '../auth/use-auth-form';
@@ -14,27 +15,59 @@ export function MilestonesPage() {
   const { project, readOnly } = useProject();
   const canManage = project.viewerCanManage && !readOnly;
   const milestones = useApiQuery<Milestone[]>(`/projects/${project.id}/milestones`);
+  const open = milestones.data?.filter((m) => m.status !== 'COMPLETED') ?? [];
+  const completed = milestones.data?.filter((m) => m.status === 'COMPLETED') ?? [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       {canManage ? <CreateMilestone onCreated={milestones.reload} /> : null}
-      <Card title="Milestones">
-        {milestones.error ? <Alert>{milestones.error.message}</Alert> : null}
-        {milestones.data?.length === 0 ? (
-          <p className="text-sm text-neutral-500">No milestones yet.</p>
-        ) : null}
-        <ul className="divide-y divide-neutral-100">
-          {milestones.data?.map((m) => (
-            <MilestoneRow
-              key={m.id}
-              milestone={m}
-              canManage={canManage}
-              onChanged={milestones.reload}
-            />
+      {milestones.error ? <Alert>{milestones.error.message}</Alert> : null}
+      <MilestoneSection
+        title="Open"
+        items={open}
+        empty="No open milestones."
+        canManage={canManage}
+        onChanged={milestones.reload}
+      />
+      <MilestoneSection
+        title="Completed"
+        items={completed}
+        empty="Completed milestones will show up here."
+        canManage={canManage}
+        onChanged={milestones.reload}
+      />
+    </div>
+  );
+}
+
+function MilestoneSection({
+  title,
+  items,
+  empty,
+  canManage,
+  onChanged,
+}: {
+  title: string;
+  items: Milestone[];
+  empty: string;
+  canManage: boolean;
+  onChanged: () => void;
+}) {
+  return (
+    <section aria-label={title} className="space-y-3">
+      <h2 className="text-md font-semibold text-fg">
+        {title} · {items.length}
+      </h2>
+      {items.length === 0 ? (
+        <EmptyState>{empty}</EmptyState>
+      ) : (
+        <ul className="space-y-3">
+          {items.map((m) => (
+            <MilestoneRow key={m.id} milestone={m} canManage={canManage} onChanged={onChanged} />
           ))}
         </ul>
-      </Card>
-    </div>
+      )}
+    </section>
   );
 }
 
@@ -64,16 +97,23 @@ function MilestoneRow({
 
   const completed = m.status === 'COMPLETED';
   return (
-    <li className="flex flex-wrap items-start gap-3 py-3">
+    <li className="flex flex-wrap items-start gap-3 rounded-card border border-line bg-surface p-4">
+      <FlagIcon
+        size={18}
+        className={`mt-0.5 shrink-0 ${completed ? 'text-status-done' : 'text-fg-subtle'}`}
+      />
       <div className="min-w-0 flex-1">
-        <p className={`font-medium ${completed ? 'text-neutral-500 line-through' : ''}`}>
+        <p className={`text-lg font-semibold ${completed ? 'text-fg-muted' : 'text-fg'}`}>
           {m.name}
         </p>
-        {m.description ? <p className="mt-0.5 text-sm text-neutral-600">{m.description}</p> : null}
-        <p className="mt-1 text-xs text-neutral-500">Due {formatDate(m.dueDate)}</p>
-        {error ? <p className="mt-1 text-sm text-red-700">{error}</p> : null}
+        {m.description ? <p className="mt-0.5 text-sm text-fg-muted">{m.description}</p> : null}
+        {m.dueDate ? (
+          <p className={`mt-1.5 text-xs ${dueTone(m.dueDate, completed)}`}>
+            {dueLabel(m.dueDate, completed)}
+          </p>
+        ) : null}
+        {error ? <p className="mt-1 text-sm text-danger">{error}</p> : null}
       </div>
-      <Badge tone={completed ? 'green' : 'blue'}>{completed ? 'Completed' : 'Open'}</Badge>
       {canManage ? (
         <>
           <Button
@@ -88,6 +128,7 @@ function MilestoneRow({
               )
             }
           >
+            {completed ? null : <CheckIcon size={14} />}
             {completed ? 'Reopen' : 'Mark complete'}
           </Button>
           <Button
@@ -104,6 +145,28 @@ function MilestoneRow({
   );
 }
 
+/** Calendar-date difference in days between a YYYY-MM-DD string and today (local). */
+function daysUntil(iso: string) {
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
+  const target = Date.UTC(y!, m! - 1, d!);
+  const now = new Date();
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((target - today) / 86_400_000);
+}
+
+function dueTone(iso: string, completed: boolean) {
+  if (completed) return 'text-fg-muted';
+  const days = daysUntil(iso);
+  if (days < 0) return 'font-medium text-danger';
+  if (days <= 2) return 'font-medium text-warning-fg';
+  return 'text-fg-muted';
+}
+
+function dueLabel(iso: string, completed: boolean) {
+  if (!completed && daysUntil(iso) < 0) return `Overdue · ${formatDate(iso)}`;
+  return `Due ${formatDate(iso)}`;
+}
+
 function CreateMilestone({ onCreated }: { onCreated: () => void }) {
   const { project } = useProject();
   const form = useAuthForm(
@@ -115,7 +178,10 @@ function CreateMilestone({ onCreated }: { onCreated: () => void }) {
     },
   );
   return (
-    <Card title="New milestone">
+    <section
+      aria-label="New milestone"
+      className="rounded-panel border border-line-control bg-surface p-5 shadow-raised"
+    >
       <form
         onSubmit={form.onSubmit}
         noValidate
@@ -152,6 +218,6 @@ function CreateMilestone({ onCreated }: { onCreated: () => void }) {
           <Alert>{form.formError}</Alert>
         </div>
       ) : null}
-    </Card>
+    </section>
   );
 }
