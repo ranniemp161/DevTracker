@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { DevtrackMark, MenuIcon } from '@/components/icons';
-import { Alert, Button, IconButton } from '@/components/ui';
+import { Alert, Avatar, Button, IconButton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { RealtimeProvider, useRealtimeRefresh, type RealtimeEvent } from '@/lib/realtime';
 import { useApiQuery } from '@/lib/use-api-query';
@@ -170,7 +170,45 @@ function VerifiedFrame({ session, children }: { session: Session; children: Reac
       >
         Skip to content
       </a>
-      {isDesktop ? (
+      {pathname === '/' ? (
+        <div className="min-h-dvh bg-bg">
+          <header className="border-b border-line bg-surface">
+            <div className="mx-auto flex min-h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-7">
+              <Link
+                href="/"
+                aria-label="DevTrack home"
+                className="flex shrink-0 items-center gap-2 rounded-control font-semibold tracking-tight"
+              >
+                <DevtrackMark size={28} />
+                DevTrack
+              </Link>
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <NotificationBell align="end" />
+                <div
+                  className="flex min-w-0 items-center gap-2 border-l border-line pl-3"
+                  title={`Signed in as @${user.username}`}
+                >
+                  <Avatar name={user.username} url={user.avatarUrl} seed={user.id} size="sm" />
+                  <span className="sr-only sm:not-sr-only sm:max-w-40 sm:truncate sm:text-sm sm:text-fg-secondary">
+                    @{user.username}
+                  </span>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => signOut(router)}>
+                  Sign out
+                </Button>
+              </div>
+            </div>
+          </header>
+          <main
+            id="main-content"
+            tabIndex={-1}
+            className="mx-auto max-w-3xl space-y-6 px-4 py-10 focus-visible:shadow-none sm:py-16"
+          >
+            <PendingInvitationBanner />
+            {children}
+          </main>
+        </div>
+      ) : isDesktop ? (
         <div className="flex h-dvh bg-bg">
           <aside className="w-62 shrink-0">{sidebar(true)}</aside>
           <main

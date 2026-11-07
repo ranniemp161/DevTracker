@@ -8,7 +8,7 @@ import { api, apiPage } from '@/lib/api';
 import { useRealtimeRefresh } from '@/lib/realtime';
 import { timeAgo } from './describe-activity';
 
-export function NotificationBell() {
+export function NotificationBell({ align = 'start' }: { align?: 'start' | 'end' }) {
   const router = useRouter();
   const pathname = usePathname();
   const [count, setCount] = useState(0);
@@ -94,7 +94,9 @@ export function NotificationBell() {
         ) : null}
       </button>
       {open ? (
-        <div className="fixed inset-x-4 top-14 z-30 rounded-card border border-line bg-surface shadow-overlay sm:absolute sm:inset-x-auto sm:top-full sm:left-0 sm:mt-2 sm:w-80">
+        <div
+          className={`fixed inset-x-4 top-14 z-30 rounded-card border border-line bg-surface shadow-overlay sm:absolute sm:inset-x-auto sm:top-full sm:mt-2 sm:w-80 ${align === 'end' ? 'sm:right-0' : 'sm:left-0'}`}
+        >
           <div className="flex items-center justify-between border-b border-line-subtle px-3 py-2">
             <span className="text-sm font-semibold">Notifications</span>
             <Button size="sm" variant="ghost" onClick={markAll} disabled={count === 0}>
