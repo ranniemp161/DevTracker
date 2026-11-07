@@ -251,7 +251,7 @@ const avatarTones = [
 ];
 
 /** Stable pick of an avatar tone from a seed (user id, falling back to the name). */
-function avatarTone(seed: string) {
+export function avatarTone(seed: string) {
   let hash = 0;
   for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
   return avatarTones[hash % avatarTones.length]!;

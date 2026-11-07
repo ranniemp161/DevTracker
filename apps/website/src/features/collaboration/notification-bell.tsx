@@ -74,12 +74,12 @@ export function NotificationBell() {
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-label={count > 0 ? `Notifications, ${count} unread` : 'Notifications'}
-        className="relative rounded-md p-1.5 text-neutral-700 hover:bg-neutral-100"
+        className="relative inline-flex size-8 items-center justify-center rounded-control text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
       >
         <svg
           aria-hidden="true"
           viewBox="0 0 24 24"
-          className="size-5"
+          className="size-4.5"
           fill="none"
           stroke="currentColor"
           strokeWidth="1.8"
@@ -88,44 +88,44 @@ export function NotificationBell() {
           <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
         </svg>
         {count > 0 ? (
-          <span className="absolute -top-0.5 -right-0.5 min-w-4 rounded-full bg-red-600 px-1 text-center text-[10px] leading-4 font-semibold text-white">
+          <span className="absolute -top-0.5 -right-0.5 min-w-4 rounded-full bg-danger px-1 text-center text-2xs leading-4 font-semibold text-fg-on-inverse">
             {count > 99 ? '99+' : count}
           </span>
         ) : null}
       </button>
       {open ? (
-        <div className="absolute right-0 z-20 mt-2 w-80 rounded-lg border border-neutral-200 bg-white shadow-lg">
-          <div className="flex items-center justify-between border-b border-neutral-100 px-3 py-2">
+        <div className="fixed inset-x-4 top-14 z-30 rounded-card border border-line bg-surface shadow-overlay sm:absolute sm:inset-x-auto sm:top-full sm:left-0 sm:mt-2 sm:w-80">
+          <div className="flex items-center justify-between border-b border-line-subtle px-3 py-2">
             <span className="text-sm font-semibold">Notifications</span>
             <Button size="sm" variant="ghost" onClick={markAll} disabled={count === 0}>
               Mark all read
             </Button>
           </div>
           <ul className="max-h-96 overflow-y-auto">
-            {!items ? <li className="px-3 py-4 text-sm text-neutral-500">Loading…</li> : null}
+            {!items ? <li className="px-3 py-4 text-sm text-fg-subtle">Loading…</li> : null}
             {items?.length === 0 ? (
-              <li className="px-3 py-4 text-sm text-neutral-500">You are all caught up.</li>
+              <li className="px-3 py-4 text-sm text-fg-subtle">You are all caught up.</li>
             ) : null}
             {items?.map((n) => (
               <li key={n.id}>
                 <button
                   type="button"
                   onClick={() => openNotification(n)}
-                  className={`block w-full px-3 py-2.5 text-left hover:bg-neutral-50 ${n.readAt ? '' : 'bg-blue-50/60'}`}
+                  className={`block w-full px-3 py-2.5 text-left hover:bg-surface-sunken ${n.readAt ? '' : 'bg-status-progress-bg'}`}
                 >
                   <span className="flex items-start gap-2">
                     {!n.readAt ? (
                       <span
                         aria-label="Unread"
-                        className="mt-1.5 size-2 shrink-0 rounded-full bg-blue-600"
+                        className="mt-1.5 size-2 shrink-0 rounded-full bg-status-progress"
                       />
                     ) : null}
                     <span className="min-w-0">
-                      <span className="block text-sm text-neutral-900">{n.title}</span>
+                      <span className="block text-sm text-fg">{n.title}</span>
                       {n.body ? (
-                        <span className="block truncate text-xs text-neutral-600">{n.body}</span>
+                        <span className="block truncate text-xs text-fg-muted">{n.body}</span>
                       ) : null}
-                      <span className="block text-xs text-neutral-500">{timeAgo(n.createdAt)}</span>
+                      <span className="block text-xs text-fg-subtle">{timeAgo(n.createdAt)}</span>
                     </span>
                   </span>
                 </button>

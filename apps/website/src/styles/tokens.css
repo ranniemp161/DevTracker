@@ -305,6 +305,7 @@ html {
   --text-label: var(--dt-text-sm);
   --text-md: var(--dt-text-md);
   --text-2xs: 10px;
+  --text-pill: 11px;
 
   --color-pr-open: var(--dt-pr-open);
   --color-pr-merged: var(--dt-pr-merged);

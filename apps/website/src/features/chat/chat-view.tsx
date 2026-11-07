@@ -364,7 +364,7 @@ export function ChatView() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-14rem)] min-h-[500px] flex-col rounded-xl border border-neutral-200 bg-white">
+    <div className="flex h-[calc(100dvh-14rem)] min-h-[500px] flex-col rounded-xl border border-neutral-200 bg-white">
       {/* Header bar / connection warning */}
       {!isConnected ? (
         <div className="border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-xs text-amber-800">
