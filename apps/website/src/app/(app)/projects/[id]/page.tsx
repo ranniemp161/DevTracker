@@ -1,8 +1,13 @@
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { Board } from '@/features/projects/board';
 
 export const metadata: Metadata = { title: 'Board' };
 
 export default function Page() {
-  return <Board />;
+  return (
+    <Suspense fallback={<p className="text-sm text-neutral-500">Loading board…</p>}>
+      <Board />
+    </Suspense>
+  );
 }

@@ -10,6 +10,7 @@ import { RealtimeProvider } from '@/lib/realtime';
 import { useApiQuery } from '@/lib/use-api-query';
 import { NotificationBell } from '../collaboration/notification-bell';
 import { usePendingInvitation } from '../invitations/pending-invitation';
+import { clearChatDrafts } from '../chat/chat-drafts';
 import { SessionContext, type Session } from './session-context';
 
 /** Layout for signed-in pages: loads the session, renders the header, guards access. */
@@ -62,9 +63,25 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 function Header({ user, workspaces }: { user: PublicUser; workspaces: WorkspaceSummary[] }) {
   const router = useRouter();
+  const pathname = usePathname();
   const params = useParams<{ id?: string }>();
+  const isProjectRoute = pathname.startsWith('/projects/') && Boolean(params.id);
+  const projectQuery = useApiQuery<{ project: { workspaceId: string } }>(
+    isProjectRoute ? `/projects/${params.id}` : null,
+  );
+
+  const activeWorkspaceId = useMemo(() => {
+    if (pathname.startsWith('/workspaces/') && params.id) {
+      return params.id;
+    }
+    if (isProjectRoute && projectQuery.data?.project.workspaceId) {
+      return projectQuery.data.project.workspaceId;
+    }
+    return '';
+  }, [pathname, params.id, isProjectRoute, projectQuery.data]);
 
   async function logout() {
+    clearChatDrafts();
     await api('/auth/logout', { method: 'POST' }).catch(() => undefined);
     router.replace('/login');
     router.refresh();
@@ -80,7 +97,7 @@ function Header({ user, workspaces }: { user: PublicUser; workspaces: WorkspaceS
           <label className="flex items-center gap-2 text-sm">
             <span className="sr-only">Workspace</span>
             <select
-              value={workspaces.some((w) => w.id === params.id) ? params.id : ''}
+              value={workspaces.some((w) => w.id === activeWorkspaceId) ? activeWorkspaceId : ''}
               onChange={(e) => router.push(e.target.value ? `/workspaces/${e.target.value}` : '/')}
               className="rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm"
             >

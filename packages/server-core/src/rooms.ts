@@ -38,7 +38,8 @@ export function roomsFor(
   aggregateId: string,
   envelope: OutboxEnvelope,
 ): string[] {
-  if (eventType.startsWith('notification.')) return [userRoom(aggregateId)];
+  if (eventType.startsWith('notification.') || eventType === 'chat.read')
+    return [userRoom(aggregateId)];
   if (envelope.projectId) return [projectRoom(envelope.projectId)];
   if (envelope.workspaceId) return [workspaceRoom(envelope.workspaceId)];
   return [];

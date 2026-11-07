@@ -1,4 +1,5 @@
 export * from './auth.js';
+export * from './chat.js';
 export * from './collaboration.js';
 export * from './github.js';
 export * from './project.js';

@@ -1,9 +1,9 @@
 'use client';
 
-import type { Project, ProjectMember } from '@devtrack/types';
+import type { Project, ProjectMember, ProjectChatUnreadSummary } from '@devtrack/types';
 import Link from 'next/link';
-import { useParams, usePathname } from 'next/navigation';
-import { createContext, useContext, type ReactNode } from 'react';
+import { useParams, usePathname, useSearchParams } from 'next/navigation';
+import { createContext, useContext, Suspense, type ReactNode } from 'react';
 import { Alert, Badge } from '@/components/ui';
 import { useRealtimeRefresh, useRealtimeRoom, type RealtimeEvent } from '@/lib/realtime';
 import { useApiQuery } from '@/lib/use-api-query';
@@ -16,6 +16,7 @@ interface ProjectContextValue {
   readOnly: boolean;
   reload: () => void;
   reloadMembers: () => void;
+  reloadChatUnread: () => void;
 }
 
 const ProjectContext = createContext<ProjectContextValue | null>(null);
@@ -31,13 +32,21 @@ export function ProjectLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const project = useApiQuery<{ project: Project }>(`/projects/${id}`);
   const members = useApiQuery<ProjectMember[]>(`/projects/${id}/members`);
+  const workspaceId = project.data?.project.workspaceId;
+  const chatUnread = useApiQuery<ProjectChatUnreadSummary[]>(
+    workspaceId ? `/workspaces/${workspaceId}/chat/unread` : null,
+  );
+
   // Every page of a project follows the project room (M7); individual views react to events.
   useRealtimeRoom(`project:${id}`);
   useRealtimeRefresh(
-    (e) => e.projectId === id && e.type === 'activity.created' && isProjectChange(e),
+    (e) =>
+      (e.projectId === id && e.type === 'activity.created' && isProjectChange(e)) ||
+      e.type.startsWith('chat.'),
     () => {
       project.reload();
       members.reload();
+      chatUnread.reload();
     },
   );
 
@@ -60,9 +69,11 @@ export function ProjectLayout({ children }: { children: ReactNode }) {
 
   const p = project.data.project;
   const base = `/projects/${p.id}`;
+  const unreadCount = chatUnread.data?.find((u) => u.projectId === p.id)?.unreadCount ?? 0;
   const tabs = [
     { href: base, label: 'Board' },
     { href: `${base}/list`, label: 'List' },
+    { href: `${base}/chat`, label: 'Chat', count: unreadCount },
     { href: `${base}/milestones`, label: 'Milestones' },
     { href: `${base}/activity`, label: 'Activity' },
     { href: `${base}/members`, label: 'Members' },
@@ -78,6 +89,7 @@ export function ProjectLayout({ children }: { children: ReactNode }) {
         readOnly,
         reload: project.reload,
         reloadMembers: members.reload,
+        reloadChatUnread: chatUnread.reload,
       }}
     >
       <div className="space-y-6">
@@ -102,29 +114,60 @@ export function ProjectLayout({ children }: { children: ReactNode }) {
               <Alert tone="info">This project is archived and read-only.</Alert>
             </div>
           ) : null}
-          <nav className="mt-4 flex gap-1 border-b border-neutral-200" aria-label="Project">
-            {tabs.map((tab) => {
-              const active = tab.href === base ? pathname === base : pathname.startsWith(tab.href);
-              return (
-                <Link
-                  key={tab.href}
-                  href={tab.href}
-                  aria-current={active ? 'page' : undefined}
-                  className={`-mb-px border-b-2 px-3 py-2 text-sm ${
-                    active
-                      ? 'border-neutral-900 font-medium text-neutral-900'
-                      : 'border-transparent text-neutral-600 hover:text-neutral-900'
-                  }`}
-                >
-                  {tab.label}
-                </Link>
-              );
-            })}
-          </nav>
+          <Suspense fallback={null}>
+            <ProjectTabs tabs={tabs} base={base} pathname={pathname} />
+          </Suspense>
         </div>
         {children}
       </div>
     </ProjectContext.Provider>
+  );
+}
+
+function ProjectTabs({
+  tabs,
+  base,
+  pathname,
+}: {
+  tabs: { href: string; label: string; count?: number }[];
+  base: string;
+  pathname: string;
+}) {
+  const searchParams = useSearchParams();
+  const searchStr = searchParams.toString();
+
+  return (
+    <nav
+      className="mt-4 flex gap-1 overflow-x-auto border-b border-neutral-200"
+      aria-label="Project"
+    >
+      {tabs.map((tab) => {
+        const active = tab.href === base ? pathname === base : pathname.startsWith(tab.href);
+        const targetHref =
+          (tab.label === 'Board' || tab.label === 'List') && searchStr
+            ? `${tab.href}?${searchStr}`
+            : tab.href;
+        return (
+          <Link
+            key={tab.href}
+            href={targetHref}
+            aria-current={active ? 'page' : undefined}
+            className={`-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-sm ${
+              active
+                ? 'border-neutral-900 font-medium text-neutral-900'
+                : 'border-transparent text-neutral-600 hover:text-neutral-900'
+            }`}
+          >
+            <span>{tab.label}</span>
+            {tab.count !== undefined && tab.count > 0 ? (
+              <span className="rounded-full bg-neutral-900 px-1.5 py-0.2 text-[11px] font-semibold text-white">
+                {tab.count}
+              </span>
+            ) : null}
+          </Link>
+        );
+      })}
+    </nav>
   );
 }
 
