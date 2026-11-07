@@ -176,6 +176,29 @@ export class GithubAppClient {
     return null;
   }
 
+  /** Every installation of this App that the user behind `userToken` can access on GitHub. */
+  async listUserInstallations(userToken: string): Promise<GithubInstallationInfo[]> {
+    const found: GithubInstallationInfo[] = [];
+    for (let page = 1; page <= 10; page++) {
+      const res = await this.fetch(`${API}/user/installations?per_page=100&page=${page}`, {
+        headers: { ...API_HEADERS, Authorization: `Bearer ${userToken}` },
+      });
+      if (!res.ok) throw githubApiError();
+      const parsed = userInstallationsSchema.safeParse(await res.json().catch(() => null));
+      if (!parsed.success) throw githubApiError();
+      found.push(
+        ...parsed.data.installations.map((i) => ({
+          id: i.id,
+          accountLogin: i.account?.login ?? 'unknown',
+          accountType: i.account?.type ?? 'Unknown',
+          suspendedAt: i.suspended_at ? new Date(i.suspended_at) : null,
+        })),
+      );
+      if (page * 100 >= parsed.data.total_count) break;
+    }
+    return found;
+  }
+
   /** Best effort: the user token is not needed after verification. */
   async revokeUserToken(userToken: string): Promise<void> {
     const app = this.app();

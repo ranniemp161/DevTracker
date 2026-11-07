@@ -540,3 +540,99 @@ describe('project repositories', () => {
     expect(disconnected).toHaveLength(2);
   });
 });
+
+describe('Connect an existing GitHub installation', () => {
+  const connect = (u: TestUser, ws: string, installationId?: string) =>
+    u.browser
+      .get(
+        `/api/v1/github/connect?workspaceId=${ws}${installationId ? `&installationId=${installationId}` : ''}`,
+      )
+      .expect(302);
+
+  it('sends an admin to GitHub user authorization with a browser-bound state', async () => {
+    const { owner, ws } = await projectFixture(t);
+    const res = await connect(owner, ws);
+    const location = redirectOf(res);
+    expect(`${location.origin}${location.pathname}`).toBe(
+      'https://github.com/login/oauth/authorize',
+    );
+    expect(location.searchParams.get('redirect_uri')).toBe(
+      `${WEB_ORIGIN}/api/v1/github/install/callback`,
+    );
+    const state = location.searchParams.get('state');
+    expect(cookieValue(setCookies(res).get('devtrack_gh_install_state'))).toBe(state);
+  });
+
+  it('only lets workspace admins start it', async () => {
+    const { dev, ws } = await projectFixture(t);
+    const res = await connect(dev, ws);
+    expect(redirectOf(res).searchParams.get('githubError')).toBe('FORBIDDEN');
+  });
+
+  it('binds the only installation the user can access', async () => {
+    const { owner, ws } = await projectFixture(t);
+    t.githubApp.addInstallation(111, 'acme-org', []);
+    t.githubApp.codes.set('c1', [111]);
+    const state = redirectOf(await connect(owner, ws)).searchParams.get('state')!;
+
+    const res = await callback(owner, { code: 'c1', state });
+    expect(redirectOf(res).searchParams.get('github')).toBe('installed');
+    const rows = await t.db.select().from(githubInstallations);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.githubInstallationId).toBe(111);
+    expect(rows[0]!.workspaceId).toBe(ws);
+    expect(t.githubApp.revoked).toEqual(['ghu_c1']);
+  });
+
+  it('lets the user choose when several installations are available', async () => {
+    const { owner, ws } = await projectFixture(t);
+    t.githubApp.addInstallation(111, 'acme-org', []);
+    t.githubApp.addInstallation(222, 'octo', []);
+    t.githubApp.codes.set('c2', [111, 222]);
+    const first = redirectOf(await connect(owner, ws)).searchParams.get('state')!;
+
+    const chooser = redirectOf(await callback(owner, { code: 'c2', state: first }));
+    expect(chooser.searchParams.get('github')).toBe('choose');
+    expect(chooser.searchParams.getAll('pick')).toEqual(['111:acme-org', '222:octo']);
+    expect(await t.db.select().from(githubInstallations)).toHaveLength(0);
+
+    const second = redirectOf(await connect(owner, ws, '222')).searchParams.get('state')!;
+    const done = await callback(owner, { code: 'c2', state: second });
+    expect(redirectOf(done).searchParams.get('github')).toBe('installed');
+    const rows = await t.db.select().from(githubInstallations);
+    expect(rows.map((r) => r.githubInstallationId)).toEqual([222]);
+  });
+
+  it('rejects a chosen installation the user cannot access', async () => {
+    const { owner, ws } = await projectFixture(t);
+    t.githubApp.addInstallation(111, 'acme-org', []);
+    t.githubApp.addInstallation(333, 'stranger', []);
+    t.githubApp.codes.set('c3', [111]);
+    const state = redirectOf(await connect(owner, ws, '333')).searchParams.get('state')!;
+
+    const res = await callback(owner, { code: 'c3', state });
+    expect(redirectOf(res).searchParams.get('githubError')).toBe('GITHUB_INSTALL_NOT_AUTHORIZED');
+    expect(await t.db.select().from(githubInstallations)).toHaveLength(0);
+  });
+
+  it('reports when GitHub lists no installation to connect', async () => {
+    const { owner, ws } = await projectFixture(t);
+    t.githubApp.codes.set('c4', []);
+    const state = redirectOf(await connect(owner, ws)).searchParams.get('state')!;
+
+    const res = await callback(owner, { code: 'c4', state });
+    expect(redirectOf(res).searchParams.get('githubError')).toBe('GITHUB_NO_INSTALLATION_FOUND');
+  });
+
+  it('does not offer an installation that belongs to another workspace', async () => {
+    const { owner, ws } = await projectFixture(t);
+    await install(owner, ws, 111);
+    const other: string = (await owner.browser.post('/api/v1/workspaces').send({ name: 'Other' }))
+      .body.data.workspace.id;
+    t.githubApp.codes.set('c5', [111]);
+    const state = redirectOf(await connect(owner, other)).searchParams.get('state')!;
+
+    const res = await callback(owner, { code: 'c5', state });
+    expect(redirectOf(res).searchParams.get('githubError')).toBe('GITHUB_NO_INSTALLATION_FOUND');
+  });
+});

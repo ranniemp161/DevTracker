@@ -56,6 +56,33 @@ export class GithubInstallationsController {
   }
 
   /**
+   * Browser navigation for an App that is already installed on the user's GitHub account:
+   * redirects to GitHub's user authorization, which returns to the install callback.
+   * `installationId` (optional) pre-selects one of several installations.
+   */
+  @Get('connect')
+  async connect(
+    @CurrentUser() user: User,
+    @Query('workspaceId') workspaceId: unknown,
+    @Query('installationId') installationId: unknown,
+    @Res() res: Response,
+  ): Promise<void> {
+    const id = str(workspaceId);
+    try {
+      if (!id || !isUuid(id)) throw AppException.notFound('Workspace not found.');
+      const { authorizeUrl, state } = await this.installations.beginConnect(
+        user.id,
+        id,
+        str(installationId),
+      );
+      this.cookies.setGithubInstallState(res, state);
+      res.redirect(HttpStatus.FOUND, authorizeUrl);
+    } catch (err) {
+      this.redirectToSettings(res, id && isUuid(id) ? id : null, err);
+    }
+  }
+
+  /**
    * GitHub redirects here after installation (the App's "Callback URL", with "Request user
    * authorization during installation" enabled). Public because it is authorized by the
    * state cookie + stored flow, not the session; the flow's user is re-checked as an admin.
@@ -76,15 +103,27 @@ export class GithubInstallationsController {
     try {
       const flow = await this.installations.consumeState(str(state), cookieState);
       workspaceId = flow.workspaceId;
+      const settings = `${this.config.webOrigin}/workspaces/${workspaceId}/settings`;
+
+      // "Connect existing installation": GitHub's user authorization returns a code only.
+      if (!str(installationId) && !str(setupAction) && str(code)) {
+        const result = await this.installations.completeConnect(flow, str(state)!, str(code)!);
+        if (result.kind === 'installed') {
+          res.redirect(HttpStatus.FOUND, `${settings}?github=installed`);
+          return;
+        }
+        const query = new URLSearchParams({ github: 'choose' });
+        for (const c of result.choices) query.append('pick', `${c.id}:${c.login}`);
+        res.redirect(HttpStatus.FOUND, `${settings}?${query}`);
+        return;
+      }
+
       const outcome = await this.installations.complete(flow, {
         installationId: str(installationId),
         code: str(code),
         setupAction: str(setupAction),
       });
-      res.redirect(
-        HttpStatus.FOUND,
-        `${this.config.webOrigin}/workspaces/${workspaceId}/settings?github=${outcome}`,
-      );
+      res.redirect(HttpStatus.FOUND, `${settings}?github=${outcome}`);
     } catch (err) {
       this.redirectToSettings(res, workspaceId, err);
     }

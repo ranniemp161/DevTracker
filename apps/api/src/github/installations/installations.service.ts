@@ -27,7 +27,11 @@ import { DATABASE } from '../../database/database.module';
 import { isUniqueViolation } from '../../database/pg-errors';
 import { EventRecorder } from '../../events/event-recorder.service';
 import { WorkspaceAccessService } from '../../workspaces/workspace-access.service';
-import { GithubAppClient, GithubInstallationUnavailableError } from '../github-app.client';
+import {
+  GithubAppClient,
+  GithubInstallationUnavailableError,
+  type GithubInstallationInfo,
+} from '../github-app.client';
 
 export type InstallationRow = typeof githubInstallations.$inferSelect;
 type InstallStateRow = typeof githubInstallStates.$inferSelect;
@@ -44,6 +48,13 @@ const notAuthorized = () =>
     HttpStatus.FORBIDDEN,
     ErrorCode.GITHUB_INSTALL_NOT_AUTHORIZED,
     'GitHub did not confirm that you can manage this installation.',
+  );
+
+const noInstallationFound = () =>
+  new AppException(
+    HttpStatus.NOT_FOUND,
+    ErrorCode.GITHUB_NO_INSTALLATION_FOUND,
+    'GitHub did not list any DevTrack installation you can connect to this workspace.',
   );
 
 export const installationUnavailable = () =>
@@ -89,19 +100,60 @@ export class GithubInstallationsService {
       );
     }
 
+    const state = await this.createState(userId, workspaceId);
+    const url = new URL(`https://github.com/apps/${app.slug}/installations/new`);
+    url.searchParams.set('state', state);
+    return { installUrl: url.toString(), state };
+  }
+
+  /**
+   * For an App that is already installed on the user's account: GitHub shows the installation's
+   * settings instead of redirecting back, so DevTrack never hears about it. This starts GitHub's
+   * user authorization instead (silent if the user already authorized the App), which returns to
+   * the same callback with a `code` and no `installation_id`. `installationId` pre-selects one.
+   */
+  async beginConnect(
+    userId: string,
+    workspaceId: string,
+    installationId?: string,
+  ): Promise<{ authorizeUrl: string; state: string }> {
+    await this.access.require(userId, workspaceId, 'ADMIN');
+    const app = this.config.githubApp;
+    if (!app) {
+      throw new AppException(
+        HttpStatus.SERVICE_UNAVAILABLE,
+        ErrorCode.GITHUB_APP_NOT_CONFIGURED,
+        'The GitHub App is not configured on this server.',
+      );
+    }
+    if (installationId !== undefined && !/^\d{1,15}$/.test(installationId)) throw notAuthorized();
+
+    const state = await this.createState(userId, workspaceId, installationId);
+    const url = new URL('https://github.com/login/oauth/authorize');
+    url.searchParams.set('client_id', app.clientId);
+    url.searchParams.set('redirect_uri', `${this.config.webOrigin}/api/v1/github/install/callback`);
+    url.searchParams.set('state', state);
+    return { authorizeUrl: url.toString(), state };
+  }
+
+  private async createState(
+    userId: string,
+    workspaceId: string,
+    installationId?: string,
+  ): Promise<string> {
     // Opportunistic cleanup of abandoned flows (indexed on expires_at).
     await this.db.delete(githubInstallStates).where(lt(githubInstallStates.expiresAt, new Date()));
 
-    const state = generateToken();
+    // The chosen installation rides inside the state: it is only trusted after the state matches
+    // the browser's cookie and a stored row, and is re-verified against GitHub's own list.
+    const state = installationId ? `${generateToken()}~${installationId}` : generateToken();
     await this.db.insert(githubInstallStates).values({
       stateHash: hashToken(state),
       userId,
       workspaceId,
       expiresAt: new Date(Date.now() + GITHUB_INSTALL_STATE_TTL_MS),
     });
-    const url = new URL(`https://github.com/apps/${app.slug}/installations/new`);
-    url.searchParams.set('state', state);
-    return { installUrl: url.toString(), state };
+    return state;
   }
 
   /**
@@ -145,6 +197,74 @@ export class GithubInstallationsService {
     }
     if (!info) throw notAuthorized();
 
+    await this.bind(flow, workspace.id, info);
+    return 'installed';
+  }
+
+  /**
+   * Finishes a "connect existing installation" flow (`code` but no `installation_id`). Binds the
+   * installation the user picked, or the only candidate; with several, returns them to choose from.
+   */
+  async completeConnect(
+    flow: InstallStateRow,
+    rawState: string,
+    code: string,
+  ): Promise<{ kind: 'installed' } | { kind: 'choose'; choices: { id: number; login: string }[] }> {
+    const { workspace } = await this.access.require(flow.userId, flow.workspaceId, 'ADMIN');
+    const userToken = await this.client.exchangeInstallCode(code);
+    if (!userToken) throw notAuthorized();
+    let accessible: GithubInstallationInfo[];
+    try {
+      accessible = await this.client.listUserInstallations(userToken);
+    } finally {
+      await this.client.revokeUserToken(userToken);
+    }
+
+    const wanted = rawState.split('~')[1];
+    if (wanted) {
+      const info = accessible.find((i) => String(i.id) === wanted);
+      if (!info) throw notAuthorized();
+      await this.bind(flow, workspace.id, info);
+      return { kind: 'installed' };
+    }
+
+    // Hide installations that already belong to another workspace.
+    const taken = accessible.length
+      ? await this.db
+          .select({
+            githubInstallationId: githubInstallations.githubInstallationId,
+            workspaceId: githubInstallations.workspaceId,
+          })
+          .from(githubInstallations)
+          .where(
+            inArray(
+              githubInstallations.githubInstallationId,
+              accessible.map((i) => i.id),
+            ),
+          )
+      : [];
+    const candidates = accessible.filter(
+      (i) => !taken.some((t) => t.githubInstallationId === i.id && t.workspaceId !== workspace.id),
+    );
+    if (candidates.length === 0) throw noInstallationFound();
+    if (candidates.length === 1) {
+      await this.bind(flow, workspace.id, candidates[0]!);
+      return { kind: 'installed' };
+    }
+    return {
+      kind: 'choose',
+      choices: candidates.map((i) => ({ id: i.id, login: i.accountLogin })),
+    };
+  }
+
+  /** Records (or refreshes) a verified installation for the workspace. */
+  private async bind(
+    flow: InstallStateRow,
+    workspaceId: string,
+    info: GithubInstallationInfo,
+  ): Promise<void> {
+    const githubInstallationId = info.id;
+    const workspace = { id: workspaceId };
     const [actor] = await this.db
       .select({ id: users.id, username: users.username })
       .from(users)
@@ -168,7 +288,7 @@ export class GithubInstallationsService {
           .update(githubInstallations)
           .set(values)
           .where(eq(githubInstallations.id, existing.id));
-        return 'installed';
+        return;
       }
       try {
         await this.db.transaction(async (tx) => {
@@ -190,7 +310,7 @@ export class GithubInstallationsService {
             metadata: { account: info.accountLogin },
           });
         });
-        return 'installed';
+        return;
       } catch (err) {
         // A concurrent callback for the same installation won: re-check who owns it.
         if (attempt === 0 && isUniqueViolation(err, 'github_installations_github_id_unique')) {

@@ -163,6 +163,15 @@ export class FakeGithubAppClient implements Pick<GithubAppClient, keyof GithubAp
     const { repos: _repos, unavailable: _unavailable, ...info } = inst;
     return info;
   }
+  async listUserInstallations(userToken: string): Promise<GithubInstallationInfo[]> {
+    const allowed = this.codes.get(userToken.replace(/^ghu_/, '')) ?? [];
+    return allowed.flatMap((id) => {
+      const inst = this.installations.get(id);
+      if (!inst) return [];
+      const { repos: _repos, unavailable: _unavailable, ...info } = inst;
+      return [info];
+    });
+  }
   async revokeUserToken(userToken: string): Promise<void> {
     this.revoked.push(userToken);
   }
