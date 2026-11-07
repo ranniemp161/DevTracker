@@ -10,7 +10,7 @@ import { useSession } from '../session/session-context';
 import { timeAgo } from './describe-activity';
 
 const textareaClass =
-  'block w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10';
+  'block w-full rounded-control border border-line-control bg-surface px-3 py-2 text-sm placeholder:text-fg-subtle focus-visible:border-primary';
 
 /**
  * Renders plain text (never HTML) and highlights `@mentions` that resolved to real people.
@@ -25,14 +25,18 @@ function CommentBody({ comment }: { comment: Comment }) {
     if (!known.has(username)) continue;
     parts.push(comment.body!.slice(last, match.index));
     parts.push(
-      <span key={match.index} className="rounded bg-blue-50 px-0.5 font-medium text-blue-700">
+      <span key={match.index} className="font-medium text-primary">
         {match[0]}
       </span>,
     );
     last = match.index! + match[0].length;
   }
   parts.push((comment.body ?? '').slice(last));
-  return <p className="text-sm break-words whitespace-pre-wrap text-neutral-800">{parts}</p>;
+  return (
+    <p className="text-sm leading-relaxed break-words whitespace-pre-wrap text-fg-secondary">
+      {parts}
+    </p>
+  );
 }
 
 export function CommentThread({ task, onActivity }: { task: Task; onActivity: () => void }) {
@@ -109,12 +113,12 @@ export function CommentThread({ task, onActivity }: { task: Task; onActivity: ()
 
   return (
     <section aria-labelledby="comments-heading" className="space-y-4">
-      <h2 id="comments-heading" className="font-semibold">
+      <h2 id="comments-heading" className="text-md font-semibold">
         Comments
       </h2>
       {error ? <Alert>{error}</Alert> : null}
-      {!comments ? <p className="text-sm text-neutral-500">Loading comments…</p> : null}
-      {comments?.length === 0 ? <p className="text-sm text-neutral-500">No comments yet.</p> : null}
+      {!comments ? <p className="text-sm text-fg-subtle">Loading comments…</p> : null}
+      {comments?.length === 0 ? <p className="text-sm text-fg-subtle">No comments yet.</p> : null}
       <ol className="space-y-4">
         {comments?.map((c) => {
           const mine = c.author?.id === user.id;
@@ -124,11 +128,12 @@ export function CommentThread({ task, onActivity }: { task: Task; onActivity: ()
               <Avatar
                 name={c.author?.username ?? '?'}
                 url={c.author?.avatarUrl ?? null}
+                seed={c.author?.id}
                 size="sm"
               />
-              <div className="min-w-0 flex-1 rounded-lg border border-neutral-200 bg-white px-3 py-2">
-                <p className="text-xs text-neutral-500">
-                  <span className="font-medium text-neutral-900">
+              <div className="min-w-0 flex-1 rounded-card border border-line bg-surface px-3.5 py-2.5">
+                <p className="text-xs text-fg-muted">
+                  <span className="text-label font-semibold text-fg">
                     @{c.author?.username ?? 'deleted user'}
                   </span>{' '}
                   ·{' '}
@@ -136,7 +141,7 @@ export function CommentThread({ task, onActivity }: { task: Task; onActivity: ()
                   {c.edited && !c.deleted ? ' · edited' : ''}
                 </p>
                 {c.deleted ? (
-                  <p className="mt-1 text-sm text-neutral-500 italic">This comment was deleted.</p>
+                  <p className="mt-1 text-sm text-fg-subtle italic">This comment was deleted.</p>
                 ) : editing?.id === c.id ? (
                   <form
                     className="mt-2 space-y-2"

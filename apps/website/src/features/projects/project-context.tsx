@@ -2,7 +2,7 @@
 
 import type { Project, ProjectMember } from '@devtrack/types';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, usePathname } from 'next/navigation';
 import { createContext, useContext, type ReactNode } from 'react';
 import { Alert, Badge, KeyBadge } from '@/components/ui';
 import { useRealtimeRefresh, useRealtimeRoom, type RealtimeEvent } from '@/lib/realtime';
@@ -30,6 +30,7 @@ export function useProject(): ProjectContextValue {
 
 export function ProjectLayout({ children }: { children: ReactNode }) {
   const { id } = useParams<{ id: string }>();
+  const pathname = usePathname();
   const project = useApiQuery<{ project: Project }>(`/projects/${id}`);
   const members = useApiQuery<ProjectMember[]>(`/projects/${id}/members`);
   const { reloadChatUnread } = useShellData();
@@ -63,6 +64,8 @@ export function ProjectLayout({ children }: { children: ReactNode }) {
 
   const p = project.data.project;
   const readOnly = p.status === 'ARCHIVED';
+  // The task page has its own header bar and runs edge to edge.
+  const isTaskPage = pathname.includes('/tasks/');
 
   return (
     <ProjectContext.Provider
@@ -76,34 +79,36 @@ export function ProjectLayout({ children }: { children: ReactNode }) {
       }}
     >
       <div className="space-y-6">
-        <div>
-          <Link
-            href={`/workspaces/${p.workspaceId}/projects`}
-            className="text-label text-fg-muted hover:underline"
-          >
-            ← Projects
-          </Link>
-          <div className="mt-1 flex flex-wrap items-center gap-3">
-            <KeyBadge>{p.key}</KeyBadge>
-            <h1 className="text-2xl font-semibold tracking-tight">{p.name}</h1>
-            <Badge
-              tone={
-                p.status === 'ACTIVE' || p.status === 'PLANNING'
-                  ? 'blue'
-                  : p.status === 'COMPLETED'
-                    ? 'green'
-                    : 'neutral'
-              }
+        {isTaskPage ? null : (
+          <div>
+            <Link
+              href={`/workspaces/${p.workspaceId}/projects`}
+              className="text-label text-fg-muted hover:underline"
             >
-              {PROJECT_STATUS_LABEL[p.status]}
-            </Badge>
-          </div>
-          {readOnly ? (
-            <div className="mt-3">
-              <Alert tone="info">This project is archived and read-only.</Alert>
+              ← Projects
+            </Link>
+            <div className="mt-1 flex flex-wrap items-center gap-3">
+              <KeyBadge>{p.key}</KeyBadge>
+              <h1 className="text-2xl font-semibold tracking-tight">{p.name}</h1>
+              <Badge
+                tone={
+                  p.status === 'ACTIVE' || p.status === 'PLANNING'
+                    ? 'blue'
+                    : p.status === 'COMPLETED'
+                      ? 'green'
+                      : 'neutral'
+                }
+              >
+                {PROJECT_STATUS_LABEL[p.status]}
+              </Badge>
             </div>
-          ) : null}
-        </div>
+            {readOnly ? (
+              <div className="mt-3">
+                <Alert tone="info">This project is archived and read-only.</Alert>
+              </div>
+            ) : null}
+          </div>
+        )}
         {children}
       </div>
     </ProjectContext.Provider>

@@ -8,3 +8,8 @@
 body {
   @apply bg-bg text-fg antialiased;
 }
+
+/* Task detail: main column + fixed-width properties panel (design/SPEC.md §5). */
+@utility grid-cols-task {
+  grid-template-columns: minmax(0, 1fr) var(--dt-task-aside-width);
+}

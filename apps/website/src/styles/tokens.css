@@ -178,6 +178,7 @@
   --dt-control-xl: 44px; /* auth forms (touch-friendly) */
   --dt-sidebar-width: 248px;
   --dt-board-column-width: 272px;
+  --dt-task-aside-width: 320px; /* task detail properties panel */
 
   /* ---------- Radius ---------- */
   --dt-radius-xs: 4px; /* kbd, inline code */
@@ -306,6 +307,7 @@ html {
   --text-md: var(--dt-text-md);
   --text-2xs: 10px;
   --text-pill: 11px;
+  --text-title: var(--dt-text-2xl);
 
   --color-pr-open: var(--dt-pr-open);
   --color-pr-merged: var(--dt-pr-merged);

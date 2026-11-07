@@ -63,18 +63,22 @@ export function ActivityFeed({
   }
 
   if (error) return <Alert>{error}</Alert>;
-  if (!entries) return <p className="text-sm text-neutral-500">Loading activity…</p>;
-  if (entries.length === 0) return <p className="text-sm text-neutral-500">No activity yet.</p>;
+  if (!entries) return <p className="text-sm text-fg-subtle">Loading activity…</p>;
+  if (entries.length === 0) return <p className="text-sm text-fg-subtle">No activity yet.</p>;
 
   return (
     <div className="space-y-3">
       <ol className="space-y-3">
         {entries.map((e) => (
           <li key={e.id} className="flex gap-3 text-sm">
-            <Avatar name={e.actor?.username ?? '?'} url={e.actor?.avatarUrl ?? null} size="sm" />
-            <p className="min-w-0 flex-1 text-neutral-700">
-              <span className="font-medium text-neutral-900">{actorLabel(e)}</span>{' '}
-              {describeActivity(e)}
+            <Avatar
+              name={e.actor?.username ?? '?'}
+              url={e.actor?.avatarUrl ?? null}
+              seed={e.actor?.id}
+              size="sm"
+            />
+            <p className="min-w-0 flex-1 text-fg-secondary">
+              <span className="font-medium text-fg">{actorLabel(e)}</span> {describeActivity(e)}
               {!taskId && e.task ? (
                 <>
                   {' on '}
@@ -91,7 +95,7 @@ export function ActivityFeed({
                 </>
               ) : null}
               <span
-                className="block text-xs text-neutral-500"
+                className="block text-xs text-fg-subtle"
                 title={new Date(e.createdAt).toLocaleString()}
               >
                 {timeAgo(e.createdAt)}

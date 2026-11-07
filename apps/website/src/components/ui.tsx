@@ -493,3 +493,13 @@ export function Skeleton({ className = '' }: { className?: string }) {
     />
   );
 }
+
+/** Titled block inside a side panel (task properties). */
+export function PanelSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="space-y-2.5">
+      <h3 className="text-label font-semibold text-fg">{title}</h3>
+      {children}
+    </section>
+  );
+}
