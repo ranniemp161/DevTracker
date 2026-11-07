@@ -22,6 +22,8 @@ export class RealtimeIoAdapter extends IoAdapter {
   private readonly redisLogger = new Logger(RealtimeIoAdapter.name);
   private redisAdapter: ReturnType<typeof createAdapter> | null = null;
   private closeRedis: (() => Promise<void>) | null = null;
+  private defaultServer: Server | null = null;
+  private readonly closing = new WeakMap<Server, Promise<void>>();
 
   constructor(
     app: INestApplicationContext,
@@ -46,6 +48,8 @@ export class RealtimeIoAdapter extends IoAdapter {
   }
 
   override createIOServer(port: number, options?: ServerOptions): Server {
+    // Startup attaches the publisher first; Nest's optional gateway must reuse that server.
+    if (port === 0 && this.defaultServer) return this.defaultServer;
     const server: Server = super.createIOServer(port, {
       ...options,
       path: REALTIME_PATH,
@@ -54,11 +58,22 @@ export class RealtimeIoAdapter extends IoAdapter {
       serveClient: false,
     } as ServerOptions);
     if (this.redisAdapter) server.adapter(this.redisAdapter);
+    if (port === 0) this.defaultServer = server;
     return server;
   }
 
   override async close(server: Server): Promise<void> {
-    await super.close(server);
-    await this.closeRedis?.();
+    const existing = this.closing.get(server);
+    if (existing) return existing;
+    // Both Nest and the publisher may close it. The publisher also owns cleanup when Nest's
+    // optional websocket module is absent and will never invoke the adapter's close hook.
+    const closing = (async () => {
+      await super.close(server);
+      const closeRedis = this.closeRedis;
+      this.closeRedis = null;
+      await closeRedis?.();
+    })();
+    this.closing.set(server, closing);
+    return closing;
   }
 }

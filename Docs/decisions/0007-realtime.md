@@ -179,6 +179,38 @@ The socket path is `/api/v1/realtime/socket`. Socket.IO answers every URL under 
 
 ## Implementation notes
 
+### Publisher startup correction (2026-11-07, awaiting deployment)
+
+The owner reported comment notifications appearing only after reload. An approved
+read-only production check found both recent `comment.created` events and all
+three recent `notification.created` events still unpublished. API startup logs
+contained no gateway registration messages. The publisher was attached only in
+the gateway's `afterInit`; without that hook, flushing silently returned zero.
+
+`setupRealtime()` now creates the Redis-backed Socket.IO server and attaches the
+publisher explicitly before `app.init()`. The local Nest gateway reuses that
+server. Publisher-owned, idempotent cleanup also runs when Nest has no registered
+gateway. An uninitialized publisher raises an error instead of reporting an
+empty flush. This preserves the existing Redis transport, room routing and
+durable outbox contract.
+
+A regression test disables the API gateway and sends an actual comment through
+REST. A separate Redis-backed receiver authenticates with an API-issued ticket,
+receives the recipient's `notification.created` hint, and verifies the unread
+count through REST. It failed before the fix and passed afterward. Production
+deployment and a subsequent new-comment check still require owner approval.
+
+Validation: all 24 root typecheck/lint/test/build tasks passed without cache,
+including 243 API tests and the Redis regression. The bundled realtime runtime
+smoke test and formatting passed. On this Windows machine the first unrestricted
+run lost a Node worker in the authentication suite; the clean full rerun used
+`VITEST_MAX_WORKERS=2` with Turborepo `--env-mode=loose` to pass that local worker
+setting through. No CI configuration or production data was changed.
+
+The PostgreSQL SSL-mode warning also appeared during the successful read-only
+query. It is separate from the unpublished-event failure; no database settings
+were changed in this fix.
+
 - **Code layout:** `apps/api/src/realtime/` contains:
   - the gateway;
   - the adapter (`RealtimeIoAdapter`: path, transport, CORS, Redis);
