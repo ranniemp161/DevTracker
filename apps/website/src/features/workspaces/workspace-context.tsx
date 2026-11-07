@@ -4,7 +4,7 @@ import type { WorkspaceDetails } from '@devtrack/types';
 import Link from 'next/link';
 import { useParams, usePathname } from 'next/navigation';
 import { createContext, useContext, type ReactNode } from 'react';
-import { Alert, Badge } from '@/components/ui';
+import { Badge, ErrorState, Skeleton } from '@/components/ui';
 import { useApiQuery } from '@/lib/use-api-query';
 import { isAdmin, ROLE_LABEL } from './permissions';
 
@@ -29,19 +29,42 @@ export function WorkspaceLayout({ children }: { children: ReactNode }) {
 
   if (query.error) {
     return (
-      <div className="space-y-4">
-        <Alert>
-          {query.error.status === 404
-            ? 'This workspace does not exist, was archived, or you are not a member.'
-            : query.error.message}
-        </Alert>
-        <Link href="/" className="text-sm underline">
-          Back to workspaces
-        </Link>
+      <div className="space-y-4 max-w-xl mx-auto py-8">
+        <ErrorState
+          message={
+            query.error.status === 404
+              ? 'This workspace does not exist, was archived, or you are not a member.'
+              : query.error.message
+          }
+          onRetry={query.reload}
+        />
+        <div className="text-center">
+          <Link
+            href="/"
+            className="text-xs font-medium text-accent hover:underline hover:text-accent-hover"
+          >
+            ← Back to workspaces
+          </Link>
+        </div>
       </div>
     );
   }
-  if (!query.data) return <p className="text-sm text-neutral-500">Loading workspace…</p>;
+
+  if (!query.data) {
+    return (
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-64 rounded-lg" />
+          <Skeleton className="h-10 w-full rounded-lg mt-4" />
+        </div>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Skeleton className="h-32 rounded-xl" />
+          <Skeleton className="h-32 rounded-xl" />
+          <Skeleton className="h-32 rounded-xl" />
+        </div>
+      </div>
+    );
+  }
 
   const { workspace } = query.data;
   const base = `/workspaces/${workspace.id}`;
@@ -56,13 +79,19 @@ export function WorkspaceLayout({ children }: { children: ReactNode }) {
     <WorkspaceContext.Provider value={{ workspace, reload: query.reload }}>
       <div className="space-y-6">
         <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight">{workspace.name}</h1>
-            <Badge tone={workspace.role === 'OWNER' ? 'blue' : 'neutral'}>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-graphite">
+              {workspace.name}
+            </h1>
+            <Badge tone={workspace.role === 'OWNER' ? 'teal' : 'neutral'}>
               {ROLE_LABEL[workspace.role]}
             </Badge>
           </div>
-          <nav className="mt-4 flex gap-1 border-b border-neutral-200" aria-label="Workspace">
+
+          <nav
+            className="mt-5 flex gap-1 overflow-x-auto border-b border-border custom-scrollbar pb-px"
+            aria-label="Workspace navigation"
+          >
             {tabs.map((tab) => {
               const active = tab.href === base ? pathname === base : pathname.startsWith(tab.href);
               return (
@@ -70,10 +99,10 @@ export function WorkspaceLayout({ children }: { children: ReactNode }) {
                   key={tab.href}
                   href={tab.href}
                   aria-current={active ? 'page' : undefined}
-                  className={`-mb-px border-b-2 px-3 py-2 text-sm ${
+                  className={`-mb-px flex shrink-0 items-center whitespace-nowrap border-b-2 px-3.5 py-2.5 text-xs sm:text-sm font-medium transition-colors ${
                     active
-                      ? 'border-neutral-900 font-medium text-neutral-900'
-                      : 'border-transparent text-neutral-600 hover:text-neutral-900'
+                      ? 'border-accent text-accent font-semibold'
+                      : 'border-transparent text-mineral hover:border-border hover:text-graphite'
                   }`}
                 >
                   {tab.label}
@@ -82,6 +111,7 @@ export function WorkspaceLayout({ children }: { children: ReactNode }) {
             })}
           </nav>
         </div>
+
         {children}
       </div>
     </WorkspaceContext.Provider>

@@ -4,7 +4,7 @@ import type { ProjectMessage, ProjectMessagePage } from '@devtrack/types';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Button, Divider } from '@/components/ui';
+import { Button, Divider, EmptyState, ErrorState, Skeleton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useRealtimeConnected, useRealtimeRefresh, useRealtimeRoom } from '@/lib/realtime';
 import { useProject } from '../projects/project-context';
@@ -323,11 +323,19 @@ export function ChatView() {
 
   if (accessLost) {
     return (
-      <div className="space-y-4">
-        <Alert tone="error">You no longer have access to this project's chat.</Alert>
-        <Link href={`/workspaces/${project.workspaceId}/projects`} className="text-sm underline">
-          Back to projects
-        </Link>
+      <div className="space-y-4 max-w-xl mx-auto py-8">
+        <ErrorState
+          message="You no longer have access to this project's chat."
+          onRetry={reconcileMessages}
+        />
+        <div className="text-center">
+          <Link
+            href={`/workspaces/${project.workspaceId}/projects`}
+            className="text-xs font-medium text-accent hover:underline"
+          >
+            ← Back to projects
+          </Link>
+        </div>
       </div>
     );
   }
@@ -364,11 +372,23 @@ export function ChatView() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-14rem)] min-h-[500px] flex-col rounded-xl border border-neutral-200 bg-white">
-      {/* Header bar / connection warning */}
+    <div className="flex h-[calc(100dvh-13.5rem)] min-h-[440px] max-h-[850px] flex-col rounded-xl border border-border bg-surface shadow-xs overflow-hidden">
+      {/* Disconnect warning bar */}
       {!isConnected ? (
-        <div className="border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-xs text-amber-800">
-          Disconnected — reconnecting… polling for new messages every 15s.
+        <div className="border-b border-amber-200 bg-amber-50/90 px-4 py-2 text-xs font-medium text-amber-900 flex items-center gap-2">
+          <svg
+            aria-hidden="true"
+            className="size-4 shrink-0 text-amber-700"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+          >
+            <path
+              fillRule="evenodd"
+              d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z"
+              clipRule="evenodd"
+            />
+          </svg>
+          <span>Disconnected — reconnecting… polling for new messages every 15s.</span>
         </div>
       ) : null}
 
@@ -376,7 +396,7 @@ export function ChatView() {
       <div
         ref={listContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-4 py-3 space-y-1"
+        className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-2 custom-scrollbar"
       >
         {hasMoreBefore ? (
           <div className="py-2 text-center">
@@ -387,11 +407,17 @@ export function ChatView() {
         ) : null}
 
         {loading ? (
-          <p className="py-8 text-center text-sm text-neutral-500">Loading chat history…</p>
+          <div className="space-y-4 py-6">
+            <Skeleton className="h-12 w-3/4 rounded-lg" />
+            <Skeleton className="h-16 w-1/2 rounded-lg ml-auto" />
+            <Skeleton className="h-12 w-2/3 rounded-lg" />
+          </div>
         ) : messages.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center py-16 text-center text-neutral-500">
-            <p className="text-sm font-medium">No messages yet.</p>
-            <p className="mt-1 text-xs">Start the conversation with your team.</p>
+          <div className="h-full flex items-center justify-center">
+            <EmptyState
+              title="No messages yet"
+              description="Start the conversation with your project team."
+            />
           </div>
         ) : (
           renderedElements
@@ -407,15 +433,15 @@ export function ChatView() {
               scrollToBottom('smooth');
               setShowNewMessagesBtn(false);
             }}
-            className="absolute bottom-3 right-6 z-10 flex items-center gap-1.5 rounded-full bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white shadow-md hover:bg-neutral-800"
+            className="absolute bottom-3 right-6 z-10 flex items-center gap-1.5 rounded-full bg-accent px-3.5 py-1.5 text-xs font-semibold text-white shadow-md hover:bg-accent-hover transition-colors"
           >
             ↓ New messages
           </button>
         </div>
       ) : null}
 
-      {/* Bottom composer */}
-      <div className="border-t border-neutral-200 p-3 bg-neutral-50/50">
+      {/* Bottom composer container */}
+      <div className="border-t border-border p-3 sm:p-4 bg-subtle/30">
         <ChatComposer
           projectId={project.id}
           members={members}

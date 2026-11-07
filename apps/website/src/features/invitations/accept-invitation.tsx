@@ -49,11 +49,14 @@ export function AcceptInvitation() {
   if (token === null) {
     return (
       <AuthCard title="Workspace invitation">
-        <Alert>
+        <Alert tone="warning">
           This invitation link is incomplete or was already used. Ask a workspace admin to send a
           new one.
         </Alert>
-        <Link href="/" className="mt-4 block text-center text-sm underline">
+        <Link
+          href="/"
+          className="mt-4 block text-center text-xs font-semibold text-accent hover:underline"
+        >
           Go to DevTrack
         </Link>
       </AuthCard>
@@ -66,24 +69,24 @@ export function AcceptInvitation() {
   return (
     <AuthCard title="Join a workspace" subtitle="You have been invited to a DevTrack workspace.">
       <div className="space-y-4">
-        {me.loading ? <p className="text-sm text-neutral-500">Checking your session…</p> : null}
-        {me.error && !signedOut ? <Alert>{me.error.message}</Alert> : null}
+        {me.loading ? <p className="text-xs text-mineral">Checking your session…</p> : null}
+        {me.error && !signedOut ? <Alert tone="error">{me.error.message}</Alert> : null}
 
         {signedOut ? (
           <>
-            <p className="text-sm text-neutral-700">
+            <p className="text-xs text-mineral leading-relaxed">
               Sign in, or create an account, with the email address the invitation was sent to.
             </p>
             <div className="flex gap-3">
               <Link
                 href={`/login?next=${NEXT}`}
-                className="flex-1 rounded-md bg-neutral-900 px-4 py-2 text-center text-sm font-medium text-white hover:bg-neutral-800"
+                className="flex-1 rounded-lg bg-accent px-4 py-2 text-center text-xs font-semibold text-white shadow-xs hover:bg-accent-hover transition-colors"
               >
                 Sign in
               </Link>
               <Link
                 href={`/register?next=${NEXT}`}
-                className="flex-1 rounded-md border border-neutral-300 px-4 py-2 text-center text-sm font-medium hover:bg-neutral-50"
+                className="flex-1 rounded-lg border border-border bg-white px-4 py-2 text-center text-xs font-semibold text-graphite shadow-xs hover:bg-subtle transition-colors"
               >
                 Create account
               </Link>
@@ -100,17 +103,18 @@ export function AcceptInvitation() {
 
         {user && user.emailVerified ? (
           <>
-            <p className="text-sm text-neutral-700">
-              Signed in as <strong>@{user.username}</strong> ({user.email}).
+            <p className="text-xs text-mineral leading-relaxed">
+              Signed in as <strong className="text-graphite">@{user.username}</strong> ({user.email}
+              ).
             </p>
             {typeof state === 'object' ? (
-              <Alert>
+              <Alert tone="error">
                 {state.error.message}
                 {state.error.code === 'INVITATION_EMAIL_MISMATCH' ? (
                   <button
                     type="button"
                     onClick={switchAccount}
-                    className="mt-2 block font-medium underline"
+                    className="mt-2 block font-semibold underline text-red-900 cursor-pointer"
                   >
                     Sign in with a different account
                   </button>
@@ -118,7 +122,10 @@ export function AcceptInvitation() {
               </Alert>
             ) : null}
             {typeof state === 'object' && state.error.code === 'INVITATION_INVALID' ? (
-              <Link href="/" className="block text-center text-sm underline">
+              <Link
+                href="/"
+                className="block text-center text-xs font-semibold text-accent hover:underline"
+              >
                 Go to DevTrack
               </Link>
             ) : (

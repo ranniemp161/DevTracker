@@ -162,20 +162,20 @@ export function ChatComposer({ projectId, members, readOnly, onSend, sending }: 
 
   if (readOnly) {
     return (
-      <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-center text-sm text-neutral-500">
+      <div className="rounded-xl border border-border bg-subtle/50 p-4 text-center text-xs text-mineral">
         This project is archived. New messages cannot be sent.
       </div>
     );
   }
 
   return (
-    <div className="relative rounded-lg border border-neutral-300 bg-white p-3 shadow-xs focus-within:border-neutral-900 focus-within:ring-1 focus-within:ring-neutral-900">
+    <div className="relative rounded-xl border border-border bg-surface p-3 shadow-xs focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/15 transition-all">
       {/* Mention autocomplete dropdown */}
       {mentionQuery !== null && filteredMembers.length > 0 ? (
         <div
           role="listbox"
           aria-label="Mention suggestions"
-          className="absolute bottom-full mb-1 left-3 z-30 max-h-48 w-64 overflow-y-auto rounded-lg border border-neutral-200 bg-white py-1 shadow-lg"
+          className="absolute bottom-full mb-1 left-2 z-30 max-h-48 w-64 overflow-y-auto rounded-xl border border-border bg-surface py-1 shadow-lg"
         >
           {filteredMembers.map((m, idx) => (
             <button
@@ -184,11 +184,13 @@ export function ChatComposer({ projectId, members, readOnly, onSend, sending }: 
               role="option"
               aria-selected={idx === mentionIndex}
               onClick={() => insertMention(m.user.username)}
-              className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm ${
-                idx === mentionIndex ? 'bg-neutral-100 font-medium' : 'hover:bg-neutral-50'
+              className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors cursor-pointer ${
+                idx === mentionIndex
+                  ? 'bg-accent-tint/60 font-semibold text-accent-text'
+                  : 'hover:bg-subtle text-graphite'
               }`}
             >
-              <span className="font-semibold text-neutral-900">@{m.user.username}</span>
+              <span className="font-semibold">@{m.user.username}</span>
             </button>
           ))}
         </div>
@@ -196,15 +198,15 @@ export function ChatComposer({ projectId, members, readOnly, onSend, sending }: 
 
       {/* Selected task preview */}
       {selectedTaskId ? (
-        <div className="mb-2 flex items-center justify-between gap-2 rounded bg-neutral-100 px-2.5 py-1 text-xs">
-          <span className="truncate font-medium text-neutral-700">
-            Linked Task:{' '}
+        <div className="mb-2 flex items-center justify-between gap-2 rounded-lg bg-subtle px-2.5 py-1 text-xs">
+          <span className="truncate font-medium text-graphite">
+            <span className="text-mineral mr-1">Linked Task:</span>
             {selectedTask ? `${selectedTask.key} — ${selectedTask.title}` : selectedTaskId}
           </span>
           <button
             type="button"
             onClick={() => updateTaskId(undefined)}
-            className="shrink-0 text-neutral-500 hover:text-neutral-900"
+            className="shrink-0 text-mineral hover:text-graphite cursor-pointer"
             aria-label="Remove linked task"
           >
             ✕
@@ -218,11 +220,11 @@ export function ChatComposer({ projectId, members, readOnly, onSend, sending }: 
         value={body}
         onChange={handleInputChange}
         onKeyDown={handleKeyDown}
-        placeholder="Type a message… (Enter to send, Shift+Enter for new line, @ to mention)"
-        className="w-full resize-none border-0 bg-transparent p-0 text-sm outline-none placeholder:text-neutral-400 focus:ring-0"
+        placeholder="Type a message… (@ to mention, # or link to reference a task)"
+        className="w-full resize-none border-0 bg-transparent p-0 text-xs sm:text-sm text-graphite outline-none placeholder:text-mineral-muted focus:ring-0 leading-relaxed"
       />
 
-      <div className="mt-2 flex items-center justify-between gap-2 pt-1 border-t border-neutral-100">
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border/60">
         <div className="flex items-center gap-2">
           {showTaskPicker ? (
             <select
@@ -232,7 +234,7 @@ export function ChatComposer({ projectId, members, readOnly, onSend, sending }: 
                 updateTaskId(e.target.value || undefined);
                 setShowTaskPicker(false);
               }}
-              className="rounded border border-neutral-300 bg-white px-2 py-1 text-xs"
+              className="rounded-lg border border-border bg-surface px-2 py-1 text-xs text-graphite focus:border-accent focus:outline-none cursor-pointer"
             >
               <option value="">No task linked</option>
               {projectTasks.map((t) => (
@@ -245,11 +247,19 @@ export function ChatComposer({ projectId, members, readOnly, onSend, sending }: 
             <button
               type="button"
               onClick={() => setShowTaskPicker(true)}
-              className="text-xs font-medium text-neutral-600 hover:text-neutral-900"
+              className="inline-flex items-center gap-1 text-xs font-medium text-mineral hover:text-accent transition-colors cursor-pointer"
             >
-              + Link task
+              <svg aria-hidden="true" className="size-3.5" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M12.232 4.232a2.5 2.5 0 013.536 3.536l-1.225 1.224a.75.75 0 001.061 1.06l1.224-1.224a4 4 0 00-5.656-5.656l-3 3a4 4 0 00.225 5.865.75.75 0 00.977-1.138 2.5 2.5 0 01-.142-3.667l3-3z" />
+                <path d="M11.603 7.963a.75.75 0 00-.977 1.138 2.5 2.5 0 01.142 3.667l-3 3a2.5 2.5 0 01-3.536-3.536l1.225-1.224a.75.75 0 00-1.061-1.06l-1.224 1.224a4 4 0 105.656 5.656l3-3a4 4 0 00-.225-5.865z" />
+              </svg>
+              <span>+ Link task</span>
             </button>
           )}
+
+          <span className="text-[11px] text-mineral-muted hidden md:inline ml-2">
+            Enter to send · Shift+Enter for new line
+          </span>
         </div>
 
         <Button

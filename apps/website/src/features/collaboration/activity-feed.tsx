@@ -3,7 +3,7 @@
 import type { ActivityEntry } from '@devtrack/types';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { Alert, Avatar, Button } from '@/components/ui';
+import { Alert, Avatar, Button, EmptyState, Skeleton } from '@/components/ui';
 import { apiPage, ApiError } from '@/lib/api';
 import { useRealtimeRefresh } from '@/lib/realtime';
 import { describeActivity, timeAgo } from './describe-activity';
@@ -26,6 +26,7 @@ export function ActivityFeed({
   const [cursor, setCursor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
+
   // Live updates (M7): new entries for this project (or this task).
   useRealtimeRefresh(
     (e) =>
@@ -42,6 +43,7 @@ export function ActivityFeed({
         if (cancelled) return;
         setEntries(page.items);
         setCursor(page.nextCursor);
+        setError(null);
       },
       (err: unknown) =>
         !cancelled && setError(err instanceof ApiError ? err.message : 'Could not load activity.'),
@@ -62,28 +64,47 @@ export function ActivityFeed({
     }
   }
 
-  if (error) return <Alert>{error}</Alert>;
-  if (!entries) return <p className="text-sm text-neutral-500">Loading activity…</p>;
-  if (entries.length === 0) return <p className="text-sm text-neutral-500">No activity yet.</p>;
+  if (error) return <Alert tone="error">{error}</Alert>;
+
+  if (!entries) {
+    return (
+      <div className="space-y-3 py-2">
+        <Skeleton className="h-8 w-full rounded" />
+        <Skeleton className="h-8 w-3/4 rounded" />
+        <Skeleton className="h-8 w-5/6 rounded" />
+      </div>
+    );
+  }
+
+  if (entries.length === 0) {
+    return (
+      <EmptyState
+        title="No activity yet"
+        description="Task updates, commits, comments, and project milestones will appear here."
+      />
+    );
+  }
 
   return (
-    <div className="space-y-3">
-      <ol className="space-y-3">
+    <div className="space-y-4">
+      <ol className="divide-y divide-border/50">
         {entries.map((e) => (
-          <li key={e.id} className="flex gap-3 text-sm">
-            <Avatar name={e.actor?.username ?? '?'} url={e.actor?.avatarUrl ?? null} size="sm" />
-            <p className="min-w-0 flex-1 text-neutral-700">
-              <span className="font-medium text-neutral-900">{actorLabel(e)}</span>{' '}
+          <li key={e.id} className="flex gap-3 py-3 text-xs leading-relaxed">
+            <div className="shrink-0 pt-0.5">
+              <Avatar name={e.actor?.username ?? '?'} url={e.actor?.avatarUrl ?? null} size="xs" />
+            </div>
+            <p className="min-w-0 flex-1 text-mineral">
+              <span className="font-semibold text-graphite">{actorLabel(e)}</span>{' '}
               {describeActivity(e)}
               {!taskId && e.task ? (
                 <>
                   {' on '}
                   {e.action === 'task.deleted' ? (
-                    <span className="font-medium">{e.task.key}</span>
+                    <span className="font-mono font-semibold text-graphite">{e.task.key}</span>
                   ) : (
                     <Link
                       href={`/projects/${projectId}/tasks/${e.task.id}`}
-                      className="font-medium hover:underline"
+                      className="font-mono font-semibold text-accent hover:underline"
                     >
                       {e.task.key}
                     </Link>
@@ -91,7 +112,7 @@ export function ActivityFeed({
                 </>
               ) : null}
               <span
-                className="block text-xs text-neutral-500"
+                className="block mt-0.5 text-[11px] text-mineral-muted"
                 title={new Date(e.createdAt).toLocaleString()}
               >
                 {timeAgo(e.createdAt)}
@@ -101,9 +122,11 @@ export function ActivityFeed({
         ))}
       </ol>
       {cursor ? (
-        <Button size="sm" onClick={loadMore}>
-          Load more
-        </Button>
+        <div className="pt-2">
+          <Button size="xs" variant="secondary" onClick={loadMore}>
+            Load more
+          </Button>
+        </div>
       ) : null}
     </div>
   );

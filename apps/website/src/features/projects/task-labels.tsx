@@ -66,7 +66,7 @@ export function TaskLabels({ task, onChanged }: { task: Task; onChanged: () => v
                 onClick={() =>
                   call(() => api(`/tasks/${task.id}/labels/${l.id}`, { method: 'DELETE' }))
                 }
-                className="ml-0.5 text-neutral-400 hover:text-neutral-900"
+                className="ml-1 text-mineral-muted hover:text-red-700 cursor-pointer font-bold"
               >
                 ×
               </button>
@@ -74,15 +74,17 @@ export function TaskLabels({ task, onChanged }: { task: Task; onChanged: () => v
           </LabelChip>
         ))}
         {task.labels.length === 0 ? (
-          <span className="text-sm text-neutral-500">No labels.</span>
+          <span className="text-xs text-mineral-muted">No labels assigned.</span>
         ) : null}
       </div>
-      {error ? <p className="mt-2 text-sm text-red-700">{error}</p> : null}
+
+      {error ? <p className="mt-2 text-xs text-red-600 font-medium">{error}</p> : null}
+
       {readOnly ? null : (
-        <div className="mt-3 space-y-2">
+        <div className="mt-3.5 space-y-2.5 pt-2.5 border-t border-border/70">
           {available.length > 0 ? (
-            <label className="block text-sm">
-              <span className="sr-only">Add a label</span>
+            <label className="block text-xs">
+              <span className="sr-only">Add an existing label</span>
               <select
                 value=""
                 disabled={busy}
@@ -90,9 +92,9 @@ export function TaskLabels({ task, onChanged }: { task: Task; onChanged: () => v
                   e.target.value &&
                   call(() => api(`/tasks/${task.id}/labels`, { body: { labelId: e.target.value } }))
                 }
-                className="w-full rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-sm"
+                className="w-full rounded-lg border border-border bg-subtle/50 px-2.5 py-1.5 text-xs text-graphite hover:bg-white focus:border-accent focus:outline-none cursor-pointer"
               >
-                <option value="">Add a label…</option>
+                <option value="">+ Add an existing label…</option>
                 {available.map((l) => (
                   <option key={l.id} value={l.id}>
                     {l.name}
@@ -101,15 +103,19 @@ export function TaskLabels({ task, onChanged }: { task: Task; onChanged: () => v
               </select>
             </label>
           ) : null}
+
           {creating ? (
-            <form onSubmit={createAndAttach} className="space-y-2">
+            <form
+              onSubmit={createAndAttach}
+              className="space-y-2.5 rounded-lg border border-border bg-subtle/30 p-2.5"
+            >
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Label name"
+                placeholder="New label name"
                 maxLength={40}
                 aria-label="New label name"
-                className="w-full rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-sm"
+                className="w-full rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs text-graphite focus:border-accent focus:outline-none"
               />
               <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Label color">
                 {LABEL_COLORS.map((c) => (
@@ -120,23 +126,25 @@ export function TaskLabels({ task, onChanged }: { task: Task; onChanged: () => v
                     aria-checked={color === c}
                     aria-label={c}
                     onClick={() => setColor(c)}
-                    className={`size-6 rounded-full ${color === c ? 'ring-2 ring-neutral-900 ring-offset-2' : ''}`}
+                    className={`size-5 rounded-full cursor-pointer transition-transform ${
+                      color === c ? 'ring-2 ring-accent ring-offset-1 scale-110' : 'hover:scale-105'
+                    }`}
                     style={{ backgroundColor: c }}
                   />
                 ))}
               </div>
               <div className="flex gap-2">
-                <Button type="submit" size="sm" variant="primary" disabled={busy || !name.trim()}>
+                <Button type="submit" size="xs" variant="primary" disabled={busy || !name.trim()}>
                   Create & add
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => setCreating(false)}>
+                <Button size="xs" variant="ghost" onClick={() => setCreating(false)}>
                   Cancel
                 </Button>
               </div>
             </form>
           ) : (
-            <Button size="sm" variant="ghost" onClick={() => setCreating(true)}>
-              + New label
+            <Button size="xs" variant="ghost" onClick={() => setCreating(true)}>
+              + Create new label
             </Button>
           )}
         </div>

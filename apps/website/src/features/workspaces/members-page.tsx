@@ -4,7 +4,17 @@ import type { Invitation, WorkspaceMember, WorkspaceRole } from '@devtrack/types
 import { createInvitationSchema } from '@devtrack/validators';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { Alert, Avatar, Badge, Button, Card, Field, Select, SubmitButton } from '@/components/ui';
+import {
+  Alert,
+  Avatar,
+  Badge,
+  Button,
+  Card,
+  Field,
+  Select,
+  Skeleton,
+  SubmitButton,
+} from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useApiQuery } from '@/lib/use-api-query';
 import { useAuthForm } from '../auth/use-auth-form';
@@ -24,13 +34,19 @@ export function MembersPage() {
       {isAdmin(workspace.role) ? (
         <InvitePanel onInvited={invitations.reload} invitations={invitations} />
       ) : null}
-      <Card title="Members" description={`${members.data?.length ?? workspace.memberCount} people`}>
-        {members.error ? <Alert>{members.error.message}</Alert> : null}
-        {!members.data ? (
-          <p className="text-sm text-neutral-500">Loading…</p>
+      <Card
+        title="Members"
+        description={`${members.data?.length ?? workspace.memberCount} team members`}
+      >
+        {members.error ? <Alert tone="error">{members.error.message}</Alert> : null}
+        {!members.data && !members.error ? (
+          <div className="space-y-3 py-2">
+            <Skeleton className="h-10 w-full rounded-lg" />
+            <Skeleton className="h-10 w-full rounded-lg" />
+          </div>
         ) : (
-          <ul className="divide-y divide-neutral-100">
-            {members.data.map((m) => (
+          <ul className="divide-y divide-border/60">
+            {members.data?.map((m) => (
               <MemberRow key={m.user.id} member={m} onChanged={members.reload} />
             ))}
           </ul>
@@ -91,49 +107,56 @@ function MemberRow({ member, onChanged }: { member: WorkspaceMember; onChanged: 
     );
 
   return (
-    <li className="flex flex-wrap items-center gap-3 py-3">
-      <Avatar name={member.user.username} url={member.user.avatarUrl} />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">
-          @{member.user.username} {isSelf ? <span className="text-neutral-500">(you)</span> : null}
-        </p>
-        <p className="truncate text-sm text-neutral-500">{member.user.email}</p>
-        {error ? <p className="mt-1 text-sm text-red-700">{error}</p> : null}
+    <li className="flex flex-wrap items-center justify-between gap-3 py-3">
+      <div className="flex items-center gap-3 min-w-0 flex-1">
+        <Avatar name={member.user.username} url={member.user.avatarUrl} size="sm" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-xs font-semibold text-graphite">
+            @{member.user.username}{' '}
+            {isSelf ? <span className="text-mineral font-normal">(you)</span> : null}
+          </p>
+          <p className="truncate text-xs text-mineral">{member.user.email}</p>
+          {error ? <p className="mt-1 text-xs text-red-600 font-medium">{error}</p> : null}
+        </div>
       </div>
 
-      {canManage && !isSelf ? (
-        <label className="text-sm">
-          <span className="sr-only">Role for @{member.user.username}</span>
-          <select
-            value={member.role}
-            disabled={busy}
-            onChange={(e) => changeRole(e.target.value as WorkspaceRole)}
-            className="rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm"
-          >
-            <option value="ADMIN">Admin</option>
-            <option value="MEMBER">Member</option>
-          </select>
-        </label>
-      ) : (
-        <Badge tone={member.role === 'OWNER' ? 'blue' : 'neutral'}>{ROLE_LABEL[member.role]}</Badge>
-      )}
-
-      {(canManage && !isSelf) || canLeave ? (
-        confirming ? (
-          <span className="flex items-center gap-2">
-            <Button variant="danger" size="sm" disabled={busy} onClick={remove}>
-              {isSelf ? 'Confirm leave' : 'Confirm remove'}
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => setConfirming(false)}>
-              Cancel
-            </Button>
-          </span>
+      <div className="flex items-center gap-2">
+        {canManage && !isSelf ? (
+          <label className="text-xs">
+            <span className="sr-only">Role for @{member.user.username}</span>
+            <select
+              value={member.role}
+              disabled={busy}
+              onChange={(e) => changeRole(e.target.value as WorkspaceRole)}
+              className="rounded-lg border border-border bg-surface px-2.5 py-1 text-xs font-medium text-graphite focus:border-accent focus:outline-none cursor-pointer"
+            >
+              <option value="ADMIN">Admin</option>
+              <option value="MEMBER">Member</option>
+            </select>
+          </label>
         ) : (
-          <Button variant="ghost" size="sm" onClick={() => setConfirming(true)}>
-            {isSelf ? 'Leave' : 'Remove'}
-          </Button>
-        )
-      ) : null}
+          <Badge tone={member.role === 'OWNER' ? 'teal' : 'neutral'}>
+            {ROLE_LABEL[member.role]}
+          </Badge>
+        )}
+
+        {(canManage && !isSelf) || canLeave ? (
+          confirming ? (
+            <span className="flex items-center gap-1.5">
+              <Button variant="danger" size="xs" disabled={busy} onClick={remove}>
+                {isSelf ? 'Confirm leave' : 'Confirm remove'}
+              </Button>
+              <Button variant="ghost" size="xs" onClick={() => setConfirming(false)}>
+                Cancel
+              </Button>
+            </span>
+          ) : (
+            <Button variant="ghost" size="xs" onClick={() => setConfirming(true)}>
+              {isSelf ? 'Leave' : 'Remove'}
+            </Button>
+          )
+        ) : null}
+      </div>
     </li>
   );
 }
@@ -185,18 +208,20 @@ function InvitePanel({
         </div>
       </form>
       <div className="mt-3 space-y-3">
-        {form.formError ? <Alert>{form.formError}</Alert> : null}
+        {form.formError ? <Alert tone="error">{form.formError}</Alert> : null}
         {sentTo && !form.formError ? (
           <Alert tone="success">Invitation sent to {sentTo}.</Alert>
         ) : null}
       </div>
 
-      <h3 className="mt-6 text-sm font-medium text-neutral-800">Pending invitations</h3>
-      {invitations.error ? <Alert>{invitations.error.message}</Alert> : null}
+      <h3 className="mt-6 text-xs font-semibold text-graphite uppercase tracking-wider">
+        Pending invitations
+      </h3>
+      {invitations.error ? <Alert tone="error">{invitations.error.message}</Alert> : null}
       {invitations.data && invitations.data.length === 0 ? (
-        <p className="mt-2 text-sm text-neutral-500">No pending invitations.</p>
+        <p className="mt-2 text-xs text-mineral-muted">No pending invitations.</p>
       ) : null}
-      <ul className="mt-2 divide-y divide-neutral-100">
+      <ul className="mt-2 divide-y divide-border/60">
         {invitations.data?.map((inv) => (
           <InvitationRow key={inv.id} invitation={inv} onChanged={invitations.reload} />
         ))}
@@ -231,23 +256,25 @@ function InvitationRow({
   }
 
   return (
-    <li className="flex flex-wrap items-center gap-3 py-2.5">
+    <li className="flex flex-wrap items-center justify-between gap-3 py-2.5">
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm">{invitation.email}</p>
-        <p className="text-xs text-neutral-500">
+        <p className="truncate text-xs font-semibold text-graphite">{invitation.email}</p>
+        <p className="text-xs text-mineral">
           {ROLE_LABEL[invitation.role]} · invited by @{invitation.invitedBy?.username ?? 'unknown'}{' '}
           · {invitation.status === 'EXPIRED' ? 'expired' : `expires ${expires}`}
         </p>
-        {error ? <p className="text-sm text-red-700">{error}</p> : null}
+        {error ? <p className="text-xs text-red-600 font-medium">{error}</p> : null}
       </div>
-      {invitation.status === 'EXPIRED' ? (
-        <Badge tone="amber">Expired</Badge>
-      ) : (
-        <Badge>Pending</Badge>
-      )}
-      <Button variant="ghost" size="sm" disabled={busy} onClick={revoke}>
-        Revoke
-      </Button>
+      <div className="flex items-center gap-2">
+        {invitation.status === 'EXPIRED' ? (
+          <Badge tone="amber">Expired</Badge>
+        ) : (
+          <Badge tone="teal">Pending</Badge>
+        )}
+        <Button variant="ghost" size="xs" disabled={busy} onClick={revoke}>
+          Revoke
+        </Button>
+      </div>
     </li>
   );
 }

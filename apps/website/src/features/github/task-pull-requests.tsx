@@ -56,27 +56,27 @@ export function TaskPullRequests({ task, onChange }: { task: Task; onChange?: ()
   return (
     <Card title="Pull requests">
       <div className="space-y-3">
-        {error ? <Alert>{error}</Alert> : null}
-        {linked.error ? <Alert>{linked.error.message}</Alert> : null}
+        {error ? <Alert tone="error">{error}</Alert> : null}
+        {linked.error ? <Alert tone="error">{linked.error.message}</Alert> : null}
         {linked.data?.length === 0 ? (
-          <p className="text-sm text-neutral-500">
+          <p className="text-xs text-mineral-muted">
             No linked pull requests. Mention {task.key} in a branch name or PR title to link one
             automatically.
           </p>
         ) : null}
-        <ul className="divide-y divide-neutral-100">
+        <ul className="divide-y divide-border/60">
           {linked.data?.map((pr) => (
-            <li key={pr.id} className="flex items-start justify-between gap-3 py-2">
+            <li key={pr.id} className="flex items-start justify-between gap-3 py-2.5">
               <div className="min-w-0">
                 <a
                   href={pr.url}
                   target="_blank"
                   rel="noreferrer noopener"
-                  className="block truncate text-sm font-medium hover:underline"
+                  className="block truncate text-xs font-semibold text-graphite hover:text-accent hover:underline"
                 >
                   #{pr.number} {pr.title}
                 </a>
-                <p className="text-xs text-neutral-500">
+                <p className="text-[11px] text-mineral">
                   {pr.repository.fullName} · {pr.headBranch}
                   {pr.link.source === 'AUTO'
                     ? ' · linked automatically'
@@ -85,12 +85,12 @@ export function TaskPullRequests({ task, onChange }: { task: Task; onChange?: ()
                       : ''}
                 </p>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex shrink-0 items-center gap-1.5">
                 <Badge tone={STATE[pr.state].tone}>
                   {pr.isDraft && pr.state === 'open' ? 'Draft' : STATE[pr.state].label}
                 </Badge>
                 {readOnly ? null : (
-                  <Button size="sm" variant="ghost" disabled={busy} onClick={() => unlink(pr)}>
+                  <Button size="xs" variant="ghost" disabled={busy} onClick={() => unlink(pr)}>
                     Unlink
                   </Button>
                 )}
@@ -134,8 +134,8 @@ function LinkForm({
   if (!repos.data || repos.data.length === 0) return null;
   if (!open) {
     return (
-      <Button size="sm" onClick={() => setOpen(true)}>
-        Link a pull request
+      <Button size="xs" variant="secondary" onClick={() => setOpen(true)}>
+        + Link a pull request
       </Button>
     );
   }
@@ -173,8 +173,8 @@ function LinkForm({
   const options = prs?.filter((p) => !linkedIds.has(p.id)) ?? [];
 
   return (
-    <form onSubmit={link} className="space-y-3 border-t border-neutral-100 pt-3">
-      {error ? <Alert>{error}</Alert> : null}
+    <form onSubmit={link} className="space-y-3 border-t border-border/70 pt-3">
+      {error ? <Alert tone="error">{error}</Alert> : null}
       <Select
         label="Repository"
         name="repository"
@@ -211,10 +211,10 @@ function LinkForm({
         </Select>
       ) : null}
       <div className="flex gap-2">
-        <Button type="submit" variant="primary" size="sm" disabled={busy || !prId}>
+        <Button type="submit" variant="primary" size="xs" disabled={busy || !prId}>
           {busy ? 'Linking…' : 'Link'}
         </Button>
-        <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
+        <Button size="xs" variant="ghost" onClick={() => setOpen(false)}>
           Cancel
         </Button>
       </div>
