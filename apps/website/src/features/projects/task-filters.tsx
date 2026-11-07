@@ -8,7 +8,7 @@ import {
   type Task,
 } from '@devtrack/types';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useApiQuery } from '@/lib/use-api-query';
 import { PRIORITY_LABEL, TASK_STATUS_LABEL } from './labels';
 
@@ -52,11 +52,18 @@ export function useTaskFilters() {
     router.replace(pathname);
   }, [router, pathname]);
 
-  const hasActiveFilters = Boolean(
-    filters.status || filters.priority || filters.assigneeId || filters.labelId,
-  );
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filters.status) count++;
+    if (filters.priority) count++;
+    if (filters.assigneeId) count++;
+    if (filters.labelId) count++;
+    return count;
+  }, [filters]);
 
-  return { filters, setFilter, clearFilters, hasActiveFilters };
+  const hasActiveFilters = activeFilterCount > 0;
+
+  return { filters, setFilter, clearFilters, hasActiveFilters, activeFilterCount };
 }
 
 export function filterTask(task: Task, filters: TaskFilters): boolean {
@@ -80,88 +87,158 @@ export function TaskFilterBar({
   workspaceId: string;
   members: ProjectMember[];
 }) {
-  const { filters, setFilter, clearFilters, hasActiveFilters } = useTaskFilters();
+  const { filters, setFilter, clearFilters, hasActiveFilters, activeFilterCount } =
+    useTaskFilters();
   const labelsQuery = useApiQuery<Label[]>(`/workspaces/${workspaceId}/labels`);
   const labels = labelsQuery.data ?? [];
+  const [mobileExpanded, setMobileExpanded] = useState(false);
+
+  const selectBaseClass =
+    'rounded-lg border bg-surface px-2.5 py-1.5 text-xs font-medium text-graphite transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15 cursor-pointer';
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <label className="text-sm">
-        <span className="sr-only">Status</span>
-        <select
-          value={filters.status}
-          onChange={(e) => setFilter('status', e.target.value)}
-          className="rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-xs font-medium text-neutral-800"
+    <div className="w-full">
+      {/* Mobile filter disclosure toggle */}
+      <div className="flex items-center justify-between sm:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileExpanded((prev) => !prev)}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-graphite shadow-xs hover:bg-subtle"
+          aria-expanded={mobileExpanded}
         >
-          <option value="">Status: all</option>
-          {TASK_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {TASK_STATUS_LABEL[s]}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label className="text-sm">
-        <span className="sr-only">Priority</span>
-        <select
-          value={filters.priority}
-          onChange={(e) => setFilter('priority', e.target.value)}
-          className="rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-xs font-medium text-neutral-800"
-        >
-          <option value="">Priority: all</option>
-          {TASK_PRIORITIES.map((p) => (
-            <option key={p} value={p}>
-              {PRIORITY_LABEL[p]}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label className="text-sm">
-        <span className="sr-only">Assignee</span>
-        <select
-          value={filters.assigneeId}
-          onChange={(e) => setFilter('assigneeId', e.target.value)}
-          className="rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-xs font-medium text-neutral-800"
-        >
-          <option value="">Assignee: all</option>
-          <option value="unassigned">Unassigned</option>
-          {members.map((m) => (
-            <option key={m.user.id} value={m.user.id}>
-              @{m.user.username}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      {labels.length > 0 ? (
-        <label className="text-sm">
-          <span className="sr-only">Label</span>
-          <select
-            value={filters.labelId}
-            onChange={(e) => setFilter('labelId', e.target.value)}
-            className="rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-xs font-medium text-neutral-800"
+          <svg
+            aria-hidden="true"
+            className="size-3.5 text-mineral"
+            viewBox="0 0 20 20"
+            fill="currentColor"
           >
-            <option value="">Label: all</option>
-            {labels.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name}
+            <path
+              fillRule="evenodd"
+              d="M2.628 1.601C5.028 1.206 7.49 1 10 1s4.972.206 7.372.601a.75.75 0 01.628.74v2.288a2.25 2.25 0 01-.659 1.59l-4.682 4.683a2.25 2.25 0 00-.659 1.59v3.037c0 .684-.31 1.33-.844 1.757l-1.937 1.55A.75.75 0 018 18.25v-5.757a2.25 2.25 0 00-.659-1.591L2.659 6.22A2.25 2.25 0 012 4.629V2.34a.75.75 0 01.628-.74z"
+              clipRule="evenodd"
+            />
+          </svg>
+          <span>Filters</span>
+          {activeFilterCount > 0 ? (
+            <span className="rounded-full bg-accent px-1.5 py-0.2 text-[10px] font-semibold text-white">
+              {activeFilterCount}
+            </span>
+          ) : null}
+        </button>
+
+        {hasActiveFilters ? (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="text-xs font-medium text-mineral hover:text-graphite underline underline-offset-2"
+          >
+            Clear all
+          </button>
+        ) : null}
+      </div>
+
+      {/* Filter items: collapsible on mobile, always visible inline on desktop */}
+      <div
+        className={`${
+          mobileExpanded ? 'mt-3 flex' : 'hidden'
+        } sm:flex flex-wrap items-center gap-2`}
+      >
+        <label className="text-xs">
+          <span className="sr-only">Status filter</span>
+          <select
+            value={filters.status}
+            onChange={(e) => setFilter('status', e.target.value)}
+            className={`${selectBaseClass} ${
+              filters.status
+                ? 'border-accent bg-accent-tint/30 text-accent-text font-semibold'
+                : 'border-border'
+            }`}
+          >
+            <option value="">Status: All</option>
+            {TASK_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {TASK_STATUS_LABEL[s]}
               </option>
             ))}
           </select>
         </label>
-      ) : null}
 
-      {hasActiveFilters ? (
-        <button
-          type="button"
-          onClick={clearFilters}
-          className="rounded-md px-2 py-1 text-xs text-neutral-500 hover:text-neutral-900"
-        >
-          Clear filters
-        </button>
-      ) : null}
+        <label className="text-xs">
+          <span className="sr-only">Priority filter</span>
+          <select
+            value={filters.priority}
+            onChange={(e) => setFilter('priority', e.target.value)}
+            className={`${selectBaseClass} ${
+              filters.priority
+                ? 'border-accent bg-accent-tint/30 text-accent-text font-semibold'
+                : 'border-border'
+            }`}
+          >
+            <option value="">Priority: All</option>
+            {TASK_PRIORITIES.map((p) => (
+              <option key={p} value={p}>
+                {PRIORITY_LABEL[p]}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="text-xs">
+          <span className="sr-only">Assignee filter</span>
+          <select
+            value={filters.assigneeId}
+            onChange={(e) => setFilter('assigneeId', e.target.value)}
+            className={`${selectBaseClass} ${
+              filters.assigneeId
+                ? 'border-accent bg-accent-tint/30 text-accent-text font-semibold'
+                : 'border-border'
+            }`}
+          >
+            <option value="">Assignee: All</option>
+            <option value="unassigned">Unassigned</option>
+            {members.map((m) => (
+              <option key={m.user.id} value={m.user.id}>
+                @{m.user.username}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {labels.length > 0 ? (
+          <label className="text-xs">
+            <span className="sr-only">Label filter</span>
+            <select
+              value={filters.labelId}
+              onChange={(e) => setFilter('labelId', e.target.value)}
+              className={`${selectBaseClass} ${
+                filters.labelId
+                  ? 'border-accent bg-accent-tint/30 text-accent-text font-semibold'
+                  : 'border-border'
+              }`}
+            >
+              <option value="">Label: All</option>
+              {labels.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+
+        {hasActiveFilters ? (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="hidden sm:inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-mineral hover:bg-subtle hover:text-graphite transition-colors"
+          >
+            <svg aria-hidden="true" className="size-3" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+            </svg>
+            Clear filters
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

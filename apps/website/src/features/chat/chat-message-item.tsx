@@ -101,8 +101,8 @@ export function ChatMessageItem({
     <div
       ref={itemRef}
       id={`message-${message.id}`}
-      className={`group flex items-start gap-3 rounded-lg p-2.5 transition-colors ${
-        highlighted ? 'bg-amber-50 ring-2 ring-amber-400' : 'hover:bg-neutral-50/80'
+      className={`group flex items-start gap-3 rounded-xl p-3 transition-colors ${
+        highlighted ? 'bg-amber-50/80 ring-2 ring-amber-400/80' : 'hover:bg-subtle/40'
       }`}
     >
       <div className="shrink-0 pt-0.5">
@@ -114,27 +114,27 @@ export function ChatMessageItem({
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-2">
-          <span className="text-xs font-semibold text-neutral-900">
+        <div className="flex items-baseline gap-2 flex-wrap">
+          <span className="text-xs font-semibold text-graphite">
             {message.author ? `@${message.author.username}` : 'Former member'}
           </span>
-          <span className="text-[11px] text-neutral-600">{formattedTime}</span>
+          <span className="text-[11px] text-mineral-muted">{formattedTime}</span>
           {message.edited && !message.deleted ? (
-            <span className="text-[11px] text-neutral-600">(edited)</span>
+            <span className="text-[11px] text-mineral-muted italic">(edited)</span>
           ) : null}
 
           {message.status === 'sending' ? (
-            <span className="text-[11px] font-medium text-neutral-600">Sending…</span>
+            <span className="text-[11px] font-medium text-mineral-muted">Sending…</span>
           ) : null}
 
           {message.status === 'failed' ? (
-            <span className="flex items-center gap-1 text-[11px] font-medium text-red-600">
+            <span className="flex items-center gap-1 text-[11px] font-semibold text-red-600">
               Failed
               {onRetry ? (
                 <button
                   type="button"
                   onClick={() => onRetry(message)}
-                  className="font-semibold underline hover:text-red-800"
+                  className="font-bold underline hover:text-red-800 cursor-pointer"
                 >
                   Retry
                 </button>
@@ -142,9 +142,9 @@ export function ChatMessageItem({
             </span>
           ) : null}
 
-          {/* Action buttons on hover */}
+          {/* Action buttons on hover/focus */}
           {!isEditing && (canEdit || canDelete) ? (
-            <div className="ml-auto opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
+            <div className="ml-auto opacity-0 group-hover:opacity-100 focus-within:opacity-100 flex items-center gap-1 transition-opacity">
               {canEdit ? (
                 <button
                   type="button"
@@ -152,7 +152,7 @@ export function ChatMessageItem({
                     setEditBody(message.body ?? '');
                     setIsEditing(true);
                   }}
-                  className="rounded px-1.5 py-0.5 text-xs text-neutral-600 hover:bg-neutral-200"
+                  className="rounded px-1.5 py-0.5 text-xs text-mineral hover:bg-subtle hover:text-graphite cursor-pointer"
                 >
                   Edit
                 </button>
@@ -161,7 +161,7 @@ export function ChatMessageItem({
                 <button
                   type="button"
                   onClick={() => setConfirmDelete(true)}
-                  className="rounded px-1.5 py-0.5 text-xs text-red-600 hover:bg-red-50"
+                  className="rounded px-1.5 py-0.5 text-xs text-red-600 hover:bg-red-50 cursor-pointer"
                 >
                   Delete
                 </button>
@@ -172,22 +172,22 @@ export function ChatMessageItem({
 
         {/* Message body / edit / deleted placeholder */}
         {message.deleted ? (
-          <p className="mt-1 text-sm italic text-neutral-600">This message was deleted.</p>
+          <p className="mt-1 text-xs italic text-mineral-muted">This message was deleted.</p>
         ) : isEditing ? (
           <div className="mt-2 space-y-2">
             <textarea
               rows={2}
               value={editBody}
               onChange={(e) => setEditBody(e.target.value)}
-              className="w-full rounded border border-neutral-300 p-2 text-sm outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900"
+              className="w-full rounded-lg border border-border p-2.5 text-xs text-graphite outline-none focus:border-accent focus:ring-1 focus:ring-accent"
             />
             {editError ? <p className="text-xs text-red-600">{editError}</p> : null}
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="primary" disabled={savingEdit} onClick={handleSaveEdit}>
+              <Button size="xs" variant="primary" disabled={savingEdit} onClick={handleSaveEdit}>
                 {savingEdit ? 'Saving…' : 'Save'}
               </Button>
               <Button
-                size="sm"
+                size="xs"
                 variant="secondary"
                 disabled={savingEdit}
                 onClick={() => setIsEditing(false)}
@@ -197,20 +197,20 @@ export function ChatMessageItem({
             </div>
           </div>
         ) : (
-          <div className="mt-1 text-sm text-neutral-800 break-words whitespace-pre-wrap">
+          <div className="mt-1 text-sm text-graphite break-words whitespace-pre-wrap leading-relaxed">
             {renderMessageWithMentions(message.body ?? '')}
           </div>
         )}
 
-        {/* Linked task badge */}
+        {/* Linked task compact preview */}
         {!message.deleted && message.task ? (
           <div className="mt-2">
             <Link
               href={`/projects/${message.projectId}/tasks/${message.task.id}`}
-              className="inline-flex items-center gap-2 rounded border border-neutral-200 bg-neutral-50 px-2.5 py-1 text-xs hover:border-neutral-400"
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-subtle/50 px-2.5 py-1 text-xs hover:border-accent hover:bg-accent-tint/30 transition-colors"
             >
-              <span className="font-semibold text-neutral-700">{message.task.key}</span>
-              <span className="max-w-[200px] truncate text-neutral-600 sm:max-w-xs">
+              <span className="font-mono font-semibold text-accent">{message.task.key}</span>
+              <span className="max-w-[200px] truncate text-mineral sm:max-w-xs">
                 {message.task.title}
               </span>
               <Badge tone={message.task.status === 'DONE' ? 'green' : 'neutral'}>
@@ -222,13 +222,13 @@ export function ChatMessageItem({
 
         {/* Delete confirmation prompt */}
         {confirmDelete ? (
-          <div className="mt-2 flex items-center gap-2 rounded bg-red-50 p-2 text-xs text-red-800">
+          <div className="mt-2 flex items-center gap-2 rounded-lg bg-red-50 p-2.5 text-xs text-red-800 border border-red-200">
             <span>Delete this message?</span>
             <button
               type="button"
               disabled={deleting}
               onClick={handleDelete}
-              className="font-bold underline hover:text-red-950"
+              className="font-bold underline hover:text-red-950 cursor-pointer"
             >
               {deleting ? 'Deleting…' : 'Confirm'}
             </button>
@@ -236,7 +236,7 @@ export function ChatMessageItem({
               type="button"
               disabled={deleting}
               onClick={() => setConfirmDelete(false)}
-              className="text-neutral-600 hover:text-neutral-900"
+              className="text-mineral hover:text-graphite cursor-pointer"
             >
               Cancel
             </button>
@@ -266,7 +266,7 @@ function renderMessageWithMentions(text: string): ReactNode[] {
     parts.push(
       <span
         key={`${matchIndex}-${username}`}
-        className="font-semibold text-blue-700 bg-blue-50 px-1 py-0.5 rounded"
+        className="font-semibold text-accent-text bg-accent-tint/80 px-1.5 py-0.5 rounded-md"
       >
         @{username}
       </span>,

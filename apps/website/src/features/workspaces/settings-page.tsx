@@ -16,7 +16,7 @@ import { useWorkspace } from './workspace-context';
 export function SettingsPage() {
   const { workspace } = useWorkspace();
   if (!isAdmin(workspace.role)) {
-    return <Alert>Only workspace admins can change settings.</Alert>;
+    return <Alert tone="warning">Only workspace admins can change settings.</Alert>;
   }
   return (
     <div className="space-y-6">
@@ -49,17 +49,20 @@ function RenameCard() {
   return (
     <Card title="General" description={`The workspace slug (${workspace.slug}) does not change.`}>
       <form onSubmit={form.onSubmit} noValidate className="max-w-md space-y-4">
-        {form.formError ? <Alert>{form.formError}</Alert> : null}
-        {saved ? <Alert tone="success">Saved.</Alert> : null}
+        {form.formError ? <Alert tone="error">{form.formError}</Alert> : null}
+        {saved ? <Alert tone="success">Workspace name updated.</Alert> : null}
         <Field
           label="Workspace name"
           name="name"
           value={form.values.name}
-          onChange={form.onChange}
+          onChange={(e) => {
+            setSaved(false);
+            form.onChange(e);
+          }}
           error={form.fieldErrors.name}
         />
-        <div className="w-40">
-          <SubmitButton pending={form.pending}>Save</SubmitButton>
+        <div className="w-40 pt-1">
+          <SubmitButton pending={form.pending}>Save changes</SubmitButton>
         </div>
       </form>
     </Card>
@@ -90,10 +93,11 @@ function ArchiveCard() {
   return (
     <Card
       title="Archive workspace"
-      description="Archiving hides the workspace from every member. Only the owner can do this."
+      description="Archiving hides the workspace from every member. Only the owner can perform this action."
+      className="border-red-200/80"
     >
-      <div className="max-w-md space-y-3">
-        {error ? <Alert>{error}</Alert> : null}
+      <div className="max-w-md space-y-4">
+        {error ? <Alert tone="error">{error}</Alert> : null}
         <Field
           label={`Type "${workspace.name}" to confirm`}
           name="confirm"
@@ -103,10 +107,11 @@ function ArchiveCard() {
         />
         <Button
           variant="danger"
+          size="sm"
           disabled={busy || confirmText !== workspace.name}
           onClick={archive}
         >
-          Archive workspace
+          {busy ? 'Archiving…' : 'Archive workspace'}
         </Button>
       </div>
     </Card>

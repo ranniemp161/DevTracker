@@ -14,7 +14,7 @@ import { useProject } from './project-context';
 export function ProjectSettings() {
   const { project, readOnly } = useProject();
   if (!project.viewerCanManage)
-    return <Alert>Only workspace admins can change project settings.</Alert>;
+    return <Alert tone="warning">Only workspace admins can change project settings.</Alert>;
   if (readOnly) return <Alert tone="info">Archived projects cannot be edited.</Alert>;
   return (
     <div className="space-y-6">
@@ -57,23 +57,37 @@ function GeneralCard() {
   return (
     <Card title="General" description={`The project key (${project.key}) cannot be changed.`}>
       <form onSubmit={form.onSubmit} noValidate className="max-w-lg space-y-4">
-        {form.formError ? <Alert>{form.formError}</Alert> : null}
-        {saved ? <Alert tone="success">Saved.</Alert> : null}
+        {form.formError ? <Alert tone="error">{form.formError}</Alert> : null}
+        {saved ? <Alert tone="success">Project settings saved.</Alert> : null}
         <Field
           label="Name"
           name="name"
           value={v.name}
-          onChange={form.onChange}
+          onChange={(e) => {
+            setSaved(false);
+            form.onChange(e);
+          }}
           error={form.fieldErrors.name}
         />
         <Field
           label="Description"
           name="description"
           value={v.description}
-          onChange={form.onChange}
+          onChange={(e) => {
+            setSaved(false);
+            form.onChange(e);
+          }}
           error={form.fieldErrors.description}
         />
-        <Select label="Status" name="status" value={v.status} onChange={form.onChange}>
+        <Select
+          label="Status"
+          name="status"
+          value={v.status}
+          onChange={(e) => {
+            setSaved(false);
+            form.onChange(e);
+          }}
+        >
           {(['PLANNING', 'ACTIVE', 'ON_HOLD', 'COMPLETED'] as const).map((s) => (
             <option key={s} value={s}>
               {PROJECT_STATUS_LABEL[s]}
@@ -86,7 +100,10 @@ function GeneralCard() {
             name="startDate"
             type="date"
             value={v.startDate}
-            onChange={form.onChange}
+            onChange={(e) => {
+              setSaved(false);
+              form.onChange(e);
+            }}
             error={form.fieldErrors.startDate}
           />
           <Field
@@ -94,12 +111,15 @@ function GeneralCard() {
             name="targetDate"
             type="date"
             value={v.targetDate}
-            onChange={form.onChange}
+            onChange={(e) => {
+              setSaved(false);
+              form.onChange(e);
+            }}
             error={form.fieldErrors.targetDate}
           />
         </div>
-        <div className="w-40">
-          <SubmitButton pending={form.pending}>Save</SubmitButton>
+        <div className="w-40 pt-2">
+          <SubmitButton pending={form.pending}>Save changes</SubmitButton>
         </div>
       </form>
     </Card>
@@ -128,19 +148,28 @@ function ArchiveCard() {
   return (
     <Card
       title="Archive project"
-      description="Archived projects become read-only and are hidden from the project list."
+      description="Archived projects become read-only and are hidden from the standard project list."
+      className="border-red-200/80"
     >
-      <div className="max-w-md space-y-3">
-        {error ? <Alert>{error}</Alert> : null}
+      <div className="max-w-md space-y-4">
+        {error ? <Alert tone="error">{error}</Alert> : null}
+        <p className="text-xs text-mineral leading-relaxed">
+          This operation will disable new task creation and comment activity.
+        </p>
         <Field
-          label={`Type ${project.key} to confirm`}
+          label={`Type "${project.key}" to confirm`}
           name="confirm"
           value={confirm}
           autoComplete="off"
           onChange={(e) => setConfirm(e.target.value)}
         />
-        <Button variant="danger" disabled={busy || confirm !== project.key} onClick={archive}>
-          Archive project
+        <Button
+          variant="danger"
+          size="sm"
+          disabled={busy || confirm !== project.key}
+          onClick={archive}
+        >
+          {busy ? 'Archiving…' : 'Archive project'}
         </Button>
       </div>
     </Card>

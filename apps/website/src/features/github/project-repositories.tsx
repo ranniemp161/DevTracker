@@ -7,7 +7,7 @@ import type {
 } from '@devtrack/types';
 import Link from 'next/link';
 import { useState } from 'react';
-import { Alert, Badge, Button, Card, Select } from '@/components/ui';
+import { Alert, Badge, Button, Card, EmptyState, Select } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useApiQuery } from '@/lib/use-api-query';
 import { useProject } from '../projects/project-context';
@@ -63,48 +63,54 @@ export function ProjectRepositories() {
       description="GitHub activity from connected repositories will appear in this project. Disconnecting keeps past activity."
     >
       <div className="space-y-4">
-        {error ? <Alert>{error}</Alert> : null}
+        {error ? <Alert tone="error">{error}</Alert> : null}
         {notice ? <Alert tone="success">{notice}</Alert> : null}
-        {connected.error ? <Alert>{connected.error.message}</Alert> : null}
+        {connected.error ? <Alert tone="error">{connected.error.message}</Alert> : null}
         {connected.data?.length === 0 ? (
-          <p className="text-sm text-neutral-500">No repositories connected yet.</p>
+          <EmptyState
+            title="No repositories connected"
+            description="Connect a repository from your GitHub App installation below."
+          />
         ) : null}
-        <ul className="divide-y divide-neutral-100">
-          {connected.data?.map((r) => (
-            <li key={r.id} className="flex items-center justify-between gap-3 py-2.5">
-              <div className="min-w-0">
-                <a
-                  href={r.url}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="truncate text-sm font-medium hover:underline"
-                >
-                  {r.fullName}
-                </a>
-                <p className="text-xs text-neutral-500">
-                  {r.visibility} · default branch {r.defaultBranch}
-                  {r.connectedBy ? ` · connected by @${r.connectedBy.username}` : ''}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                {r.installationStatus !== 'ACTIVE' ? (
-                  <Badge tone="amber">Installation {r.installationStatus.toLowerCase()}</Badge>
-                ) : null}
-                <Button
-                  size="sm"
-                  disabled={busy || r.installationStatus !== 'ACTIVE'}
-                  onClick={() => sync(r)}
-                  title="Import this repository's recent pull requests from GitHub"
-                >
-                  Sync pull requests
-                </Button>
-                <Button size="sm" variant="danger" disabled={busy} onClick={() => disconnect(r)}>
-                  Disconnect
-                </Button>
-              </div>
-            </li>
-          ))}
-        </ul>
+        {connected.data && connected.data.length > 0 ? (
+          <ul className="divide-y divide-border/60">
+            {connected.data.map((r) => (
+              <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                <div className="min-w-0 flex-1">
+                  <a
+                    href={r.url}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="font-mono text-xs font-semibold text-graphite hover:text-accent hover:underline truncate block"
+                  >
+                    {r.fullName}
+                  </a>
+                  <p className="mt-0.5 text-xs text-mineral">
+                    {r.visibility} · default branch {r.defaultBranch}
+                    {r.connectedBy ? ` · connected by @${r.connectedBy.username}` : ''}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {r.installationStatus !== 'ACTIVE' ? (
+                    <Badge tone="amber">Installation {r.installationStatus.toLowerCase()}</Badge>
+                  ) : null}
+                  <Button
+                    size="xs"
+                    variant="secondary"
+                    disabled={busy || r.installationStatus !== 'ACTIVE'}
+                    onClick={() => sync(r)}
+                    title="Import this repository's recent pull requests from GitHub"
+                  >
+                    Sync PRs
+                  </Button>
+                  <Button size="xs" variant="danger" disabled={busy} onClick={() => disconnect(r)}>
+                    Disconnect
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : null}
         <ConnectForm
           connectedIds={new Set(connected.data?.map((r) => r.githubRepositoryId) ?? [])}
           onConnected={connected.reload}
@@ -136,12 +142,15 @@ function ConnectForm({
   const [busy, setBusy] = useState(false);
 
   const settingsLink = (
-    <Link href={`/workspaces/${project.workspaceId}/settings`} className="underline">
+    <Link
+      href={`/workspaces/${project.workspaceId}/settings`}
+      className="font-semibold underline text-accent"
+    >
       workspace settings
     </Link>
   );
 
-  if (installations.error) return <Alert>{installations.error.message}</Alert>;
+  if (installations.error) return <Alert tone="error">{installations.error.message}</Alert>;
   if (!installations.data) return null;
   if (active.length === 0) {
     return (
@@ -173,10 +182,12 @@ function ConnectForm({
   }
 
   return (
-    <form onSubmit={connect} className="space-y-3 border-t border-neutral-100 pt-4">
-      <h3 className="text-sm font-medium">Connect a repository</h3>
-      {error ? <Alert>{error}</Alert> : null}
-      {repos.error ? <Alert>{repos.error.message}</Alert> : null}
+    <form onSubmit={connect} className="space-y-3.5 border-t border-border/70 pt-4">
+      <h3 className="text-xs font-semibold text-graphite uppercase tracking-wider">
+        Connect a repository
+      </h3>
+      {error ? <Alert tone="error">{error}</Alert> : null}
+      {repos.error ? <Alert tone="error">{repos.error.message}</Alert> : null}
       <div className="grid gap-3 sm:grid-cols-2">
         {active.length > 1 ? (
           <Select
@@ -217,13 +228,15 @@ function ConnectForm({
           ))}
         </Select>
       </div>
-      <p className="text-xs text-neutral-500">
-        Only repositories the GitHub App was given access to are listed. Change that on GitHub, then
-        reload this page.
+      <p className="text-xs text-mineral-muted">
+        Only repositories the GitHub App was granted access to are listed. Update repository
+        permissions on GitHub, then refresh this page.
       </p>
-      <Button type="submit" variant="primary" disabled={busy || !repoId}>
-        {busy ? 'Connecting…' : 'Connect repository'}
-      </Button>
+      <div className="pt-1">
+        <Button type="submit" variant="primary" size="sm" disabled={busy || !repoId}>
+          {busy ? 'Connecting…' : 'Connect repository'}
+        </Button>
+      </div>
     </form>
   );
 }

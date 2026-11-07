@@ -4,7 +4,7 @@ import type { Project, ProjectMember, ProjectChatUnreadSummary } from '@devtrack
 import Link from 'next/link';
 import { useParams, usePathname, useSearchParams } from 'next/navigation';
 import { createContext, useContext, Suspense, type ReactNode } from 'react';
-import { Alert, Badge } from '@/components/ui';
+import { Alert, Badge, ErrorState, Skeleton } from '@/components/ui';
 import { useRealtimeRefresh, useRealtimeRoom, type RealtimeEvent } from '@/lib/realtime';
 import { useApiQuery } from '@/lib/use-api-query';
 import { PROJECT_STATUS_LABEL } from './labels';
@@ -52,20 +52,46 @@ export function ProjectLayout({ children }: { children: ReactNode }) {
 
   if (project.error) {
     return (
-      <div className="space-y-4">
-        <Alert>
-          {project.error.status === 404
-            ? 'This project does not exist or you do not have access to it.'
-            : project.error.message}
-        </Alert>
-        <Link href="/" className="text-sm underline">
-          Back to workspaces
-        </Link>
+      <div className="space-y-4 max-w-xl mx-auto py-8">
+        <ErrorState
+          message={
+            project.error.status === 404
+              ? 'This project does not exist or you do not have access to it.'
+              : project.error.message
+          }
+          onRetry={project.reload}
+        />
+        <div className="text-center">
+          <Link
+            href="/"
+            className="text-xs font-medium text-accent hover:underline hover:text-accent-hover"
+          >
+            ← Back to workspaces
+          </Link>
+        </div>
       </div>
     );
   }
-  if (!project.data || !members.data)
-    return <p className="text-sm text-neutral-500">Loading project…</p>;
+
+  if (!project.data || !members.data) {
+    return (
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <Skeleton className="h-4 w-20" />
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-6 w-16 rounded" />
+            <Skeleton className="h-8 w-64 rounded-lg" />
+          </div>
+          <Skeleton className="h-10 w-full rounded-lg mt-4" />
+        </div>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Skeleton className="h-48 rounded-xl" />
+          <Skeleton className="h-48 rounded-xl" />
+          <Skeleton className="h-48 rounded-xl" />
+        </div>
+      </div>
+    );
+  }
 
   const p = project.data.project;
   const base = `/projects/${p.id}`;
@@ -94,30 +120,45 @@ export function ProjectLayout({ children }: { children: ReactNode }) {
     >
       <div className="space-y-6">
         <div>
-          <Link
-            href={`/workspaces/${p.workspaceId}/projects`}
-            className="text-sm text-neutral-600 hover:underline"
-          >
-            ← Projects
-          </Link>
-          <div className="mt-1 flex flex-wrap items-center gap-3">
-            <span className="rounded bg-neutral-200 px-2 py-0.5 text-xs font-semibold tracking-wide">
+          <nav aria-label="Breadcrumb" className="mb-2">
+            <Link
+              href={`/workspaces/${p.workspaceId}/projects`}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-mineral hover:text-graphite transition-colors"
+            >
+              <svg aria-hidden="true" className="size-3.5" viewBox="0 0 20 20" fill="currentColor">
+                <path
+                  fillRule="evenodd"
+                  d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              Projects
+            </Link>
+          </nav>
+
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+            <span className="font-mono text-xs font-semibold tracking-wider text-mineral bg-subtle px-2 py-0.5 rounded-md border border-border">
               {p.key}
             </span>
-            <h1 className="text-2xl font-semibold tracking-tight">{p.name}</h1>
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-semibold tracking-tight text-graphite">
+              {p.name}
+            </h1>
             <Badge tone={p.status === 'ACTIVE' ? 'green' : 'neutral'}>
               {PROJECT_STATUS_LABEL[p.status]}
             </Badge>
           </div>
+
           {readOnly ? (
             <div className="mt-3">
               <Alert tone="info">This project is archived and read-only.</Alert>
             </div>
           ) : null}
+
           <Suspense fallback={null}>
             <ProjectTabs tabs={tabs} base={base} pathname={pathname} />
           </Suspense>
         </div>
+
         {children}
       </div>
     </ProjectContext.Provider>
@@ -138,8 +179,8 @@ function ProjectTabs({
 
   return (
     <nav
-      className="mt-4 flex gap-1 overflow-x-auto border-b border-neutral-200"
-      aria-label="Project"
+      className="mt-5 flex gap-1 overflow-x-auto border-b border-border custom-scrollbar pb-px"
+      aria-label="Project views and navigation"
     >
       {tabs.map((tab) => {
         const active = tab.href === base ? pathname === base : pathname.startsWith(tab.href);
@@ -147,20 +188,21 @@ function ProjectTabs({
           (tab.label === 'Board' || tab.label === 'List') && searchStr
             ? `${tab.href}?${searchStr}`
             : tab.href;
+
         return (
           <Link
             key={tab.href}
             href={targetHref}
             aria-current={active ? 'page' : undefined}
-            className={`-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-sm ${
+            className={`-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3.5 py-2.5 text-xs sm:text-sm font-medium transition-colors ${
               active
-                ? 'border-neutral-900 font-medium text-neutral-900'
-                : 'border-transparent text-neutral-600 hover:text-neutral-900'
+                ? 'border-accent text-accent font-semibold'
+                : 'border-transparent text-mineral hover:border-border hover:text-graphite'
             }`}
           >
             <span>{tab.label}</span>
             {tab.count !== undefined && tab.count > 0 ? (
-              <span className="rounded-full bg-neutral-900 px-1.5 py-0.2 text-[11px] font-semibold text-white">
+              <span className="rounded-full bg-accent px-1.5 py-0.2 text-[10px] font-bold text-white leading-none">
                 {tab.count}
               </span>
             ) : null}

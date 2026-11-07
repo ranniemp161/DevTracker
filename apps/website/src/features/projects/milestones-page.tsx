@@ -3,7 +3,16 @@
 import type { Milestone } from '@devtrack/types';
 import { createMilestoneSchema } from '@devtrack/validators';
 import { useState } from 'react';
-import { Alert, Badge, Button, Card, Field, SubmitButton } from '@/components/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Skeleton,
+  SubmitButton,
+} from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useApiQuery } from '@/lib/use-api-query';
 import { useAuthForm, withoutBlanks } from '../auth/use-auth-form';
@@ -20,19 +29,30 @@ export function MilestonesPage() {
       {canManage ? <CreateMilestone onCreated={milestones.reload} /> : null}
       <Card title="Milestones">
         {milestones.error ? <Alert>{milestones.error.message}</Alert> : null}
-        {milestones.data?.length === 0 ? (
-          <p className="text-sm text-neutral-500">No milestones yet.</p>
+        {!milestones.data && !milestones.error ? (
+          <div className="space-y-3 py-2">
+            <Skeleton className="h-12 w-full rounded-lg" />
+            <Skeleton className="h-12 w-full rounded-lg" />
+          </div>
         ) : null}
-        <ul className="divide-y divide-neutral-100">
-          {milestones.data?.map((m) => (
-            <MilestoneRow
-              key={m.id}
-              milestone={m}
-              canManage={canManage}
-              onChanged={milestones.reload}
-            />
-          ))}
-        </ul>
+        {milestones.data?.length === 0 ? (
+          <EmptyState
+            title="No milestones yet"
+            description="Milestones help track high-level release goals and delivery targets."
+          />
+        ) : null}
+        {milestones.data && milestones.data.length > 0 ? (
+          <ul className="divide-y divide-border/60">
+            {milestones.data.map((m) => (
+              <MilestoneRow
+                key={m.id}
+                milestone={m}
+                canManage={canManage}
+                onChanged={milestones.reload}
+              />
+            ))}
+          </ul>
+        ) : null}
       </Card>
     </div>
   );
@@ -64,20 +84,28 @@ function MilestoneRow({
 
   const completed = m.status === 'COMPLETED';
   return (
-    <li className="flex flex-wrap items-start gap-3 py-3">
+    <li className="flex flex-wrap items-start justify-between gap-3 py-3.5">
       <div className="min-w-0 flex-1">
-        <p className={`font-medium ${completed ? 'text-neutral-500 line-through' : ''}`}>
-          {m.name}
-        </p>
-        {m.description ? <p className="mt-0.5 text-sm text-neutral-600">{m.description}</p> : null}
-        <p className="mt-1 text-xs text-neutral-500">Due {formatDate(m.dueDate)}</p>
-        {error ? <p className="mt-1 text-sm text-red-700">{error}</p> : null}
+        <div className="flex items-center gap-2 flex-wrap">
+          <p
+            className={`font-semibold text-sm ${completed ? 'text-mineral line-through' : 'text-graphite'}`}
+          >
+            {m.name}
+          </p>
+          <Badge tone={completed ? 'green' : 'teal'}>{completed ? 'Completed' : 'Open'}</Badge>
+        </div>
+        {m.description ? (
+          <p className="mt-1 text-xs text-mineral leading-relaxed">{m.description}</p>
+        ) : null}
+        <p className="mt-1.5 text-xs text-mineral-muted font-medium">Due {formatDate(m.dueDate)}</p>
+        {error ? <p className="mt-1.5 text-xs text-red-600 font-medium">{error}</p> : null}
       </div>
-      <Badge tone={completed ? 'green' : 'blue'}>{completed ? 'Completed' : 'Open'}</Badge>
+
       {canManage ? (
-        <>
+        <div className="flex items-center gap-2 shrink-0">
           <Button
-            size="sm"
+            size="xs"
+            variant="secondary"
             disabled={busy}
             onClick={() =>
               call(() =>
@@ -91,14 +119,15 @@ function MilestoneRow({
             {completed ? 'Reopen' : 'Mark complete'}
           </Button>
           <Button
-            size="sm"
+            size="xs"
             variant="ghost"
             disabled={busy}
             onClick={() => call(() => api(`/milestones/${m.id}`, { method: 'DELETE' }))}
+            className="text-red-700 hover:bg-red-50"
           >
             Delete
           </Button>
-        </>
+        </div>
       ) : null}
     </li>
   );
@@ -124,6 +153,7 @@ function CreateMilestone({ onCreated }: { onCreated: () => void }) {
         <Field
           label="Name"
           name="name"
+          placeholder="e.g. v1.0 Launch"
           value={form.values.name}
           onChange={form.onChange}
           error={form.fieldErrors.name}
@@ -131,6 +161,7 @@ function CreateMilestone({ onCreated }: { onCreated: () => void }) {
         <Field
           label="Description"
           name="description"
+          placeholder="Optional goals and scope"
           value={form.values.description}
           onChange={form.onChange}
           error={form.fieldErrors.description}
