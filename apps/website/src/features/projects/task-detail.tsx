@@ -10,7 +10,7 @@ import {
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { CheckIcon, ChevronDownIcon } from '@/components/icons';
+import { CheckIcon, ChevronDownIcon, ExternalLinkIcon, XIcon } from '@/components/icons';
 import {
   Alert,
   Avatar,
@@ -33,11 +33,25 @@ import { TaskPullRequests } from '../github/task-pull-requests';
 import { useProject } from './project-context';
 import { TaskLabels } from './task-labels';
 
-export function TaskDetail() {
-  const { taskId } = useParams<{ taskId: string }>();
-  const query = useApiQuery<{ task: Task }>(`/tasks/${taskId}`);
+export function TaskDetail({
+  taskId: propTaskId,
+  onClose,
+  isDrawer = false,
+  onTaskUpdated,
+}: {
+  taskId?: string;
+  onClose?: () => void;
+  isDrawer?: boolean;
+  onTaskUpdated?: (task: Task) => void;
+} = {}) {
+  const params = useParams<{ taskId?: string }>();
+  const taskId = propTaskId ?? params.taskId;
+  const query = useApiQuery<{ task: Task }>(taskId ? `/tasks/${taskId}` : null);
   // Live updates (M7): refetch when this task changes elsewhere.
-  useRealtimeRefresh((e) => e.type.startsWith('task.') && e.entity.id === taskId, query.reload);
+  useRealtimeRefresh(
+    (e) => Boolean(taskId) && e.type.startsWith('task.') && e.entity.id === taskId,
+    query.reload,
+  );
   const { project } = useProject();
   // Bumped after comments/edits so the History list re-fetches.
   const [history, setHistory] = useState(0);
@@ -50,21 +64,29 @@ export function TaskDetail() {
     return () => clearTimeout(timer);
   }, [saved]);
 
+  if (!taskId) return null;
+
   if (query.error) {
     return (
-      <div className="space-y-3">
+      <div className={`space-y-3 ${isDrawer ? 'p-6' : ''}`}>
         {query.error.status === 404 ? (
           <Alert>This task does not exist or was deleted.</Alert>
         ) : (
           <ErrorState message={query.error.message} onRetry={query.reload} />
         )}
-        <Link href={`/projects/${project.id}`} className="text-sm underline">
-          Back to board
-        </Link>
+        {onClose ? (
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Close
+          </Button>
+        ) : (
+          <Link href={`/projects/${project.id}`} className="text-sm underline">
+            Back to board
+          </Link>
+        )}
       </div>
     );
   }
-  if (!query.data) return <TaskSkeleton />;
+  if (!query.data) return <TaskSkeleton isDrawer={isDrawer} />;
   const task = query.data.task;
   // Re-mount the editor when the task changes on the server so the form shows fresh values.
   return (
@@ -77,15 +99,20 @@ export function TaskDetail() {
       onSaved={() => {
         query.reload();
         bumpHistory();
+        if (query.data?.task) {
+          onTaskUpdated?.(query.data.task);
+        }
       }}
       onFieldsSaved={() => setSaved(true)}
+      onClose={onClose}
+      isDrawer={isDrawer}
     />
   );
 }
 
-function TaskSkeleton() {
+function TaskSkeleton({ isDrawer = false }: { isDrawer?: boolean }) {
   return (
-    <div role="status" aria-label="Loading task" className="space-y-4">
+    <div role="status" aria-label="Loading task" className={`space-y-4 ${isDrawer ? 'p-6' : ''}`}>
       <Skeleton className="h-8 w-2/3" />
       <Skeleton className="h-40" />
       <Skeleton className="h-24" />
@@ -133,6 +160,8 @@ function TaskEditor({
   onActivity,
   onSaved,
   onFieldsSaved,
+  onClose,
+  isDrawer = false,
 }: {
   task: Task;
   saved: boolean;
@@ -140,6 +169,8 @@ function TaskEditor({
   onActivity: () => void;
   onSaved: () => void;
   onFieldsSaved: () => void;
+  onClose?: () => void;
+  isDrawer?: boolean;
 }) {
   const router = useRouter();
   const { user } = useSession();
@@ -224,25 +255,37 @@ function TaskEditor({
   const base = `/projects/${project.id}`;
 
   return (
-    <div className="-mx-4 -my-6 sm:-mx-7">
-      <header className="flex min-h-13 flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-2 sm:px-7">
+    <div className={isDrawer ? 'flex h-full flex-col bg-surface' : '-mx-4 -my-6 sm:-mx-7'}>
+      <header
+        className={`flex min-h-13 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-2 sm:px-7 ${
+          isDrawer ? 'sticky top-0 z-20 bg-surface/95 backdrop-blur-xs' : ''
+        }`}
+      >
         <nav
           aria-label="Breadcrumb"
           className="flex min-w-0 items-center gap-1.5 text-label text-fg-muted"
         >
-          <Link href={base} className="truncate hover:text-fg hover:underline">
-            {project.name}
-          </Link>
-          <span aria-hidden="true">/</span>
-          <Link href={base} className="hover:text-fg hover:underline">
-            Board
-          </Link>
-          <span aria-hidden="true">/</span>
-          <span aria-current="page" className="font-mono text-fg">
-            {task.key}
-          </span>
+          {isDrawer ? (
+            <span aria-current="page" className="rounded-chip bg-surface-muted px-2.5 py-1 font-mono text-xs font-semibold text-fg">
+              {task.key}
+            </span>
+          ) : (
+            <>
+              <Link href={base} className="truncate hover:text-fg hover:underline">
+                {project.name}
+              </Link>
+              <span aria-hidden="true">/</span>
+              <Link href={base} className="hover:text-fg hover:underline">
+                Board
+              </Link>
+              <span aria-hidden="true">/</span>
+              <span aria-current="page" className="font-mono text-fg">
+                {task.key}
+              </span>
+            </>
+          )}
         </nav>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <span role="status" className="text-label font-medium text-status-done-fg">
             {saved ? 'Saved' : copied ? 'Link copied' : ''}
           </span>
@@ -267,50 +310,70 @@ function TaskEditor({
               <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
             </svg>
           </IconButton>
+          {isDrawer ? (
+            <>
+              <IconButton
+                aria-label="Open task in full page"
+                onClick={() => router.push(`${base}/tasks/${task.id}`)}
+              >
+                <ExternalLinkIcon size={14} />
+              </IconButton>
+              {onClose ? (
+                <IconButton aria-label="Close task details" onClick={onClose}>
+                  <XIcon size={16} />
+                </IconButton>
+              ) : null}
+            </>
+          ) : null}
         </div>
       </header>
 
-      <div className="grid lg:grid-cols-task">
-        <form
-          id="task-form"
-          onSubmit={save}
-          className="space-y-3 px-4 py-6 sm:px-7 lg:col-start-1 lg:row-start-1 lg:px-12 lg:pt-9"
-        >
-          {error ? <Alert>{error}</Alert> : null}
-          <div>
-            <label htmlFor="task-title" className="sr-only">
-              Title
-            </label>
-            <input
-              id="task-title"
-              value={form.title}
-              disabled={readOnly}
-              maxLength={200}
-              placeholder="Task title"
-              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-              className="block w-full rounded-control border border-transparent bg-transparent px-2 py-1 -mx-2 text-title font-semibold tracking-tight text-fg placeholder:text-fg-subtle hover:border-line focus-visible:border-primary"
-            />
-          </div>
-          <div>
-            <label htmlFor="task-description" className="sr-only">
-              Description
-            </label>
-            <textarea
-              id="task-description"
-              rows={8}
-              value={form.description}
-              disabled={readOnly}
-              placeholder="Add a description…"
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              className="block w-full rounded-control border border-transparent bg-transparent px-2 py-1.5 -mx-2 text-sm leading-relaxed text-fg-secondary placeholder:text-fg-subtle hover:border-line focus-visible:border-primary"
-            />
-          </div>
-        </form>
+      <div className={isDrawer ? 'flex-1 overflow-y-auto' : ''}>
+        <div className={`grid ${isDrawer ? 'grid-cols-1' : 'lg:grid-cols-task'}`}>
+          <form
+            id="task-form"
+            onSubmit={save}
+            className={`space-y-3 px-4 py-6 sm:px-7 ${
+              isDrawer ? 'lg:px-8 lg:pt-7' : 'lg:col-start-1 lg:row-start-1 lg:px-12 lg:pt-9'
+            }`}
+          >
+            {error ? <Alert>{error}</Alert> : null}
+            <div>
+              <label htmlFor="task-title" className="sr-only">
+                Title
+              </label>
+              <input
+                id="task-title"
+                value={form.title}
+                disabled={readOnly}
+                maxLength={200}
+                placeholder="Task title"
+                onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+                className="block w-full rounded-control border border-transparent bg-transparent px-2 py-1 -mx-2 text-title font-semibold tracking-tight text-fg placeholder:text-fg-subtle hover:border-line focus-visible:border-primary"
+              />
+            </div>
+            <div>
+              <label htmlFor="task-description" className="sr-only">
+                Description
+              </label>
+              <textarea
+                id="task-description"
+                rows={isDrawer ? 6 : 8}
+                value={form.description}
+                disabled={readOnly}
+                placeholder="Add a description…"
+                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                className="block w-full rounded-control border border-transparent bg-transparent px-2 py-1.5 -mx-2 text-sm leading-relaxed text-fg-secondary placeholder:text-fg-subtle hover:border-line focus-visible:border-primary"
+              />
+            </div>
+          </form>
 
-        <aside
-          aria-label="Task properties"
-          className="space-y-6 border-t border-line bg-surface-sunken p-6 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:border-t-0 lg:border-l"
-        >
+          <aside
+            aria-label="Task properties"
+            className={`space-y-6 border-t border-line bg-surface-sunken p-6 ${
+              isDrawer ? '' : 'lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:border-t-0 lg:border-l'
+            }`}
+          >
           <div className="space-y-1.5">
             <PropertyRow label="Status" htmlFor="task-status">
               <span className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2">
@@ -448,7 +511,10 @@ function TaskEditor({
                     onClick={() =>
                       call(
                         () => api(`/tasks/${task.id}`, { method: 'DELETE' }),
-                        () => router.push(base),
+                        () => {
+                          onClose?.();
+                          router.push(base);
+                        },
                       )
                     }
                   >
@@ -472,7 +538,11 @@ function TaskEditor({
           ) : null}
         </aside>
 
-        <div className="space-y-8 px-4 pb-8 sm:px-7 lg:col-start-1 lg:row-start-2 lg:px-12">
+        <div
+          className={`space-y-8 px-4 pb-8 sm:px-7 ${
+            isDrawer ? 'lg:px-8' : 'lg:col-start-1 lg:row-start-2 lg:px-12'
+          }`}
+        >
           <div className="space-y-8 border-t border-line pt-6">
             <CommentThread task={task} onActivity={onActivity} />
             <section aria-labelledby="history-heading" className="space-y-3">
@@ -489,18 +559,24 @@ function TaskEditor({
           </div>
         </div>
       </div>
+      </div>
 
       {readOnly || !(dirty || saving) ? null : (
-        <div className="sticky bottom-0 z-10 flex items-center justify-between gap-3 border-t border-line bg-surface px-4 py-3 sm:px-7 lg:px-12">
+        <div
+          className={`sticky bottom-0 z-30 flex items-center justify-between gap-3 border-t border-line bg-surface/95 px-4 py-3 backdrop-blur-xs ${
+            isDrawer ? 'shadow-xl' : 'sm:px-7 lg:px-12'
+          }`}
+        >
           <p className="text-label text-fg-muted">Unsaved changes</p>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" onClick={discard} disabled={saving}>
+            <Button variant="ghost" size="sm" onClick={discard} disabled={saving}>
               Discard
             </Button>
             <Button
               type="submit"
               form="task-form"
               variant="primary"
+              size="sm"
               icon={saving ? undefined : <CheckIcon size={14} />}
               loading={saving}
               disabled={!dirty}
