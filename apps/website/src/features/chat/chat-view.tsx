@@ -4,7 +4,7 @@ import type { ProjectMessage, ProjectMessagePage } from '@devtrack/types';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Button, Divider } from '@/components/ui';
+import { Button, Divider, ErrorState } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useRealtimeConnected, useRealtimeRefresh, useRealtimeRoom } from '@/lib/realtime';
 import { useProject } from '../projects/project-context';
@@ -324,7 +324,10 @@ export function ChatView() {
   if (accessLost) {
     return (
       <div className="space-y-4">
-        <Alert tone="error">You no longer have access to this project's chat.</Alert>
+        <ErrorState
+          message="You no longer have access to this project's chat."
+          onRetry={reconcileMessages}
+        />
         <Link href={`/workspaces/${project.workspaceId}/projects`} className="text-sm underline">
           Back to projects
         </Link>

@@ -4,7 +4,7 @@ import type { Project, ProjectMember } from '@devtrack/types';
 import Link from 'next/link';
 import { useParams, usePathname } from 'next/navigation';
 import { createContext, useContext, type ReactNode } from 'react';
-import { Alert, Badge, KeyBadge } from '@/components/ui';
+import { Alert, Badge, ErrorState, KeyBadge } from '@/components/ui';
 import { useRealtimeRefresh, useRealtimeRoom, type RealtimeEvent } from '@/lib/realtime';
 import { useApiQuery } from '@/lib/use-api-query';
 import { useShellData } from '../session/shell-data';
@@ -48,11 +48,14 @@ export function ProjectLayout({ children }: { children: ReactNode }) {
   if (project.error) {
     return (
       <div className="space-y-4">
-        <Alert>
-          {project.error.status === 404
-            ? 'This project does not exist or you do not have access to it.'
-            : project.error.message}
-        </Alert>
+        <ErrorState
+          message={
+            project.error.status === 404
+              ? 'This project does not exist or you do not have access to it.'
+              : project.error.message
+          }
+          onRetry={project.reload}
+        />
         <Link href="/" className="text-sm underline">
           Back to workspaces
         </Link>

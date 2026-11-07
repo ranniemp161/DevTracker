@@ -4,7 +4,7 @@ import type { WorkspaceDetails } from '@devtrack/types';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { createContext, useContext, type ReactNode } from 'react';
-import { Alert, Badge } from '@/components/ui';
+import { Badge, ErrorState } from '@/components/ui';
 import { useApiQuery } from '@/lib/use-api-query';
 import { ROLE_LABEL } from './permissions';
 
@@ -29,11 +29,14 @@ export function WorkspaceLayout({ children }: { children: ReactNode }) {
   if (query.error) {
     return (
       <div className="space-y-4">
-        <Alert>
-          {query.error.status === 404
-            ? 'This workspace does not exist, was archived, or you are not a member.'
-            : query.error.message}
-        </Alert>
+        <ErrorState
+          message={
+            query.error.status === 404
+              ? 'This workspace does not exist, was archived, or you are not a member.'
+              : query.error.message
+          }
+          onRetry={query.reload}
+        />
         <Link href="/" className="text-sm underline">
           Back to workspaces
         </Link>
