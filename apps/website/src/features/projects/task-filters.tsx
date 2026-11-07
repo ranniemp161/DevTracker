@@ -8,7 +8,8 @@ import {
   type Task,
 } from '@devtrack/types';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, type ReactNode } from 'react';
+import { ChevronDownIcon } from '@/components/icons';
 import { useApiQuery } from '@/lib/use-api-query';
 import { PRIORITY_LABEL, TASK_STATUS_LABEL } from './labels';
 
@@ -73,6 +74,38 @@ export function filterTask(task: Task, filters: TaskFilters): boolean {
   return true;
 }
 
+/** A native select styled as a toolbar filter. Active filters get a darker border. */
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  children,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  children: ReactNode;
+}) {
+  return (
+    <label className="relative inline-flex">
+      <span className="sr-only">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`h-7.5 cursor-pointer appearance-none rounded-control border bg-surface pr-7 pl-2.5 text-label font-medium transition-colors hover:bg-surface-sunken ${
+          value ? 'border-fg text-fg' : 'border-line-control text-fg-secondary'
+        }`}
+      >
+        {children}
+      </select>
+      <ChevronDownIcon
+        size={14}
+        className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-fg-subtle"
+      />
+    </label>
+  );
+}
+
 export function TaskFilterBar({
   workspaceId,
   members,
@@ -85,79 +118,63 @@ export function TaskFilterBar({
   const labels = labelsQuery.data ?? [];
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <label className="text-sm">
-        <span className="sr-only">Status</span>
-        <select
-          value={filters.status}
-          onChange={(e) => setFilter('status', e.target.value)}
-          className="rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-xs font-medium text-neutral-800"
-        >
-          <option value="">Status: all</option>
-          {TASK_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {TASK_STATUS_LABEL[s]}
-            </option>
-          ))}
-        </select>
-      </label>
+    <div role="group" aria-label="Filters" className="flex flex-wrap items-center gap-2">
+      <FilterSelect label="Status" value={filters.status} onChange={(v) => setFilter('status', v)}>
+        <option value="">Status: all</option>
+        {TASK_STATUSES.map((s) => (
+          <option key={s} value={s}>
+            {TASK_STATUS_LABEL[s]}
+          </option>
+        ))}
+      </FilterSelect>
 
-      <label className="text-sm">
-        <span className="sr-only">Priority</span>
-        <select
-          value={filters.priority}
-          onChange={(e) => setFilter('priority', e.target.value)}
-          className="rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-xs font-medium text-neutral-800"
-        >
-          <option value="">Priority: all</option>
-          {TASK_PRIORITIES.map((p) => (
-            <option key={p} value={p}>
-              {PRIORITY_LABEL[p]}
-            </option>
-          ))}
-        </select>
-      </label>
+      <FilterSelect
+        label="Priority"
+        value={filters.priority}
+        onChange={(v) => setFilter('priority', v)}
+      >
+        <option value="">Priority: all</option>
+        {TASK_PRIORITIES.map((p) => (
+          <option key={p} value={p}>
+            {PRIORITY_LABEL[p]}
+          </option>
+        ))}
+      </FilterSelect>
 
-      <label className="text-sm">
-        <span className="sr-only">Assignee</span>
-        <select
-          value={filters.assigneeId}
-          onChange={(e) => setFilter('assigneeId', e.target.value)}
-          className="rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-xs font-medium text-neutral-800"
-        >
-          <option value="">Assignee: all</option>
-          <option value="unassigned">Unassigned</option>
-          {members.map((m) => (
-            <option key={m.user.id} value={m.user.id}>
-              @{m.user.username}
-            </option>
-          ))}
-        </select>
-      </label>
+      <FilterSelect
+        label="Assignee"
+        value={filters.assigneeId}
+        onChange={(v) => setFilter('assigneeId', v)}
+      >
+        <option value="">Assignee: all</option>
+        <option value="unassigned">Unassigned</option>
+        {members.map((m) => (
+          <option key={m.user.id} value={m.user.id}>
+            @{m.user.username}
+          </option>
+        ))}
+      </FilterSelect>
 
       {labels.length > 0 ? (
-        <label className="text-sm">
-          <span className="sr-only">Label</span>
-          <select
-            value={filters.labelId}
-            onChange={(e) => setFilter('labelId', e.target.value)}
-            className="rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-xs font-medium text-neutral-800"
-          >
-            <option value="">Label: all</option>
-            {labels.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <FilterSelect
+          label="Label"
+          value={filters.labelId}
+          onChange={(v) => setFilter('labelId', v)}
+        >
+          <option value="">Label: all</option>
+          {labels.map((l) => (
+            <option key={l.id} value={l.id}>
+              {l.name}
+            </option>
+          ))}
+        </FilterSelect>
       ) : null}
 
       {hasActiveFilters ? (
         <button
           type="button"
           onClick={clearFilters}
-          className="rounded-md px-2 py-1 text-xs text-neutral-500 hover:text-neutral-900"
+          className="h-7.5 rounded-control px-2.5 text-label font-medium text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
         >
           Clear filters
         </button>
