@@ -4,18 +4,16 @@ import {
   MessageBody,
   type OnGatewayConnection,
   type OnGatewayDisconnect,
-  type OnGatewayInit,
   SubscribeMessage,
   WebSocketGateway,
 } from '@nestjs/websockets';
-import type { Server, Socket } from 'socket.io';
+import type { Socket } from 'socket.io';
 import { SessionsService } from '../auth/sessions.service';
 import { AppException } from '../common/errors/app.exception';
 import { isUuid } from '../common/pipes/uuid-param.pipe';
 import { APP_CONFIG, type AppConfig } from '../config/app-config';
 import { ProjectAccessService } from '../projects/project-access.service';
 import { WorkspaceAccessService } from '../workspaces/workspace-access.service';
-import { OutboxPublisher } from './outbox-publisher.service';
 import { verifyTicket } from './realtime-ticket';
 import { parseSubscribableRoom, userRoom } from './rooms';
 
@@ -43,7 +41,7 @@ interface SocketData {
  * the API, which enforces authorization again.
  */
 @WebSocketGateway()
-export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
+export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private readonly logger = new Logger(RealtimeGateway.name);
 
   constructor(
@@ -51,12 +49,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     private readonly sessions: SessionsService,
     private readonly workspaces: WorkspaceAccessService,
     private readonly projects: ProjectAccessService,
-    private readonly publisher: OutboxPublisher,
   ) {}
-
-  afterInit(server: Server): void {
-    this.publisher.attach(server);
-  }
 
   async handleConnection(socket: Socket): Promise<void> {
     const claims = verifyTicket(this.config.realtime.secret, socket.handshake.auth?.token);

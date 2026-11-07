@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, type OnApplicationShutdown } from '@nestjs/common';
 import { asc, inArray, isNull, outboxEvents, sql, type Database } from '@devtrack/database';
 import type { Server } from 'socket.io';
 import { describeError } from '../common/filters/all-exceptions.filter';
@@ -30,17 +30,26 @@ export interface FlushResult {
  * With Redis configured, `server.to(room).emit()` reaches sockets on every instance.
  */
 @Injectable()
-export class OutboxPublisher {
+export class OutboxPublisher implements OnApplicationShutdown {
   private readonly logger = new Logger(OutboxPublisher.name);
   private server: Server | null = null;
   private running: Promise<FlushResult> | null = null;
   private again = false;
+  private closeTransport: (() => Promise<void>) | null = null;
 
   constructor(@Inject(DATABASE) private readonly db: Database) {}
 
-  /** Called by the gateway once the Socket.IO server exists. */
-  attach(server: Server): void {
+  /** Called explicitly by setupRealtime before app.init(), independently of gateway hooks. */
+  attach(server: Server, closeTransport?: () => Promise<void>): void {
     this.server = server;
+    this.closeTransport = closeTransport ?? null;
+  }
+
+  async onApplicationShutdown(): Promise<void> {
+    await this.running?.catch(() => undefined);
+    await this.closeTransport?.();
+    this.closeTransport = null;
+    this.server = null;
   }
 
   /**
@@ -82,7 +91,7 @@ export class OutboxPublisher {
 
   private async flushBatch(): Promise<FlushResult> {
     const server = this.server;
-    if (!server) return { published: 0, skippedStale: 0 };
+    if (!server) throw new Error('Realtime publisher transport has not been initialized');
     return this.db.transaction(async (tx) => {
       const rows = await tx
         .select()

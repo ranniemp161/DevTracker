@@ -19,6 +19,7 @@ import {
 import type { PullRequestPayload } from '../../src/github/webhooks/payloads';
 import { APP_CONFIG, type AppConfig } from '../../src/config/app-config';
 import { configureApp, setupRealtime } from '../../src/configure-app';
+import { RealtimeGateway } from '../../src/realtime/realtime.gateway';
 import { DATABASE_CONNECTION } from '../../src/database/database.module';
 import { MAILER, type Mailer, type MailMessage } from '../../src/mail/mailer';
 import type { User } from '../../src/users/users.service';
@@ -196,14 +197,17 @@ class ProtectedTestController {
   }
 }
 
-export async function createTestApp(overrides: Partial<AppConfig> = {}) {
+export async function createTestApp(
+  overrides: Partial<AppConfig> = {},
+  options: { gateway?: boolean } = {},
+) {
   const config = testConfig(overrides);
   const database = await createTestDatabase();
   const mailer = new CapturingMailer();
   const github = new FakeGithubOAuthClient();
   const githubApp = new FakeGithubAppClient();
 
-  const moduleRef = await Test.createTestingModule({
+  const builder = Test.createTestingModule({
     imports: [AppModule],
     controllers: [ProtectedTestController],
   })
@@ -216,8 +220,10 @@ export async function createTestApp(overrides: Partial<AppConfig> = {}) {
     .overrideProvider(GithubOAuthClient)
     .useValue(github)
     .overrideProvider(GithubAppClient)
-    .useValue(githubApp)
-    .compile();
+    .useValue(githubApp);
+  // Model serverless startup where Nest's optional gateway discovery is absent.
+  if (options.gateway === false) builder.overrideProvider(RealtimeGateway).useValue({});
+  const moduleRef = await builder.compile();
 
   const app = moduleRef.createNestApplication<NestExpressApplication>({ logger: false });
   configureApp(app, config);

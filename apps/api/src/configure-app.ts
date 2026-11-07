@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import { clientIpMiddleware, requestIdMiddleware } from './common/http/request-context';
 import type { AppConfig } from './config/app-config';
 import { RealtimeIoAdapter } from './realtime/realtime-io.adapter';
+import { OutboxPublisher } from './realtime/outbox-publisher.service';
 
 export const API_PREFIX = 'api/v1';
 
@@ -35,4 +36,8 @@ export async function setupRealtime(app: NestExpressApplication, config: AppConf
   const adapter = new RealtimeIoAdapter(app, config);
   await adapter.connect();
   app.useWebSocketAdapter(adapter);
+  // Publishing must not depend on Nest discovering/initializing a gateway. On Vercel the
+  // REST API still needs a Redis-backed Socket.IO server even when it accepts no sockets.
+  const server = adapter.createIOServer(0);
+  app.get(OutboxPublisher).attach(server, () => adapter.close(server));
 }
