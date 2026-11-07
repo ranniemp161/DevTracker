@@ -5,16 +5,18 @@ DevTrack is an internal engineering project management platform with first-class
 - **Architecture reference:** [DEVTRACK_ARCHITECTURE.md](DEVTRACK_ARCHITECTURE.md)
 - **Decision records:** [Docs/decisions/](Docs/decisions/)
 
-**Status:** M1–M7 are merged. M8 (release readiness) is on the `m8-release` branch. To deploy, follow [Docs/deploy-runbook.md](Docs/deploy-runbook.md); release sign-off uses [Docs/release-checklist.md](Docs/release-checklist.md).
+**Status:** M1-M8 are merged. The standalone realtime server and website cutover are deployed; real-user production acceptance remains pending. To deploy, follow [Docs/deploy-runbook.md](Docs/deploy-runbook.md); release sign-off uses [Docs/release-checklist.md](Docs/release-checklist.md).
 
 ## Repository layout
 
 ```text
 apps/
   api/          NestJS 12 REST API (/api/v1), modular monolith
+  realtime/     Authenticated Socket.IO transport (deployed; user acceptance pending)
   website/      Next.js 16 frontend (proxies /api/v1 to the API)
 packages/
   database/     Drizzle schema, SQL migrations, client, PGlite test helper
+  server-core/  Shared server-side access queries, session lookup, tickets and rooms
   types/        Shared API contracts (envelopes, error codes, PublicUser)
   validators/   Shared Zod schemas, used by both API and website
   config/       Shared TypeScript configurations

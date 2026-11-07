@@ -162,7 +162,8 @@ The deployment preference is Vercel for both Next.js and NestJS. This must be im
 | Component | Initial platform |
 |---|---|
 | Next.js frontend | Vercel |
-| NestJS API | Vercel Functions, subject to compatibility validation |
+| NestJS API | Vercel Functions (REST and Redis-backed outbox publisher) |
+| Socket.IO transport | Separate Vercel Function in `apps/realtime` (decision 0007) |
 | PostgreSQL | Neon |
 | Redis | Managed Redis provider |
 | GitHub integration | GitHub App |
@@ -174,6 +175,16 @@ The deployment preference is Vercel for both Next.js and NestJS. This must be im
 Do not assume a Vercel Function behaves like a permanently running VPS process. Validate the current Vercel WebSocket support, runtime requirements, function duration, connection lifecycle, and Socket.IO compatibility before implementation.
 
 The application must not depend on one function instance retaining connection state.
+
+Approved on 2026-11-07 after the standalone WebSocket probe passed: the API
+retains business logic, connection tickets and durable outbox publishing. A
+separate Socket.IO function handles client connections, sharing the same Redis,
+database and ticket secret. Both use `packages/server-core` for access queries,
+session lookup and ticket/room helpers. The native function route is
+`/api/v1/realtime/socket`; each connection expires after 270 seconds. The full
+implementation is locally tested and deployed with approval. Hosted transport
+and invalid-ticket rejection passed. The website was rebuilt with the realtime
+URL after owner approval. Valid-user acceptance remains pending; see decision 0007.
 
 Requirements:
 - Use an external Socket.IO adapter / shared event transport when multiple instances are involved.

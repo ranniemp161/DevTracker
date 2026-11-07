@@ -26,6 +26,7 @@
     },
     "test": {
       "dependsOn": ["^build"],
+      "env": ["TEST_REDIS_URL"],
       "outputs": []
     }
   }

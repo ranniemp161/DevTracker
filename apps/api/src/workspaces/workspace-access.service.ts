@@ -1,16 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
-import {
-  and,
-  eq,
-  isNull,
-  workspaceMembers,
-  workspaces,
-  type Database,
-  type Executor,
-} from '@devtrack/database';
+import { workspaceMembers, workspaces, type Database, type Executor } from '@devtrack/database';
 import type { WorkspaceRole } from '@devtrack/types';
 import { AppException } from '../common/errors/app.exception';
-import { isUuid } from '../common/pipes/uuid-param.pipe';
+import { findWorkspaceAccess } from '@devtrack/server-core';
 import { DATABASE } from '../database/database.module';
 import { hasAtLeastRole } from './workspace-policy';
 
@@ -40,17 +32,7 @@ export class WorkspaceAccessService {
     minimumRole: WorkspaceRole = 'MEMBER',
     executor: Executor = this.db,
   ): Promise<WorkspaceAccess> {
-    if (!isUuid(workspaceId)) throw notFound();
-
-    const [row] = await executor
-      .select({ workspace: workspaces, membership: workspaceMembers })
-      .from(workspaces)
-      .innerJoin(
-        workspaceMembers,
-        and(eq(workspaceMembers.workspaceId, workspaces.id), eq(workspaceMembers.userId, userId)),
-      )
-      .where(and(eq(workspaces.id, workspaceId), isNull(workspaces.archivedAt)))
-      .limit(1);
+    const row = await findWorkspaceAccess(executor, userId, workspaceId);
 
     if (!row) throw notFound();
     if (!hasAtLeastRole(row.membership.role, minimumRole)) {

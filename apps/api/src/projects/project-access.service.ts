@@ -3,21 +3,18 @@ import {
   and,
   eq,
   inArray,
-  isNull,
   or,
   projectMembers,
   projects,
   users,
   workspaceMembers,
-  workspaces,
   type Database,
   type Executor,
 } from '@devtrack/database';
 import { ErrorCode, type WorkspaceRole } from '@devtrack/types';
 import { AppException } from '../common/errors/app.exception';
-import { isUuid } from '../common/pipes/uuid-param.pipe';
+import { findProjectAccess } from '@devtrack/server-core';
 import { DATABASE } from '../database/database.module';
-import { hasAtLeastRole } from '../workspaces/workspace-policy';
 
 export type ProjectRow = typeof projects.$inferSelect;
 
@@ -52,36 +49,10 @@ export class ProjectAccessService {
     options: ProjectAccessOptions = {},
     executor: Executor = this.db,
   ): Promise<ProjectAccess> {
-    if (!isUuid(projectId)) throw notFound();
-
-    const [row] = await executor
-      .select({
-        project: projects,
-        workspaceRole: workspaceMembers.role,
-        projectMembershipId: projectMembers.id,
-      })
-      .from(projects)
-      .innerJoin(
-        workspaces,
-        and(eq(workspaces.id, projects.workspaceId), isNull(workspaces.archivedAt)),
-      )
-      .innerJoin(
-        workspaceMembers,
-        and(
-          eq(workspaceMembers.workspaceId, projects.workspaceId),
-          eq(workspaceMembers.userId, userId),
-        ),
-      )
-      .leftJoin(
-        projectMembers,
-        and(eq(projectMembers.projectId, projects.id), eq(projectMembers.userId, userId)),
-      )
-      .where(eq(projects.id, projectId))
-      .limit(1);
+    const row = await findProjectAccess(executor, userId, projectId);
 
     if (!row) throw notFound();
-    const canManage = hasAtLeastRole(row.workspaceRole, 'ADMIN');
-    if (!canManage && !row.projectMembershipId) throw notFound();
+    const { canManage } = row;
     if (options.manage && !canManage) {
       throw AppException.forbidden('You need to be a workspace admin to manage this project.');
     }
