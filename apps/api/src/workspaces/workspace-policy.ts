@@ -5,11 +5,9 @@ import type { AssignableWorkspaceRole, WorkspaceRole } from '@devtrack/types';
  * permission matrix is unit-testable; services call these and translate denials into errors.
  */
 
+import { hasAtLeastRole } from '@devtrack/server-core';
+export { hasAtLeastRole } from '@devtrack/server-core';
 const RANK: Record<WorkspaceRole, number> = { OWNER: 3, ADMIN: 2, MEMBER: 1 };
-
-export function hasAtLeastRole(actual: WorkspaceRole, minimum: WorkspaceRole): boolean {
-  return RANK[actual] >= RANK[minimum];
-}
 
 export function compareRoles(a: WorkspaceRole, b: WorkspaceRole): number {
   return RANK[b] - RANK[a];

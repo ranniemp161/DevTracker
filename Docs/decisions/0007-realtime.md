@@ -1,6 +1,6 @@
 # 0007 — Real-time delivery: Socket.IO on Vercel Functions with Redis
 
-- **Status:** Accepted (M7). Running the gateway on Vercel itself still needs a proof-of-concept deploy (see "Not yet verified").
+- **Status:** Accepted (M7). Standalone Vercel hosting probe passed; full authenticated implementation awaits production cutover (see "Not yet verified").
 - **Date:** 2026-11-06
 - **Scope:** Milestone M7 — architecture §4, §10, §14
 - **Records:** Open decisions #2 (Redis provider) and #3 (real-time hosting)
@@ -14,7 +14,23 @@ Vercel Functions support WebSockets, generally available since October 20, 2026 
 - **WebSocket transport only.** HTTP long-polling isn't supported, so server and client both set `transports: ['websocket']`.
 - **A connection stays on one function instance**, and a reconnect may land on another instance. Vercel provides no pub/sub between instances. So **Redis** (`REDIS_URL`, via the Socket.IO Redis adapter) broadcasts across instances. Upstash Redis from the Vercel Marketplace is the expected provider (open decision #2).
 - **Connections end at the function's maximum duration** (300 s on Hobby). The server closes each connection itself after **4.5 minutes** (`REALTIME_MAX_CONNECTION_MS`), and the client reconnects (rule 4).
-- The Socket.IO gateway runs inside the existing Nest API, so there is no second service.
+- **2026-11-07 approved update:** Socket.IO connections run in `apps/realtime`, a
+  separate Vercel project using the proven default-exported HTTP server route.
+  The Nest API retains tickets, outbox publishing, and its Redis adapter; Redis
+  carries broadcasts to the connection servers. The Nest gateway remains for
+  local development and existing tests. Business writes and the durable outbox
+  remain in the API.
+
+  Both use `@devtrack/server-core`: the same ticket format, session lookup,
+  workspace/project visibility queries, UUID checks, and room helpers. REST
+  services retain role/write-policy errors around those shared queries. The
+  standalone server serializes room operations, caps subscriptions at 50, and
+  expires connections after 270 seconds (function maximum: 300 seconds).
+
+  The authenticated server was deployed with owner approval on 2026-11-07.
+  Hosted WebSocket connection and invalid-ticket rejection passed; Redis startup
+  succeeded. A valid user ticket, matching API Redis delivery, and website
+  cutover remain to be verified (details below).
 
 Without `REDIS_URL` (development, tests), broadcasting stays inside one process. Production requires `REDIS_URL` and `REALTIME_SECRET`.
 
@@ -31,7 +47,7 @@ Hobby cron runs only once a day, so recovery jobs are triggered without Vercel C
 
 ## 3. Authentication: connection tickets
 
-The website reaches the API through its same-origin `/api/v1` proxy, so the session cookie belongs to the website's origin. Socket.IO connects to the **API origin directly** (`NEXT_PUBLIC_REALTIME_URL`), because the Next.js proxy doesn't carry WebSocket upgrades. The cookie isn't sent there. So:
+The website reaches the API through its same-origin `/api/v1` proxy, so the session cookie belongs to the website's origin. Socket.IO connects to the **realtime origin directly** (`NEXT_PUBLIC_REALTIME_URL`), because the Next.js proxy doesn't carry WebSocket upgrades. The cookie isn't sent there. So:
 
 1. The browser calls `POST /api/v1/realtime/token` through the proxy. This is cookie-authenticated and requires a verified email.
 2. The API returns a **60-second ticket**: `{ sid, uid, exp }`, signed with HMAC-SHA256 using `REALTIME_SECRET`.
@@ -90,11 +106,76 @@ The socket path is `/api/v1/realtime/socket`. Socket.IO answers every URL under 
 | GET    | `/internal/realtime/outbox/flush` | Scheduler (`Bearer CRON_SECRET`)                                                                                                                      |
 | WS     | `/api/v1/realtime/socket`         | Ticket in `auth.token`. Events: `subscribe`, `unsubscribe` (with ack). Server events: `realtime.ready`, `realtime.error`, and every outbox event type |
 
+## Authenticated deployment (2026-11-07)
+
+- Owner configured the four Production variables and approved deployment to
+  `devtrack-realtime-poc`, root `apps/realtime`.
+- Deployment: `dpl_62y7NSevRLvqx9YXC6MqyZ7yuXBN`, aliased to
+  `https://devtrack-realtime-poc.vercel.app`.
+- Hosted check: `connect` fired using `websocket`; a fake ticket received
+  `realtime.error { code: 'UNAUTHENTICATED' }`, followed by
+  `disconnect: io server disconnect`. No `realtime.ready` was emitted.
+- Redis initialization succeeded before accepting that connection. This does
+  not prove that the supplied Redis/key/database values match the API.
+- API and website deployments were unchanged. No application data was written.
+- Pending: a real API-issued ticket accepted against an active session, authorized
+  and denied project subscriptions, API-to-realtime Redis delivery, website URL
+  update/rebuild with separate approval, and two-browser acceptance.
+
+## Website cutover (2026-11-07)
+
+- With owner approval, the website Production `NEXT_PUBLIC_REALTIME_URL` was set
+  to `https://devtrack-realtime-poc.vercel.app` and the website was rebuilt.
+- Website deployment: `dpl_F3q5jVUyDW17BGifQvy7evb6SNxb`, aliased to
+  `https://dev-tracker-website.vercel.app`.
+- The served app page returned HTTP 200; its JavaScript chunk
+  `/_next/static/immutable/chunks/40r1iono9v29w.js` contains the new realtime URL.
+  The API health endpoint returned HTTP 200.
+- A socket using the website's Origin connected to the realtime server, received
+  `UNAUTHENTICATED` for a fake ticket, and was disconnected by the server.
+- No signed-in browser session was available to the tools. Valid-user ticket
+  acceptance, API-to-realtime Redis delivery, denied subscriptions, and the
+  two-user browser check remain pending. Do not mark release acceptance complete.
+- No API redeployment, production application-data writes, or push was performed.
+
 ## Not yet verified
 
-- **A Nest gateway on Vercel.** Vercel documents Express, `ws` and Socket.IO servers. Whether a NestJS application, deployed as a Vercel function, accepts WebSocket upgrades on its HTTP server must be confirmed with a deploy in M8, which is where deployment is configured.
-  - **If it doesn't work:** keep the publisher and client and change only the transport. Either use a small Socket.IO-only Vercel function (Express/`ws` style, as documented) sharing the same Redis and ticket secret, or use a managed service. The outbox, tickets, rooms and client contract stay the same.
+- **2026-11-07 standalone probe: passed.** With owner approval, `apps/realtime`
+  was deployed as project `devtrack-realtime-poc` (root `apps/realtime`, Other
+  preset, Node 24, Fluid compute). A Socket.IO client connected to
+  `https://devtrack-realtime-poc.vercel.app` at `/api/v1/realtime/socket` using
+  only WebSocket transport: `connect` fired, followed by `realtime.ready`.
+  Deployment: `dpl_bLM5RGGciBpaPtNfDjzPiFBMDHuQ`.
+  - The entry is a default-exported HTTP server at
+    `api/v1/realtime/socket.mjs`. Rewriting to `/api/socket` returned 404;
+    placing the function directly at the public socket path fixed the handshake.
+  - The Other preset needs a `public` output directory. Build command and output
+    are explicit in `apps/realtime/vercel.json`.
+  - This probe has no authentication, database, Redis, or business events. The
+    existing website and API deployments were not changed. Full authenticated
+    delivery and cross-instance publishing remain unverified; this result does
+    not complete the realtime production acceptance criteria.
+
+- **Nest gateway hosting failed in the handoff.** Upgrade requests reached Express and returned 404. The standalone deployment passed transport and invalid-ticket checks; valid-user production acceptance is still pending.
+  - **If the standalone deployment fails acceptance:** keep the publisher and client and change only the transport. Either use a small Socket.IO-only Vercel function (Express/`ws` style, as documented) sharing the same Redis and ticket secret, or use a managed service. The outbox, tickets, rooms and client contract stay the same.
 - **Billing for idle connections.** Vercel bills active CPU only while messages are processed. Whether provisioned memory is billed while a connection is open and idle isn't documented. Check it in the Vercel usage dashboard after deploying.
+
+## Local validation of the standalone implementation (2026-11-07)
+
+- All 24 Turborepo typecheck/lint/test/build tasks passed, including the existing
+  API regression suite and eight standalone/configuration tests. The standalone
+  suite ran against PGlite and an isolated Redis 7 container, with no skipped
+  Redis test. CI now provides Redis for the same check.
+- Coverage includes forged/expired tickets, expired/revoked sessions, verified
+  email and user binding, origin checks, denied rooms, archived workspaces,
+  unsubscribe, reconnect authorization, concurrent room limits, and cross-server
+  delivery to authorized project/personal rooms without outsider delivery.
+- The actual bundled function entry passed a handshake/rejection smoke test with
+  `--no-experimental-require-module` and synthetic settings. Production Redis
+  is required even when `NODE_ENV` is absent (production is the default).
+- Formatting and frozen-lockfile install passed. No production deployment,
+  environment update, database access or push occurred during local implementation;
+  the later approved deployment is recorded above.
 
 ## Implementation notes
 

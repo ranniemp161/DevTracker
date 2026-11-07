@@ -1,3 +1,4 @@
+import { findActiveSession } from '@devtrack/server-core';
 import { Inject, Injectable } from '@nestjs/common';
 import { sessions, users, type Database, type Executor, and, eq, gt } from '@devtrack/database';
 import { generateToken, hashToken } from '../common/crypto/tokens';
@@ -39,13 +40,7 @@ export class SessionsService {
 
   /** A session by ID, if it still exists and has not expired (real-time connections, M7). */
   async findActive(sessionId: string): Promise<{ user: User; session: Session } | null> {
-    const [row] = await this.db
-      .select({ session: sessions, user: users })
-      .from(sessions)
-      .innerJoin(users, eq(users.id, sessions.userId))
-      .where(and(eq(sessions.id, sessionId), gt(sessions.expiresAt, new Date())))
-      .limit(1);
-    return row ?? null;
+    return findActiveSession(this.db, sessionId);
   }
 
   async revoke(token: string): Promise<void> {

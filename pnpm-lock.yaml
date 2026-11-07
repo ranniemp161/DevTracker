@@ -181,6 +181,9 @@ importers:
       '@devtrack/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@devtrack/server-core':
+        specifier: workspace:*
+        version: link:../../packages/server-core
       '@devtrack/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -297,6 +300,61 @@ importers:
         specifier: ^5.1.0
         version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
 
+  apps/realtime:
+    dependencies:
+      '@devtrack/database':
+        specifier: workspace:*
+        version: link:../../packages/database
+      '@devtrack/server-core':
+        specifier: workspace:*
+        version: link:../../packages/server-core
+      '@socket.io/redis-adapter':
+        specifier: ^8.3.0
+        version: 8.3.0(socket.io-adapter@2.5.8(supports-color@8.1.1))(supports-color@8.1.1)
+      drizzle-orm:
+        specifier: ^0.45.4
+        version: 0.45.4(@electric-sql/pglite@0.5.15)(@opentelemetry/api@1.10.0)(@types/pg@8.23.1)(pg@8.23.1)
+      pg:
+        specifier: ^8.23.1
+        version: 8.23.1
+      redis:
+        specifier: ^6.3.1
+        version: 6.3.1(@opentelemetry/api@1.10.0)
+      socket.io:
+        specifier: ^4.8.4
+        version: 4.8.4(supports-color@8.1.1)
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@devtrack/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@devtrack/eslint-config':
+        specifier: workspace:*
+        version: link:../../packages/eslint-config
+      '@electric-sql/pglite':
+        specifier: ^0.5.15
+        version: 0.5.15
+      '@types/node':
+        specifier: ^26.6.6
+        version: 26.6.6
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
+      eslint:
+        specifier: ^10.14.0
+        version: 10.14.0(jiti@2.7.0)(supports-color@8.1.1)
+      socket.io-client:
+        specifier: ^4.8.4
+        version: 4.8.4(supports-color@8.1.1)
+      typescript:
+        specifier: ~6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^5.1.0
+        version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
+
   apps/website:
     dependencies:
       '@devtrack/types':
@@ -405,6 +463,31 @@ importers:
       typescript-eslint:
         specifier: ^8.72.1
         version: 8.72.1(eslint@10.14.0(jiti@2.7.0)(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3)
+
+  packages/server-core:
+    dependencies:
+      '@devtrack/database':
+        specifier: workspace:*
+        version: link:../database
+      '@devtrack/types':
+        specifier: workspace:*
+        version: link:../types
+    devDependencies:
+      '@devtrack/config':
+        specifier: workspace:*
+        version: link:../config
+      '@devtrack/eslint-config':
+        specifier: workspace:*
+        version: link:../eslint-config
+      '@types/node':
+        specifier: ^26.6.6
+        version: 26.6.6
+      eslint:
+        specifier: ^10.14.0
+        version: 10.14.0(jiti@2.7.0)(supports-color@8.1.1)
+      typescript:
+        specifier: ~6.0.3
+        version: 6.0.3
 
   packages/types:
     devDependencies:

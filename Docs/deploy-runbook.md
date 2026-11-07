@@ -63,6 +63,33 @@ Set these for **Production** in each project (Settings → Environment Variables
 
 The API refuses to start in production if a required value is missing or malformed, and its log lists every problem.
 
+## Realtime cutover addendum (2026-11-07)
+
+The Nest gateway's Vercel upgrade path returned 404; the standalone probe at
+`https://devtrack-realtime-poc.vercel.app` passed. The authenticated server and
+website URL cutover were subsequently deployed with owner approval on 2026-11-07.
+Transport and fake-ticket rejection pass; valid-user acceptance is still pending.
+See decision 0007 for deployment IDs and verification evidence.
+
+With owner approval, configure the realtime project with Root Directory
+`apps/realtime`, Other preset, Node 24, and Fluid compute. Its checked-in
+`vercel.json` builds workspace dependencies and sets the function maximum to
+300 seconds. Set `DATABASE_URL`, `REDIS_URL`, `REALTIME_SECRET`, and `WEB_ORIGIN`
+to the same values used by the API. Transfer values securely; never print them
+or copy them into source control. No migration is needed for this change.
+
+Deploy realtime first and verify authentication and Redis delivery before
+changing the website. Then set `NEXT_PUBLIC_REALTIME_URL` to the realtime URL
+and rebuild/redeploy the website. The existing API publisher remains active
+through its Redis adapter. The API's extracted queries preserve its current
+behavior; its next deployment follows the same approved build pipeline.
+
+Use [apps/realtime/README.md](../apps/realtime/README.md) for exact checks.
+Production sign-off still requires two authorized browsers receiving each
+other's changes within about two seconds and an outsider denied subscription.
+The fake-ticket socket check proves transport and rejection only. The older
+API-hosted WebSocket check below is superseded by this addendum.
+
 ## 3. Migrate the production database
 
 ```bash

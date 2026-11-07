@@ -25,6 +25,18 @@ jobs:
     name: Format, lint, typecheck, test, build
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      TEST_REDIS_URL: redis://127.0.0.1:6379
     steps:
       - uses: actions/checkout@v5
 
@@ -53,6 +65,9 @@ jobs:
       - name: Lint, typecheck, test and build
         # Tests use in-memory Postgres (PGlite): no database or secrets are needed.
         run: pnpm turbo run lint typecheck test build
+
+      - name: Verify realtime ESM runtime
+        run: pnpm --filter @devtrack/realtime test:bundle
 
       - name: Check migrations match the schema
         # `check` validates the migration history. `generate` must find nothing new: a schema
