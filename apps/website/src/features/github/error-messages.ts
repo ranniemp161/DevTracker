@@ -5,6 +5,8 @@ const MESSAGES: Record<string, string> = {
     'The GitHub installation session expired or did not start here. Please click "Install GitHub App" again.',
   GITHUB_INSTALL_NOT_AUTHORIZED:
     'GitHub did not confirm that you can manage that installation, so it was not connected.',
+  GITHUB_NO_INSTALLATION_FOUND:
+    'GitHub did not list any DevTrack installation you can connect here. Use "Install GitHub App" instead.',
   GITHUB_INSTALLATION_IN_USE:
     'That GitHub installation is already connected to another DevTrack workspace.',
   GITHUB_API_ERROR: 'GitHub could not be reached. Please try again.',
