@@ -59,6 +59,12 @@ export const projects = pgTable(
      * `UPDATE … RETURNING` inside the task-creation transaction; numbers are never reused.
      */
     nextTaskNumber: integer('next_task_number').notNull().default(1),
+    /**
+     * M9: next chat message sequence to hand out per project. Incremented under row lock
+     * in the message-creation transaction; sequences are strictly linear and monotonic.
+     */
+    nextMessageSequence: integer('next_message_sequence').notNull().default(1),
+
     createdAt: timestamptz('created_at').notNull().defaultNow(),
     updatedAt: timestamptz('updated_at')
       .notNull()

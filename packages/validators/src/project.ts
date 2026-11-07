@@ -128,7 +128,7 @@ export type AddAssigneesInput = z.infer<typeof addAssigneesSchema>;
 export const listTasksQuerySchema = z.object({
   status: taskStatusSchema.optional(),
   priority: taskPrioritySchema.optional(),
-  assigneeId: uuid.optional(),
+  assigneeId: z.union([uuid, z.literal('unassigned')]).optional(),
   labelId: uuid.optional(),
   cursor: z.string().max(100).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),

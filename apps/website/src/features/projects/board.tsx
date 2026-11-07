@@ -14,6 +14,7 @@ import {
 } from './labels';
 import { LabelChip } from './label-chip';
 import { useProject } from './project-context';
+import { filterTask, TaskFilterBar, useTaskFilters } from './task-filters';
 import { useProjectTasks } from './use-project-tasks';
 
 const byPriorityThenAge = (a: Task, b: Task) =>
@@ -21,8 +22,9 @@ const byPriorityThenAge = (a: Task, b: Task) =>
 
 /** Kanban view: one column per status; dropping a card in a column changes its status (M3 rule 8). */
 export function Board() {
-  const { project, readOnly } = useProject();
+  const { project, members, readOnly } = useProject();
   const { tasks, setTasks, error, reload } = useProjectTasks(project.id);
+  const { filters } = useTaskFilters();
   const [dropError, setDropError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<TaskStatus | null>(null);
 
@@ -56,12 +58,17 @@ export function Board() {
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <TaskFilterBar workspaceId={project.workspaceId} members={members} />
+      </div>
       {readOnly ? null : <QuickAdd onCreated={(t) => setTasks((c) => [t, ...(c ?? [])])} />}
       {dropError ? <Alert>{dropError}</Alert> : null}
       <div className="-mx-6 overflow-x-auto px-6 pb-2">
         <div className="grid min-w-[1080px] grid-cols-6 gap-3">
           {TASK_STATUSES.map((status) => {
-            const column = tasks.filter((t) => t.status === status).sort(byPriorityThenAge);
+            const column = tasks
+              .filter((t) => t.status === status && filterTask(t, filters))
+              .sort(byPriorityThenAge);
             return (
               <section
                 key={status}
@@ -87,7 +94,13 @@ export function Board() {
                 </h2>
                 <ul className="space-y-2">
                   {column.map((task) => (
-                    <TaskCard key={task.id} task={task} draggable={!readOnly} />
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      draggable={!readOnly}
+                      onMove={moveTask}
+                      readOnly={readOnly}
+                    />
                   ))}
                 </ul>
               </section>
@@ -102,7 +115,17 @@ export function Board() {
   );
 }
 
-function TaskCard({ task, draggable }: { task: Task; draggable: boolean }) {
+function TaskCard({
+  task,
+  draggable,
+  onMove,
+  readOnly,
+}: {
+  task: Task;
+  draggable: boolean;
+  onMove: (taskId: string, status: TaskStatus) => void;
+  readOnly: boolean;
+}) {
   const { project } = useProject();
   return (
     <li
@@ -111,11 +134,35 @@ function TaskCard({ task, draggable }: { task: Task; draggable: boolean }) {
         e.dataTransfer.setData('text/devtrack-task', task.id);
         e.dataTransfer.effectAllowed = 'move';
       }}
-      className="rounded-md border border-neutral-200 bg-white p-2.5 shadow-xs"
+      className="group rounded-md border border-neutral-200 bg-white p-2.5 shadow-xs transition hover:border-neutral-300"
     >
-      <Link href={`/projects/${project.id}/tasks/${task.id}`} className="block space-y-2">
-        <p className="text-xs font-medium text-neutral-500">{task.key}</p>
-        <p className="text-sm leading-snug font-medium">{task.title}</p>
+      <div className="flex items-start justify-between gap-1.5">
+        <Link
+          href={`/projects/${project.id}/tasks/${task.id}`}
+          className="text-xs font-medium text-neutral-500 hover:underline"
+        >
+          {task.key}
+        </Link>
+        {!readOnly ? (
+          <label className="text-xs">
+            <span className="sr-only">Change status for {task.key}</span>
+            <select
+              value={task.status}
+              onChange={(e) => onMove(task.id, e.target.value as TaskStatus)}
+              className="rounded border border-neutral-200 bg-white px-1 py-0.5 text-[11px] font-medium text-neutral-600 focus:border-neutral-900 focus:outline-none"
+              title="Move to status"
+            >
+              {TASK_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {TASK_STATUS_LABEL[s]}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+      </div>
+      <Link href={`/projects/${project.id}/tasks/${task.id}`} className="mt-1 block space-y-2">
+        <p className="text-sm font-medium leading-snug text-neutral-900">{task.title}</p>
         {task.labels.length > 0 ? (
           <div className="flex flex-wrap gap-1">
             {task.labels.map((l) => (
@@ -143,10 +190,27 @@ function TaskCard({ task, draggable }: { task: Task; draggable: boolean }) {
 
 function QuickAdd({ onCreated }: { onCreated: (task: Task) => void }) {
   const { project } = useProject();
-  const [title, setTitle] = useState('');
+  const draftKey = `devtrack_task_draft_${project.id}`;
+  const [title, setTitle] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem(draftKey) ?? '';
+    }
+    return '';
+  });
   const [status, setStatus] = useState<TaskStatus>('TODO');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function handleTitleChange(val: string) {
+    setTitle(val);
+    if (typeof window !== 'undefined') {
+      if (val) {
+        sessionStorage.setItem(draftKey, val);
+      } else {
+        sessionStorage.removeItem(draftKey);
+      }
+    }
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -158,7 +222,7 @@ function QuickAdd({ onCreated }: { onCreated: (task: Task) => void }) {
         body: { title, status },
       });
       onCreated(task);
-      setTitle('');
+      handleTitleChange('');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not create the task.');
     } finally {
@@ -174,7 +238,7 @@ function QuickAdd({ onCreated }: { onCreated: (task: Task) => void }) {
       <input
         id="quick-add-title"
         value={title}
-        onChange={(e) => setTitle(e.target.value)}
+        onChange={(e) => handleTitleChange(e.target.value)}
         placeholder={`Add a task to ${project.key}…`}
         maxLength={200}
         className="min-w-64 flex-1 rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"

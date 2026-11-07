@@ -133,9 +133,20 @@ function TaskEditor({ task, onSaved }: { task: Task; onSaved: () => void }) {
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
       <form onSubmit={save} className="space-y-4">
-        <Link href={`/projects/${project.id}`} className="text-sm text-neutral-600 hover:underline">
-          ← Board
-        </Link>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Link
+            href={`/projects/${project.id}`}
+            className="text-sm text-neutral-600 hover:underline"
+          >
+            ← Board
+          </Link>
+          <Link
+            href={`/projects/${project.id}/chat?task=${task.id}`}
+            className="inline-flex items-center gap-1.5 rounded-md border border-neutral-300 bg-white px-2.5 py-1 text-xs font-medium text-neutral-700 shadow-xs hover:border-neutral-400 hover:text-neutral-900"
+          >
+            <span>💬</span> Discuss in chat
+          </Link>
+        </div>
         <p className="text-sm font-medium text-neutral-500">{task.key}</p>
         {error ? <Alert>{error}</Alert> : null}
         <Field

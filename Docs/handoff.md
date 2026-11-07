@@ -175,3 +175,50 @@ setTimeout(()=>process.exit(1),20000);" https://<realtime-or-api-url>
 - **Decisions and docs:** before changing an architectural decision, explain the trade-off and get approval. Record approved decisions in `Docs/decisions/` and keep `README.md` and the architecture doc in step.
 - **Secrets:** never commit them, never print them in logs or chat, and never put them in activity or outbox payloads.
 - **Line endings:** the repo uses LF (`.gitattributes`). On Windows, write files with UTF-8 and LF.
+
+## 9. Project Chat and Core UX Upgrades (Milestones 9–12)
+
+Implemented according to [`Docs/project-chat-and-ux-plan.md`](file:///D:/Projects/DevTracker/Docs/project-chat-and-ux-plan.md) and [`Docs/decisions/0009-project-chat.md`](file:///D:/Projects/DevTracker/Docs/decisions/0009-project-chat.md).
+
+### 9.1 Database & Persistence
+
+- **Migration:** `packages/database/migrations/0007_project_chat.sql`.
+- **Tables:**
+  - `project_messages`: monotonic `sequence` per project allocated under row lock on `projects.next_message_sequence`. Unique index on `(project_id, author_id, client_request_id)` for idempotent sends. Soft-deletion via `deleted_at`.
+  - `project_message_mentions`: extracted `@username` mentions, linked to project members.
+  - `project_chat_reads`: monotonic tracking of `last_read_sequence` per user per project.
+  - `projects.next_message_sequence`: atomic sequence generator.
+- **Privacy Invariant:** Outbox events (`outbox_events`), Socket.IO broadcasts, activity items, and server logs NEVER carry message bodies—only `{ messageId, sequence, projectId, actorId }`. Clients fetch full message payloads via authenticated REST endpoints.
+
+### 9.2 API & Realtime
+
+- Endpoints in `apps/api/src/chat/`:
+  - `POST /api/v1/projects/:id/messages`: send message with idempotency.
+  - `GET /api/v1/projects/:id/messages`: cursor-paginated messages (`limit`, `before`, `after`, `around`).
+  - `PATCH /api/v1/messages/:id`: author-only message edit.
+  - `DELETE /api/v1/messages/:id`: author or admin/owner moderation soft-deletion.
+  - `PUT /api/v1/projects/:id/chat/read`: monotonic read state advance.
+  - `GET /api/v1/workspaces/:id/chat/unread`: batch unread counts across all accessible projects.
+- Realtime routing in `packages/server-core/src/rooms.ts`:
+  - `chat.message.*` -> `project:<projectId>`
+  - `chat.read` -> `user:<userId>`
+- Scoped notifications in `apps/api/src/notifications/notifications.service.ts`:
+  - Mentions notify eligible project members with `resourceType: 'chat_message'` and deep link `/projects/:id/chat?message=<id>`. Revoked/former members cannot see or receive notifications.
+
+### 9.3 Frontend Live Chat (`/projects/[id]/chat`)
+
+- **Composer:** In-memory drafts per project, @mention autocomplete dropdown, task reference picker pill, keyboard shortcuts (Enter to send, Shift+Enter for newline).
+- **History:** Monotonically ordered, grouped by calendar date dividers, "Load earlier" preserving scroll position relative to viewport.
+- **Optimistic UI:** Messages display immediately as sending/failed, with retry utilizing original `clientRequestId`.
+- **Deep Linking:** Navigating with `?message=<id>` fetches the message around the target, scrolls it into center view, and temporarily highlights it with an amber border.
+- **Resilience:** Visual banner on disconnect with fallback 15s polling, automatic message reconciliation on reconnect.
+- **Unread Tracking:** Unread count badge on Project Chat tab and Project list cards, auto-cleared when scrolled near the bottom.
+
+### 9.4 Core UX Improvements
+
+- **Workspace Navigation:** Fixed workspace switcher in header to resolve workspace from current project on `/projects/:id` routes.
+- **Horizontal Scrollable Tabs:** Project navigation tabs scroll smoothly on mobile/narrow viewports.
+- **Unified URL Filters:** Shared query parameters (`?status=...&priority=...&assignee=...&label=...`) across Kanban Board and List views with tab-switching query preservation. Added "unassigned" option support.
+- **Accessible Kanban Status Action:** Each task card includes a compact status `<select>` for keyboard and touch accessibility alongside drag-and-drop.
+- **Task Creation Draft Retention:** `QuickAdd` preserves draft title in session storage across reloads and tab navigations.
+- **Task Detail Enhancements:** Clear grouping with a direct "Discuss in chat" button linking to `/projects/[id]/chat?task=[taskId]`.

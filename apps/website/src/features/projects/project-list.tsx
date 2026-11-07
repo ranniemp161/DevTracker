@@ -1,8 +1,8 @@
 'use client';
 
-import type { Project } from '@devtrack/types';
+import type { Project, ProjectChatUnreadSummary } from '@devtrack/types';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Badge } from '@/components/ui';
 import { useApiQuery } from '@/lib/use-api-query';
 import { isAdmin } from '../workspaces/permissions';
@@ -16,6 +16,21 @@ export function ProjectList() {
   const projects = useApiQuery<Project[]>(
     `/workspaces/${workspace.id}/projects${showArchived ? '?includeArchived=true' : ''}`,
   );
+  const unreadQuery = useApiQuery<ProjectChatUnreadSummary[]>(
+    `/workspaces/${workspace.id}/chat/unread`,
+  );
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      unreadQuery.reload();
+    }, 30_000);
+    const onFocus = () => unreadQuery.reload();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [unreadQuery]);
 
   return (
     <div className="space-y-4">
@@ -48,31 +63,41 @@ export function ProjectList() {
       ) : null}
 
       <ul className="grid gap-4 sm:grid-cols-2">
-        {projects.data?.map((p) => (
-          <li key={p.id}>
-            <Link
-              href={`/projects/${p.id}`}
-              className="block rounded-xl border border-neutral-200 bg-white p-5 hover:border-neutral-400"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold tracking-wide text-neutral-500">{p.key}</p>
-                  <p className="truncate font-medium">{p.name}</p>
+        {projects.data?.map((p) => {
+          const unread = unreadQuery.data?.find((u) => u.projectId === p.id)?.unreadCount ?? 0;
+          return (
+            <li key={p.id}>
+              <Link
+                href={`/projects/${p.id}`}
+                className="block rounded-xl border border-neutral-200 bg-white p-5 hover:border-neutral-400"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold tracking-wide text-neutral-500">{p.key}</p>
+                    <p className="truncate font-medium">{p.name}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {unread > 0 ? (
+                      <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">
+                        {unread} unread
+                      </span>
+                    ) : null}
+                    <Badge tone={p.status === 'ACTIVE' ? 'green' : 'neutral'}>
+                      {PROJECT_STATUS_LABEL[p.status]}
+                    </Badge>
+                  </div>
                 </div>
-                <Badge tone={p.status === 'ACTIVE' ? 'green' : 'neutral'}>
-                  {PROJECT_STATUS_LABEL[p.status]}
-                </Badge>
-              </div>
-              {p.description ? (
-                <p className="mt-2 line-clamp-2 text-sm text-neutral-600">{p.description}</p>
-              ) : null}
-              <p className="mt-3 text-xs text-neutral-500">
-                {p.memberCount} {p.memberCount === 1 ? 'member' : 'members'}
-                {p.targetDate ? ` · target ${formatDate(p.targetDate)}` : ''}
-              </p>
-            </Link>
-          </li>
-        ))}
+                {p.description ? (
+                  <p className="mt-2 line-clamp-2 text-sm text-neutral-600">{p.description}</p>
+                ) : null}
+                <p className="mt-3 text-xs text-neutral-500">
+                  {p.memberCount} {p.memberCount === 1 ? 'member' : 'members'}
+                  {p.targetDate ? ` · target ${formatDate(p.targetDate)}` : ''}
+                </p>
+              </Link>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

@@ -27,6 +27,8 @@ function linkFor(n: NotificationRow): string | null {
   if (!n.projectId) return null;
   if (n.resourceType === 'task') return `/projects/${n.projectId}/tasks/${n.resourceId}`;
   if (n.resourceType === 'milestone') return `/projects/${n.projectId}/milestones`;
+  if (n.resourceType === 'chat_message')
+    return `/projects/${n.projectId}/chat?message=${n.resourceId}`;
   return `/projects/${n.projectId}`;
 }
 
@@ -140,6 +142,12 @@ export class NotificationsService {
           .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
           .where(and(eq(workspaceMembers.userId, userId), isNull(workspaces.archivedAt))),
       ),
+      sql`(${notifications.resourceType} != 'chat_message' OR ${notifications.projectId} IN (
+        SELECT p.id FROM projects p
+        INNER JOIN workspace_members wm ON wm.workspace_id = p.workspace_id AND wm.user_id = ${userId}
+        LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ${userId}
+        WHERE wm.role IN ('OWNER', 'ADMIN') OR pm.user_id IS NOT NULL
+      ))`,
     ];
   }
 }

@@ -27,6 +27,7 @@ export {
   min,
   ne,
   not,
+  notInArray,
   or,
   sql,
 } from 'drizzle-orm';

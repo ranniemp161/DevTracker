@@ -8,6 +8,7 @@ import {
   labels,
   lt,
   ne,
+  notInArray,
   projectMembers,
   projects,
   sql,
@@ -118,15 +119,21 @@ export class TasksService {
     if (query.status) conditions.push(eq(tasks.status, query.status));
     if (query.priority) conditions.push(eq(tasks.priority, query.priority));
     if (query.assigneeId) {
-      conditions.push(
-        inArray(
-          tasks.id,
-          this.db
-            .select({ id: taskAssignees.taskId })
-            .from(taskAssignees)
-            .where(eq(taskAssignees.userId, query.assigneeId.toLowerCase())),
-        ),
-      );
+      if (query.assigneeId === 'unassigned') {
+        conditions.push(
+          notInArray(tasks.id, this.db.select({ id: taskAssignees.taskId }).from(taskAssignees)),
+        );
+      } else {
+        conditions.push(
+          inArray(
+            tasks.id,
+            this.db
+              .select({ id: taskAssignees.taskId })
+              .from(taskAssignees)
+              .where(eq(taskAssignees.userId, query.assigneeId.toLowerCase())),
+          ),
+        );
+      }
     }
     if (query.labelId) {
       conditions.push(

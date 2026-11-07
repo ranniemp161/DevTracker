@@ -1,6 +1,14 @@
 'use client';
 
-import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { api } from './api';
 
@@ -38,11 +46,23 @@ class RealtimeClient {
   private readonly rooms = new Map<string, number>();
   private readonly listeners = new Set<Listener>();
   private readonly reconnectListeners = new Set<() => void>();
+  private readonly connectionListeners = new Set<(connected: boolean) => void>();
   private readonly seen: string[] = [];
   private backoff = MIN_BACKOFF_MS;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private everReady = false;
   private stopped = false;
+  private connected = false;
+
+  isConnected(): boolean {
+    return this.connected;
+  }
+
+  private setConnected(val: boolean): void {
+    if (this.connected === val) return;
+    this.connected = val;
+    for (const fn of this.connectionListeners) fn(val);
+  }
 
   start(): void {
     if (this.socket || !REALTIME_URL) return;
@@ -63,12 +83,19 @@ class RealtimeClient {
     });
     socket.on('realtime.ready', () => {
       this.backoff = MIN_BACKOFF_MS;
+      this.setConnected(true);
       for (const room of this.rooms.keys()) socket.emit('subscribe', { room });
       if (this.everReady) for (const fn of this.reconnectListeners) fn();
       this.everReady = true;
     });
-    socket.on('disconnect', () => this.scheduleReconnect());
-    socket.on('connect_error', () => this.scheduleReconnect());
+    socket.on('disconnect', () => {
+      this.setConnected(false);
+      this.scheduleReconnect();
+    });
+    socket.on('connect_error', () => {
+      this.setConnected(false);
+      this.scheduleReconnect();
+    });
     socket.onAny((type: string, event: RealtimeEvent) => {
       if (type.startsWith('realtime.') || !event?.id) return;
       if (this.seen.includes(event.id)) return;
@@ -121,6 +148,11 @@ class RealtimeClient {
   onReconnect(fn: () => void): () => void {
     this.reconnectListeners.add(fn);
     return () => this.reconnectListeners.delete(fn);
+  }
+
+  onConnectionChange(fn: (connected: boolean) => void): () => void {
+    this.connectionListeners.add(fn);
+    return () => this.connectionListeners.delete(fn);
   }
 }
 
@@ -176,4 +208,14 @@ export function useRealtimeRefresh(
       if (timer) clearTimeout(timer);
     };
   }, [client, debounceMs]);
+}
+
+/** Returns true if the WebSocket is currently open and ready. */
+export function useRealtimeConnected(): boolean {
+  const client = useContext(RealtimeContext);
+  return useSyncExternalStore(
+    (notify) => (client ? client.onConnectionChange(notify) : () => {}),
+    () => (client ? client.isConnected() : false),
+    () => false,
+  );
 }
