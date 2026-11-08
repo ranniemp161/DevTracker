@@ -196,9 +196,23 @@ function TaskEditor({
     if (form.priority !== task.priority) body.priority = form.priority;
     if (form.dueDate !== (task.dueDate ?? '')) body.dueDate = form.dueDate || null;
     if (form.milestoneId !== (task.milestoneId ?? '')) body.milestoneId = form.milestoneId || null;
+    let unchanged = false;
     void call(
-      () => api(`/tasks/${task.id}`, { method: 'PATCH', body }),
+      async () => {
+        const { task: updated } = await api<{ task: Task }>(`/tasks/${task.id}`, {
+          method: 'PATCH',
+          body,
+        });
+        // The server trims text, so e.g. a whitespace-only description is not a change. Then
+        // `updatedAt` stays the same, the editor is not re-mounted, and we must reset it here.
+        unchanged = updated.updatedAt === task.updatedAt;
+      },
       () => {
+        if (unchanged) {
+          discard();
+          setSaving(false);
+          return;
+        }
         onFieldsSaved();
         onSaved();
       },
