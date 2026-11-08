@@ -11,9 +11,13 @@ import {
 } from '@nestjs/common';
 import type { Milestone } from '@devtrack/types';
 import {
+  createMilestoneCriterionSchema,
   createMilestoneSchema,
+  updateMilestoneCriterionSchema,
   updateMilestoneSchema,
+  type CreateMilestoneCriterionInput,
   type CreateMilestoneInput,
+  type UpdateMilestoneCriterionInput,
   type UpdateMilestoneInput,
 } from '@devtrack/validators';
 import { CurrentUser } from '../common/decorators/auth.decorators';
@@ -58,5 +62,35 @@ export class MilestonesController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async remove(@CurrentUser() user: User, @Param('id', UuidParamPipe) id: string): Promise<void> {
     await this.milestones.remove(user.id, id);
+  }
+
+  /** Acceptance criteria. Each call returns the whole updated milestone. */
+  @Post('milestones/:id/criteria')
+  @HttpCode(HttpStatus.CREATED)
+  async addCriterion(
+    @CurrentUser() user: User,
+    @Param('id', UuidParamPipe) id: string,
+    @Body(new ZodValidationPipe(createMilestoneCriterionSchema))
+    body: CreateMilestoneCriterionInput,
+  ): Promise<{ milestone: Milestone }> {
+    return { milestone: await this.milestones.addCriterion(user.id, id, body) };
+  }
+
+  @Patch('milestone-criteria/:id')
+  async updateCriterion(
+    @CurrentUser() user: User,
+    @Param('id', UuidParamPipe) id: string,
+    @Body(new ZodValidationPipe(updateMilestoneCriterionSchema))
+    body: UpdateMilestoneCriterionInput,
+  ): Promise<{ milestone: Milestone }> {
+    return { milestone: await this.milestones.updateCriterion(user.id, id, body) };
+  }
+
+  @Delete('milestone-criteria/:id')
+  async removeCriterion(
+    @CurrentUser() user: User,
+    @Param('id', UuidParamPipe) id: string,
+  ): Promise<{ milestone: Milestone }> {
+    return { milestone: await this.milestones.removeCriterion(user.id, id) };
   }
 }

@@ -3,6 +3,7 @@
 import {
   TASK_PRIORITIES,
   TASK_STATUSES,
+  type Milestone,
   type Task,
   type TaskPriority,
   type TaskStatus,
@@ -150,6 +151,7 @@ function TaskEditor({
     status: task.status,
     priority: task.priority,
     dueDate: task.dueDate ?? '',
+    milestoneId: task.milestoneId ?? '',
   });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -162,7 +164,10 @@ function TaskEditor({
     form.description !== (task.description ?? '') ||
     form.status !== task.status ||
     form.priority !== task.priority ||
-    form.dueDate !== (task.dueDate ?? '');
+    form.dueDate !== (task.dueDate ?? '') ||
+    form.milestoneId !== (task.milestoneId ?? '');
+  const milestonesQuery = useApiQuery<Milestone[]>(`/projects/${project.id}/milestones`);
+  const milestones = milestonesQuery.data ?? [];
 
   async function call(fn: () => Promise<unknown>, after: () => void = onSaved) {
     setSaving(true);
@@ -190,6 +195,7 @@ function TaskEditor({
     if (form.status !== task.status) body.status = form.status;
     if (form.priority !== task.priority) body.priority = form.priority;
     if (form.dueDate !== (task.dueDate ?? '')) body.dueDate = form.dueDate || null;
+    if (form.milestoneId !== (task.milestoneId ?? '')) body.milestoneId = form.milestoneId || null;
     void call(
       () => api(`/tasks/${task.id}`, { method: 'PATCH', body }),
       () => {
@@ -207,6 +213,7 @@ function TaskEditor({
       status: task.status,
       priority: task.priority,
       dueDate: task.dueDate ?? '',
+      milestoneId: task.milestoneId ?? '',
     });
   }
 
@@ -361,6 +368,24 @@ function TaskEditor({
                 onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))}
                 className={`${valueControl} px-2 ${form.dueDate ? '' : 'text-fg-subtle'}`}
               />
+            </PropertyRow>
+            <PropertyRow label="Milestone" htmlFor="task-milestone">
+              <select
+                id="task-milestone"
+                value={form.milestoneId}
+                disabled={readOnly}
+                onChange={(e) => setForm((f) => ({ ...f, milestoneId: e.target.value }))}
+                className={`${valueControl} px-2 ${form.milestoneId ? '' : 'text-fg-subtle'}`}
+              >
+                <option value="">None</option>
+                {milestones.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                    {m.status === 'COMPLETED' ? ' (completed)' : ''}
+                  </option>
+                ))}
+              </select>
+              {readOnly ? null : <SelectChevron />}
             </PropertyRow>
           </div>
 

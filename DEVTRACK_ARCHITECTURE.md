@@ -490,6 +490,7 @@ Use PostgreSQL with Drizzle ORM. The list below is the logical model; exact Driz
 - `projects`
 - `project_members`
 - `milestones`
+- `milestone_criteria`
 
 #### Task
 - `tasks`
@@ -579,6 +580,7 @@ Use PostgreSQL with Drizzle ORM. The list below is the logical model; exact Driz
 - `priority`
 - `reporter_id` FK
 - `due_date`
+- `milestone_id` FK nullable (same project; set null when the milestone is deleted)
 - timestamps
 - `completed_at`
 - `deleted_at` nullable (M3: soft deletion)
@@ -622,6 +624,16 @@ Use PostgreSQL with Drizzle ORM. The list below is the logical model; exact Driz
 - `description`
 - `due_date`
 - `status`
+- API adds `taskCounts` `{ total, done }` from non-deleted tasks: real counts, never estimates
+
+**milestone_criteria** (acceptance criteria)
+- `id`
+- `milestone_id` FK (cascade delete)
+- `text`
+- `position` (display order)
+- `done_at`, `done_by` FK nullable (who checked it and when)
+- timestamps
+- Workspace Admins/Owner manage criteria; everyone with project access reads them
 
 **github_installations** (shared metadata; decision record 0010)
 - `id` UUID PK

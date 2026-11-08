@@ -9,6 +9,7 @@ import { api, ApiError } from '@/lib/api';
 import { useApiQuery } from '@/lib/use-api-query';
 import { useAuthForm, withoutBlanks } from '../auth/use-auth-form';
 import { formatDate } from './labels';
+import { MilestoneCriteria, MilestoneProgress } from './milestone-criteria';
 import { useProject } from './project-context';
 
 export function MilestonesPage() {
@@ -80,6 +81,7 @@ function MilestoneRow({
   canManage: boolean;
   onChanged: () => void;
 }) {
+  const { project } = useProject();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -113,6 +115,8 @@ function MilestoneRow({
           </p>
         ) : null}
         {error ? <p className="mt-1 text-sm text-danger">{error}</p> : null}
+        <MilestoneProgress milestone={m} projectId={project.id} />
+        <MilestoneCriteria milestone={m} canManage={canManage} onChanged={onChanged} />
       </div>
       {canManage ? (
         <>

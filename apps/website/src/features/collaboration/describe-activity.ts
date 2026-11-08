@@ -9,6 +9,7 @@ const FIELD_LABEL: Record<string, string> = {
   priority: 'priority',
   dueDate: 'due date',
   description: 'description',
+  milestone: 'milestone',
 };
 
 function value(field: string, v: unknown): string {

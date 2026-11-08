@@ -102,6 +102,7 @@ export const createTaskSchema = z.object({
   priority: taskPrioritySchema.optional(),
   dueDate: optionalDate,
   assigneeIds: userIdList.optional(),
+  milestoneId: uuid.nullable().optional(),
 });
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 
@@ -112,6 +113,8 @@ export const updateTaskSchema = z
     status: taskStatusSchema.optional(),
     priority: taskPrioritySchema.optional(),
     dueDate: optionalDate,
+    /** `null` removes the task from its milestone. */
+    milestoneId: uuid.nullable().optional(),
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), { error: 'Nothing to update.' });
 export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
@@ -130,6 +133,8 @@ export const listTasksQuerySchema = z.object({
   priority: taskPrioritySchema.optional(),
   assigneeId: z.union([uuid, z.literal('unassigned')]).optional(),
   labelId: uuid.optional(),
+  /** A milestone id, or `none` for tasks without a milestone. */
+  milestoneId: z.union([uuid, z.literal('none')]).optional(),
   cursor: z.string().max(100).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
@@ -194,3 +199,22 @@ export const updateMilestoneSchema = z
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), { error: 'Nothing to update.' });
 export type UpdateMilestoneInput = z.infer<typeof updateMilestoneSchema>;
+
+// --- Milestone acceptance criteria ---
+
+const criterionText = z
+  .string({ error: 'Criterion text is required.' })
+  .trim()
+  .min(1, { error: 'Criterion text is required.' })
+  .max(500, { error: 'Criterion text must be at most 500 characters.' });
+
+export const createMilestoneCriterionSchema = z.object({ text: criterionText });
+export type CreateMilestoneCriterionInput = z.infer<typeof createMilestoneCriterionSchema>;
+
+export const updateMilestoneCriterionSchema = z
+  .object({
+    text: criterionText.optional(),
+    done: z.boolean().optional(),
+  })
+  .refine((v) => v.text !== undefined || v.done !== undefined, { error: 'Nothing to update.' });
+export type UpdateMilestoneCriterionInput = z.infer<typeof updateMilestoneCriterionSchema>;

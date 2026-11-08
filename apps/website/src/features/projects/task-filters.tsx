@@ -4,6 +4,7 @@ import {
   TASK_PRIORITIES,
   TASK_STATUSES,
   type Label,
+  type Milestone,
   type ProjectMember,
   type Task,
 } from '@devtrack/types';
@@ -18,6 +19,8 @@ export interface TaskFilters {
   priority: string;
   assigneeId: string;
   labelId: string;
+  /** A milestone id, or `none` for tasks without a milestone. */
+  milestoneId: string;
 }
 
 export function useTaskFilters() {
@@ -31,6 +34,7 @@ export function useTaskFilters() {
       priority: searchParams.get('priority') ?? '',
       assigneeId: searchParams.get('assigneeId') ?? '',
       labelId: searchParams.get('labelId') ?? '',
+      milestoneId: searchParams.get('milestoneId') ?? '',
     }),
     [searchParams],
   );
@@ -54,7 +58,11 @@ export function useTaskFilters() {
   }, [router, pathname]);
 
   const hasActiveFilters = Boolean(
-    filters.status || filters.priority || filters.assigneeId || filters.labelId,
+    filters.status ||
+    filters.priority ||
+    filters.assigneeId ||
+    filters.labelId ||
+    filters.milestoneId,
   );
 
   return { filters, setFilter, clearFilters, hasActiveFilters };
@@ -71,6 +79,15 @@ export function filterTask(task: Task, filters: TaskFilters): boolean {
     }
   }
   if (filters.labelId && !task.labels.some((l) => l.id === filters.labelId)) return false;
+  if (filters.milestoneId) {
+    if (
+      filters.milestoneId === 'none'
+        ? task.milestoneId !== null
+        : task.milestoneId !== filters.milestoneId
+    ) {
+      return false;
+    }
+  }
   return true;
 }
 
@@ -108,14 +125,18 @@ function FilterSelect({
 
 export function TaskFilterBar({
   workspaceId,
+  projectId,
   members,
 }: {
   workspaceId: string;
+  projectId: string;
   members: ProjectMember[];
 }) {
   const { filters, setFilter, clearFilters, hasActiveFilters } = useTaskFilters();
   const labelsQuery = useApiQuery<Label[]>(`/workspaces/${workspaceId}/labels`);
   const labels = labelsQuery.data ?? [];
+  const milestonesQuery = useApiQuery<Milestone[]>(`/projects/${projectId}/milestones`);
+  const milestones = milestonesQuery.data ?? [];
 
   return (
     <div role="group" aria-label="Filters" className="flex flex-wrap items-center gap-2">
@@ -165,6 +186,22 @@ export function TaskFilterBar({
           {labels.map((l) => (
             <option key={l.id} value={l.id}>
               {l.name}
+            </option>
+          ))}
+        </FilterSelect>
+      ) : null}
+
+      {milestones.length > 0 || filters.milestoneId ? (
+        <FilterSelect
+          label="Milestone"
+          value={filters.milestoneId}
+          onChange={(v) => setFilter('milestoneId', v)}
+        >
+          <option value="">Milestone: all</option>
+          <option value="none">No milestone</option>
+          {milestones.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name}
             </option>
           ))}
         </FilterSelect>

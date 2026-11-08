@@ -65,6 +65,8 @@ export interface Task {
   assignees: UserRef[];
   labels: TaskLabel[];
   dueDate: string | null;
+  /** Milestone (deliverable) this task counts toward, in the same project. */
+  milestoneId: string | null;
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
@@ -90,6 +92,20 @@ export interface Milestone {
   description: string | null;
   dueDate: string | null;
   status: MilestoneStatus;
+  /** Real counts of the milestone's non-deleted tasks; never an estimate. */
+  taskCounts: { total: number; done: number };
+  /** Acceptance criteria in display order. */
+  criteria: MilestoneCriterion[];
   createdAt: string;
   updatedAt: string;
+}
+
+/** One acceptance criterion: a checkable statement of what "done" means for a milestone. */
+export interface MilestoneCriterion {
+  id: string;
+  milestoneId: string;
+  text: string;
+  done: boolean;
+  doneAt: string | null;
+  doneBy: UserRef | null;
 }

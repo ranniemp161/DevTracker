@@ -7,6 +7,7 @@ import {
   isNull,
   labels,
   lt,
+  milestones,
   ne,
   notInArray,
   projectMembers,
@@ -69,6 +70,9 @@ export class TasksService {
     const { project } = await this.projectAccess.require(actor.id, projectId, { write: true });
     const assigneeIds = input.assigneeIds ?? [];
     await this.assertProjectMembers(projectId, assigneeIds);
+    const milestoneId = input.milestoneId
+      ? (await this.requireMilestoneIn(projectId, input.milestoneId)).id
+      : null;
     const status = input.status ?? 'TODO';
 
     const taskId = await this.db.transaction(async (tx) => {
@@ -90,6 +94,7 @@ export class TasksService {
           priority: input.priority ?? 'MEDIUM',
           reporterId: actor.id,
           dueDate: input.dueDate ?? null,
+          milestoneId,
           completedAt: status === 'DONE' ? new Date() : null,
         })
         .returning();
@@ -146,6 +151,13 @@ export class TasksService {
         ),
       );
     }
+    if (query.milestoneId) {
+      conditions.push(
+        query.milestoneId === 'none'
+          ? isNull(tasks.milestoneId)
+          : eq(tasks.milestoneId, query.milestoneId.toLowerCase()),
+      );
+    }
     if (query.cursor) {
       conditions.push(lt(tasks.taskNumber, decodeCursor(query.cursor, isTaskCursor).n));
     }
@@ -175,6 +187,21 @@ export class TasksService {
   async update(actor: Actor, taskId: string, input: UpdateTaskInput): Promise<Task> {
     const { task, access } = await this.taskAccess.require(actor.id, taskId, { write: true });
     const changes = describeChanges(task, input);
+    const nextMilestone =
+      input.milestoneId === undefined || input.milestoneId === null
+        ? null
+        : await this.requireMilestoneIn(task.projectId, input.milestoneId);
+    if (input.milestoneId !== undefined && (nextMilestone?.id ?? null) !== task.milestoneId) {
+      // Activity shows names, not ids, so the feed stays readable after renames or deletion.
+      const previous = task.milestoneId
+        ? await this.db
+            .select({ name: milestones.name })
+            .from(milestones)
+            .where(eq(milestones.id, task.milestoneId))
+            .then((r) => r[0]?.name ?? null)
+        : null;
+      changes.milestone = { from: previous, to: nextMilestone?.name ?? null };
+    }
 
     if (Object.keys(changes).length > 0) {
       await this.db.transaction(async (tx) => {
@@ -185,6 +212,7 @@ export class TasksService {
             description: input.description,
             priority: input.priority,
             dueDate: input.dueDate,
+            milestoneId: input.milestoneId === undefined ? undefined : (nextMilestone?.id ?? null),
             status: input.status,
             completedAt: input.status ? completionFor(input.status, task) : undefined,
           })
@@ -378,6 +406,21 @@ export class TasksService {
     }
   }
 
+  /** A milestone may only hold tasks from its own project. */
+  private async requireMilestoneIn(projectId: string, milestoneId: string) {
+    const [milestone] = await this.db
+      .select({ id: milestones.id, name: milestones.name })
+      .from(milestones)
+      .where(and(eq(milestones.id, milestoneId.toLowerCase()), eq(milestones.projectId, projectId)))
+      .limit(1);
+    if (!milestone) {
+      throw AppException.validation([
+        { path: 'milestoneId', message: 'Choose a milestone from this project.' },
+      ]);
+    }
+    return milestone;
+  }
+
   /** Loads tasks with reporter, assignees and labels, preserving the order of `ids`. */
   private async load(ids: string[], projectKey: string): Promise<Task[]> {
     if (ids.length === 0) return [];
@@ -426,6 +469,7 @@ export class TasksService {
         assignees: assigneesByTask.get(task.id) ?? [],
         labels: labelsByTask.get(task.id) ?? [],
         dueDate: task.dueDate,
+        milestoneId: task.milestoneId,
         createdAt: task.createdAt.toISOString(),
         updatedAt: task.updatedAt.toISOString(),
         completedAt: task.completedAt?.toISOString() ?? null,

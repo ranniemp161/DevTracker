@@ -74,7 +74,7 @@ export function TaskList() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
-        <TaskFilterBar workspaceId={project.workspaceId} members={members} />
+        <TaskFilterBar workspaceId={project.workspaceId} projectId={project.id} members={members} />
       </div>
       {error ? <Alert>{error}</Alert> : null}
       <div className="overflow-x-auto rounded-card border border-line bg-surface">
