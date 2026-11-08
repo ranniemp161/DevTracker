@@ -1,16 +1,28 @@
 import {
   Controller,
+  Body,
+  Delete,
   Get,
   HttpStatus,
   Inject,
   Logger,
   Param,
+  Post,
+  Put,
+  HttpCode,
   Query,
   Req,
   Res,
 } from '@nestjs/common';
 import { ErrorCode, type AvailableRepository, type GithubInstallationList } from '@devtrack/types';
-import { listInstallationsQuerySchema, type ListInstallationsQuery } from '@devtrack/validators';
+import {
+  listInstallationsQuerySchema,
+  type ListInstallationsQuery,
+  connectGithubInstallationSchema,
+  type ConnectGithubInstallationInput,
+  updateGithubRepositoryAccessSchema,
+  type UpdateGithubRepositoryAccessInput,
+} from '@devtrack/validators';
 import type { Request, Response } from 'express';
 import { AuthCookiesService } from '../../auth/auth-cookies.service';
 import { CurrentUser, Public } from '../../common/decorators/auth.decorators';
@@ -42,12 +54,17 @@ export class GithubInstallationsController {
   async install(
     @CurrentUser() user: User,
     @Query('workspaceId') workspaceId: unknown,
+    @Query('mode') mode: unknown,
     @Res() res: Response,
   ): Promise<void> {
     const id = str(workspaceId);
     try {
       if (!id || !isUuid(id)) throw AppException.notFound('Workspace not found.');
-      const { installUrl, state } = await this.installations.begin(user.id, id);
+      const { installUrl, state } = await this.installations.begin(
+        user.id,
+        id,
+        mode === 'connect' ? 'connect' : 'install',
+      );
       this.cookies.setGithubInstallState(res, state);
       res.redirect(HttpStatus.FOUND, installUrl);
     } catch (err) {
@@ -76,6 +93,15 @@ export class GithubInstallationsController {
     try {
       const flow = await this.installations.consumeState(str(state), cookieState);
       workspaceId = flow.workspaceId;
+      if (flow.mode === 'connect') {
+        const selectionState = await this.installations.prepareExisting(flow, str(code));
+        this.cookies.setGithubInstallState(res, selectionState);
+        res.redirect(
+          HttpStatus.FOUND,
+          `${this.config.webOrigin}/workspaces/${workspaceId}/settings?github=choose`,
+        );
+        return;
+      }
       const outcome = await this.installations.complete(flow, {
         installationId: str(installationId),
         code: str(code),
@@ -104,6 +130,59 @@ export class GithubInstallationsController {
     @Param('id', UuidParamPipe) id: string,
   ): Promise<AvailableRepository[]> {
     return this.installations.listRepositories(user.id, id);
+  }
+
+  @Get('available-installations')
+  available(
+    @CurrentUser() user: User,
+    @Query(new ZodValidationPipe(listInstallationsQuerySchema)) query: ListInstallationsQuery,
+    @Req() req: Request,
+  ) {
+    return this.installations.available(
+      user.id,
+      query.workspaceId,
+      this.cookies.readGithubInstallState(req),
+    );
+  }
+
+  @Post('connections')
+  async connect(
+    @CurrentUser() user: User,
+    @Body(new ZodValidationPipe(connectGithubInstallationSchema))
+    input: ConnectGithubInstallationInput,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    await this.installations.connectExisting(
+      user.id,
+      input.workspaceId,
+      input.githubInstallationId,
+      this.cookies.readGithubInstallState(req),
+    );
+    this.cookies.clearGithubInstallState(res);
+    return { connected: true };
+  }
+
+  @Get('installations/:id/repository-access')
+  repositoryAccess(@CurrentUser() user: User, @Param('id', UuidParamPipe) id: string) {
+    return this.installations.repositoryAccess(user.id, id);
+  }
+
+  @Put('installations/:id/repository-access')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async updateRepositoryAccess(
+    @CurrentUser() user: User,
+    @Param('id', UuidParamPipe) id: string,
+    @Body(new ZodValidationPipe(updateGithubRepositoryAccessSchema))
+    input: UpdateGithubRepositoryAccessInput,
+  ) {
+    await this.installations.updateRepositoryAccess(user.id, id, input.githubRepositoryIds);
+  }
+
+  @Delete('installations/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async disconnect(@CurrentUser() user: User, @Param('id', UuidParamPipe) id: string) {
+    await this.installations.disconnectWorkspace(user.id, id);
   }
 
   private redirectToSettings(res: Response, workspaceId: string | null, err: unknown) {

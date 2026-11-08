@@ -63,7 +63,7 @@ The Vercel Cron schedule (every 5 minutes) is added with the deployment configur
 - The raw body is captured by a route-specific parser (`express.raw`, up to 25 MB, GitHub's limit) registered before Nest's JSON parser, so other routes keep the 100 KB JSON limit.
 - If the secret isn't configured, the endpoint answers 503. In production it is required whenever the GitHub App is configured.
 - URLs from payloads (`html_url`) must be `https://`. Otherwise the payload is ignored, because they are rendered as links.
-- An installation is only ever bound to a workspace by the verified install flow (0005). Events for unknown installations are ignored. Repository events go only to non-archived projects of the installation's own workspace.
+- An installation is only ever bound to a workspace by the verified install flow (0005). Events for unknown installations are ignored. Repository events go only to non-archived projects with an active workspace connection and explicit repository grant (see [0010](0010-shared-github-connections.md)).
 - Neither payloads nor SQL parameters are logged. Errors are logged through `describeError`, which redacts parameters.
 
 ## 5. Events handled (§11.6)

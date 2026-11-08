@@ -4,6 +4,7 @@ import {
   githubInstallations,
   githubInstallStates,
   githubRepositories,
+  githubWorkspaceConnections,
   outboxEvents,
 } from '@devtrack/database';
 import type { GithubRepo } from '../src/github/github-app.client';
@@ -70,9 +71,14 @@ async function install(
   });
   expect(redirectOf(res).searchParams.get('github')).toBe('installed');
   const list = await u.browser.get(`/api/v1/github/installations?workspaceId=${ws}`).expect(200);
-  return list.body.data.installations.find(
+  const installation = list.body.data.installations.find(
     (i: { githubInstallationId: number }) => i.githubInstallationId === ghId,
   ) as { id: string; status: string };
+  await u.browser
+    .put(`/api/v1/github/installations/${installation.id}/repository-access`)
+    .send({ githubRepositoryIds: t.githubApp.installations.get(ghId)!.repos.map((r) => r.id) })
+    .expect(204);
+  return installation;
 }
 
 describe('GitHub App installation flow', () => {
@@ -257,7 +263,7 @@ describe('GitHub App installation flow', () => {
     expect(await t.db.select().from(githubInstallations)).toEqual([]);
   });
 
-  it('never binds one installation to two workspaces, but refreshes it for its own', async () => {
+  it('shares one verified installation across independently connected workspaces', async () => {
     const { owner, ws } = await projectFixture(t);
     await install(owner, ws, 111, 'acme-org');
 
@@ -267,15 +273,18 @@ describe('GitHub App installation flow', () => {
     const [row] = await t.db.select().from(githubInstallations);
     expect(row!.accountLogin).toBe('acme-renamed');
 
-    // Another workspace cannot claim it.
+    // Another workspace may connect only after its own verified GitHub flow.
     const other: string = (await owner.browser.post('/api/v1/workspaces').send({ name: 'Other' }))
       .body.data.workspace.id;
     t.githubApp.codes.set('code-111', [111]);
     const { state } = await beginInstall(owner, other);
     const res = await callback(owner, { installation_id: '111', code: 'code-111', state: state! });
     expect(redirectOf(res).pathname).toBe(`/workspaces/${other}/settings`);
-    expect(redirectOf(res).searchParams.get('githubError')).toBe('GITHUB_INSTALLATION_IN_USE');
+    expect(redirectOf(res).searchParams.get('github')).toBe('installed');
     expect(await t.db.select().from(githubInstallations)).toHaveLength(1);
+    const connections = await t.db.select().from(githubWorkspaceConnections);
+    expect(connections).toHaveLength(2);
+    expect(new Set(connections.map((c) => c.workspaceId))).toEqual(new Set([ws, other]));
   });
 });
 
@@ -440,8 +449,8 @@ describe('project repositories', () => {
     expect(invalid.status).toBe(400);
 
     const missing = await post({ installationId: inst.id, githubRepositoryId: 9999 });
-    expect(missing.status).toBe(422);
-    expect(missing.body.error.code).toBe('GITHUB_REPOSITORY_NOT_ACCESSIBLE');
+    expect(missing.status).toBe(403);
+    expect(missing.body.error.code).toBe('FORBIDDEN');
 
     await post({ installationId: inst.id, githubRepositoryId: 1001 }).expect(201);
     const dup = await post({ installationId: inst.id, githubRepositoryId: 1001 });
@@ -538,5 +547,225 @@ describe('project repositories', () => {
       .from(activityLogs)
       .where(eq(activityLogs.action, 'repository_disconnected'));
     expect(disconnected).toHaveLength(2);
+  });
+});
+
+describe('shared GitHub workspace connections', () => {
+  async function authorizeExisting(user: TestUser, ws: string, code = 'existing-code') {
+    const start = await user.browser
+      .get(`/api/v1/github/install?workspaceId=${ws}&mode=connect`)
+      .expect(302);
+    const url = new URL(start.headers.location as string);
+    expect(url.pathname).toBe('/login/oauth/authorize');
+    expect(url.searchParams.get('client_id')).toBe('Iv23li-test-app');
+    expect(url.searchParams.get('redirect_uri')).toBe(
+      `${WEB_ORIGIN}/api/v1/github/install/callback`,
+    );
+    const result = await callback(user, { code, state: url.searchParams.get('state')! });
+    expect(redirectOf(result).searchParams.get('github')).toBe('choose');
+  }
+
+  it('connects an existing installation after fresh browser-bound GitHub proof; grants start empty', async () => {
+    const { owner, outsider, ws } = await projectFixture(t);
+    const first = await install(owner, ws);
+    const other: string = (
+      await outsider.browser.post('/api/v1/workspaces').send({ name: 'Client' })
+    ).body.data.workspace.id;
+    const project: string = (
+      await outsider.browser
+        .post(`/api/v1/workspaces/${other}/projects`)
+        .send({ name: 'Website', key: 'WEB' })
+    ).body.data.project.id;
+    // Knowing the global installation ID or another workspace's connection ID is insufficient.
+    await outsider.browser
+      .post('/api/v1/github/connections')
+      .send({ workspaceId: other, githubInstallationId: 111 })
+      .expect(403);
+    await outsider.browser
+      .get(`/api/v1/github/installations/${first.id}/repository-access`)
+      .expect(404);
+    t.githubApp.codes.set('existing-code', [111]);
+    t.githubApp.userRepositoryIds.set('existing-code', [1002]);
+    await authorizeExisting(outsider, other);
+    expect(t.githubApp.revoked).toContain('ghu_existing-code');
+    const available = await outsider.browser
+      .get(`/api/v1/github/available-installations?workspaceId=${other}`)
+      .expect(200);
+    expect(available.body.data).toEqual([
+      { githubInstallationId: 111, accountLogin: 'acme-org', accountType: 'Organization' },
+    ]);
+    // This proof is scoped to the target workspace and current DevTrack user.
+    expect(
+      (await owner.browser.get(`/api/v1/github/available-installations?workspaceId=${ws}`)).body
+        .data,
+    ).toEqual([]);
+    await outsider.browser
+      .post('/api/v1/github/connections')
+      .send({ workspaceId: other, githubInstallationId: 222 })
+      .expect(403);
+    await outsider.browser
+      .post('/api/v1/github/connections')
+      .send({ workspaceId: other, githubInstallationId: 111 })
+      .expect(201);
+    await outsider.browser
+      .post('/api/v1/github/connections')
+      .send({ workspaceId: other, githubInstallationId: 111 })
+      .expect(403);
+    const list = await outsider.browser
+      .get(`/api/v1/github/installations?workspaceId=${other}`)
+      .expect(200);
+    const second: string = list.body.data.installations[0].id;
+    expect(second).not.toBe(first.id);
+    expect(await t.db.select().from(githubInstallations)).toHaveLength(1);
+    expect(
+      (await outsider.browser.get(`/api/v1/github/installations/${second}/repositories`)).body.data,
+    ).toEqual([]);
+    const access = await outsider.browser
+      .get(`/api/v1/github/installations/${second}/repository-access`)
+      .expect(200);
+    expect(access.body.data).toEqual([
+      expect.objectContaining({
+        githubRepositoryId: 1002,
+        allowed: false,
+        connectedProjectIds: [],
+      }),
+    ]);
+    // The installation can read 1001, but this GitHub user cannot delegate it.
+    await outsider.browser
+      .put(`/api/v1/github/installations/${second}/repository-access`)
+      .send({ githubRepositoryIds: [1001] })
+      .expect(403);
+    await outsider.browser
+      .post(`/api/v1/projects/${project}/repositories`)
+      .send({ installationId: second, githubRepositoryId: 1002 })
+      .expect(403);
+    await outsider.browser
+      .put(`/api/v1/github/installations/${second}/repository-access`)
+      .send({ githubRepositoryIds: [1002] })
+      .expect(204);
+    await outsider.browser
+      .post(`/api/v1/projects/${project}/repositories`)
+      .send({ installationId: second, githubRepositoryId: 1002 })
+      .expect(201);
+    const firstAvailable = await owner.browser
+      .get(`/api/v1/github/installations/${first.id}/repositories`)
+      .expect(200);
+    expect(
+      firstAvailable.body.data.every(
+        (r: { connectedProjectIds: string[] }) => !r.connectedProjectIds.includes(project),
+      ),
+    ).toBe(true);
+  });
+
+  it('expires existing-installation proof and rechecks the workspace role before connecting', async () => {
+    const { owner, admin, ws } = await projectFixture(t);
+    t.githubApp.addInstallation(111, 'acme-org', [repo(1001, 'acme-org/api')]);
+    t.githubApp.codes.set('existing-code', [111]);
+    await authorizeExisting(admin, ws);
+    await owner.browser
+      .patch(`/api/v1/workspaces/${ws}/members/${admin.id}`)
+      .send({ role: 'MEMBER' })
+      .expect(200);
+    await admin.browser
+      .post('/api/v1/github/connections')
+      .send({ workspaceId: ws, githubInstallationId: 111 })
+      .expect(403);
+    expect(await t.db.select().from(githubInstallations)).toEqual([]);
+    await authorizeExisting(owner, ws);
+    await t.db.update(githubInstallStates).set({ expiresAt: new Date(Date.now() - 1000) });
+    expect(
+      (await owner.browser.get(`/api/v1/github/available-installations?workspaceId=${ws}`)).body
+        .data,
+    ).toEqual([]);
+    await owner.browser
+      .post('/api/v1/github/connections')
+      .send({ workspaceId: ws, githubInstallationId: 111 })
+      .expect(403);
+    expect(await t.db.select().from(githubInstallations)).toEqual([]);
+  });
+
+  it('rejects a foreign browser callback and GitHub authorization denial for an existing connection', async () => {
+    const { owner, admin, ws } = await projectFixture(t);
+    const start = await owner.browser
+      .get(`/api/v1/github/install?workspaceId=${ws}&mode=connect`)
+      .expect(302);
+    const state = new URL(start.headers.location as string).searchParams.get('state')!;
+    const foreign = await callback(admin, { state, code: 'existing-code' });
+    expect(redirectOf(foreign).searchParams.get('githubError')).toBe(
+      'GITHUB_INSTALL_STATE_INVALID',
+    );
+    const denied = await callback(owner, { state, error: 'access_denied' });
+    expect(redirectOf(denied).searchParams.get('githubError')).toBe(
+      'GITHUB_INSTALL_NOT_AUTHORIZED',
+    );
+    expect(await t.db.select().from(githubWorkspaceConnections)).toEqual([]);
+  });
+
+  it('validates repository allowlists and restricts connection management to workspace admins', async () => {
+    const { owner, dev, outsider, ws } = await projectFixture(t);
+    const installation = await install(owner, ws);
+    const path = `/api/v1/github/installations/${installation.id}`;
+    for (const user of [dev, outsider]) {
+      const status = user === dev ? 403 : 404;
+      await user.browser
+        .put(`${path}/repository-access`)
+        .send({ githubRepositoryIds: [] })
+        .expect(status);
+      await user.browser.delete(path).expect(status);
+    }
+    for (const ids of [[1001, 1001], [0], ['1001'], [-1]]) {
+      await owner.browser
+        .put(`${path}/repository-access`)
+        .send({ githubRepositoryIds: ids })
+        .expect(400);
+    }
+    await owner.browser
+      .put(`${path}/repository-access`)
+      .send({ githubRepositoryIds: [9999] })
+      .expect(403);
+  });
+
+  it('does not delegate an installer’s ungranted GitHub repository choices to other workspace admins', async () => {
+    const { owner, admin, ws } = await projectFixture(t);
+    const installation = await install(owner, ws);
+    const path = `/api/v1/github/installations/${installation.id}`;
+    await owner.browser
+      .put(`${path}/repository-access`)
+      .send({ githubRepositoryIds: [1001] })
+      .expect(204);
+    const clientView = await admin.browser.get(`${path}/repository-access`).expect(200);
+    expect(
+      clientView.body.data.map((r: { githubRepositoryId: number }) => r.githubRepositoryId),
+    ).toEqual([1001]);
+    await admin.browser
+      .put(`${path}/repository-access`)
+      .send({ githubRepositoryIds: [1001, 1002] })
+      .expect(403);
+    // Admins may still revoke delegated access. To expand it, they must prove their own GitHub access.
+    await admin.browser
+      .put(`${path}/repository-access`)
+      .send({ githubRepositoryIds: [] })
+      .expect(204);
+    t.githubApp.codes.set('existing-code', [111]);
+    t.githubApp.userRepositoryIds.set('existing-code', [1002]);
+    await authorizeExisting(admin, ws);
+    await admin.browser
+      .post('/api/v1/github/connections')
+      .send({ workspaceId: ws, githubInstallationId: 111 })
+      .expect(201);
+    expect(
+      (await admin.browser.get(`${path}/repository-access`)).body.data.map(
+        (r: { githubRepositoryId: number }) => r.githubRepositoryId,
+      ),
+    ).toEqual([1002]);
+    await admin.browser
+      .put(`${path}/repository-access`)
+      .send({ githubRepositoryIds: [1002] })
+      .expect(204);
+    expect(
+      (await owner.browser.get(`${path}/repository-access`)).body.data.map(
+        (r: { githubRepositoryId: number }) => r.githubRepositoryId,
+      ),
+    ).toEqual([1002]);
   });
 });

@@ -6,7 +6,10 @@ import {
   eq,
   githubInstallations,
   githubRepositories,
+  githubWorkspaceConnections,
+  githubWorkspaceRepositories,
   projectRepositories,
+  projects,
   sql,
   users,
   type Database,
@@ -31,8 +34,8 @@ const notConnected = () =>
  * - Anyone with project access can see connected repositories.
  * - Workspace Admins/Owner connect and disconnect them (archived projects are read-only).
  * - Only repositories GitHub confirms the installation can access can be connected, and only
- *   through an ACTIVE installation of the project's own workspace.
- * - A repository may be connected to several projects of the same workspace.
+ *   through an ACTIVE, independently authorized connection of the project's own workspace.
+ * - A repository may be connected to projects in separately authorized workspaces.
  * - Disconnecting keeps the repository row (and, from M6, its history).
  */
 @Injectable()
@@ -60,17 +63,21 @@ export class ProjectRepositoriesService {
   ): Promise<ConnectedRepository> {
     const { project } = await this.access.require(actor.id, projectId, { manage: true });
 
-    const [installation] = await this.db
+    const installation = await this.installations.requireForAdmin(actor.id, input.installationId);
+    if (installation.workspaceId !== project.workspaceId)
+      throw AppException.notFound('GitHub installation not found.');
+
+    const [allowed] = await this.db
       .select()
-      .from(githubInstallations)
+      .from(githubWorkspaceRepositories)
       .where(
         and(
-          eq(githubInstallations.id, input.installationId),
-          // Never connect through another workspace's installation.
-          eq(githubInstallations.workspaceId, project.workspaceId),
+          eq(githubWorkspaceRepositories.connectionId, input.installationId),
+          eq(githubWorkspaceRepositories.githubRepositoryId, input.githubRepositoryId),
         ),
       );
-    if (!installation) throw AppException.notFound('GitHub installation not found.');
+    if (!allowed)
+      throw AppException.forbidden('Allow this repository in workspace GitHub settings first.');
 
     const repo = await this.installations.call(installation, () =>
       this.client.getRepository(installation.githubInstallationId, input.githubRepositoryId),
@@ -86,6 +93,23 @@ export class ProjectRepositoriesService {
     let repositoryId!: string;
     try {
       await this.db.transaction(async (tx) => {
+        const [connection] = await tx
+          .select()
+          .from(githubWorkspaceConnections)
+          .where(eq(githubWorkspaceConnections.id, input.installationId))
+          .for('update');
+        if (!connection) throw AppException.notFound('GitHub connection not found.');
+        const [grant] = await tx
+          .select()
+          .from(githubWorkspaceRepositories)
+          .where(
+            and(
+              eq(githubWorkspaceRepositories.connectionId, input.installationId),
+              eq(githubWorkspaceRepositories.githubRepositoryId, input.githubRepositoryId),
+            ),
+          );
+        if (!grant)
+          throw AppException.forbidden('Allow this repository in workspace GitHub settings first.');
         const metadata = {
           fullName: repo.fullName,
           ownerLogin: repo.ownerLogin,
@@ -227,12 +251,21 @@ export class ProjectRepositoriesService {
       .select({
         repo: githubRepositories,
         installationStatus: githubInstallations.status,
+        connectionId: githubWorkspaceConnections.id,
         connectedAt: projectRepositories.connectedAt,
         connectedBy: { id: users.id, username: users.username, avatarUrl: users.avatarUrl },
       })
       .from(projectRepositories)
       .innerJoin(githubRepositories, eq(githubRepositories.id, projectRepositories.repositoryId))
       .innerJoin(githubInstallations, eq(githubInstallations.id, githubRepositories.installationId))
+      .innerJoin(projects, eq(projects.id, projectRepositories.projectId))
+      .innerJoin(
+        githubWorkspaceConnections,
+        and(
+          eq(githubWorkspaceConnections.installationId, githubInstallations.id),
+          eq(githubWorkspaceConnections.workspaceId, projects.workspaceId),
+        ),
+      )
       .leftJoin(users, eq(users.id, projectRepositories.connectedBy))
       .where(
         and(
@@ -243,7 +276,7 @@ export class ProjectRepositoriesService {
       .orderBy(asc(githubRepositories.fullName));
     return rows.map((r) => ({
       id: r.repo.id,
-      installationId: r.repo.installationId,
+      installationId: r.connectionId,
       installationStatus: r.installationStatus,
       githubRepositoryId: r.repo.githubRepositoryId,
       fullName: r.repo.fullName,

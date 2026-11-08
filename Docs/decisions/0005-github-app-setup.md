@@ -5,6 +5,8 @@
 - **Scope:** Milestone M5 — architecture §7.5, §8.2, §9 "GitHub", §11.1–§11.3, §14
 - **Records:** Open decision #5 (GitHub App details), partly. Webhooks are M6.
 
+> The one-workspace restriction and repository selection rules are superseded by [0010 - Shared GitHub connections](0010-shared-github-connections.md).
+
 The first three rules were approved before implementation (§21 rule 12).
 
 ## 1. Proving who installed the app (approved)

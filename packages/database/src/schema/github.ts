@@ -37,16 +37,13 @@ export const githubInstallationStatus = pgEnum('github_installation_status', [
 ]);
 
 /**
- * Architecture §8.2 — a GitHub App installation bound to one workspace. No credentials are
+ * A GitHub App installation shared by independently authorized workspace connections. No credentials are
  * stored: installation tokens are minted on demand from the App private key (decision 0005).
  */
 export const githubInstallations = pgTable(
   'github_installations',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    workspaceId: uuid('workspace_id')
-      .notNull()
-      .references(() => workspaces.id, { onDelete: 'cascade' }),
     githubInstallationId: githubId('github_installation_id').notNull(),
     accountLogin: text('account_login').notNull(),
     /** `User` or `Organization`. */
@@ -61,10 +58,51 @@ export const githubInstallations = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
+  (t) => [unique('github_installations_github_id_unique').on(t.githubInstallationId)],
+);
+
+/** A verified workspace connection. API installation IDs identify these scoped connections. */
+export const githubWorkspaceConnections = pgTable(
+  'github_workspace_connections',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    installationId: uuid('installation_id')
+      .notNull()
+      .references(() => githubInstallations.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    /** Last user to verify candidate repository scope with GitHub; only this user sees ungranted candidates. */
+    connectedBy: uuid('connected_by').references(() => users.id, { onDelete: 'set null' }),
+    connectedAt: timestamptz('connected_at').notNull().defaultNow(),
+    /** Repositories verified with the connecting user's GitHub token. Refresh by reauthorizing. */
+    authorizedRepositoryIds: jsonb('authorized_repository_ids')
+      .$type<number[]>()
+      .notNull()
+      .default([]),
+  },
   (t) => [
-    // One installation can never serve two workspaces (cross-tenant repository access).
-    unique('github_installations_github_id_unique').on(t.githubInstallationId),
-    index('github_installations_workspace_idx').on(t.workspaceId),
+    unique('github_workspace_connections_workspace_installation_unique').on(
+      t.workspaceId,
+      t.installationId,
+    ),
+  ],
+);
+
+/** Explicit repository allowlist for a workspace connection; new connections start empty. */
+export const githubWorkspaceRepositories = pgTable(
+  'github_workspace_repositories',
+  {
+    connectionId: uuid('connection_id')
+      .notNull()
+      .references(() => githubWorkspaceConnections.id, { onDelete: 'cascade' }),
+    githubRepositoryId: githubId('github_repository_id').notNull(),
+  },
+  (t) => [
+    primaryKey({
+      name: 'github_workspace_repositories_pk',
+      columns: [t.connectionId, t.githubRepositoryId],
+    }),
   ],
 );
 
@@ -105,7 +143,7 @@ export const githubRepositories = pgTable(
 
 /**
  * Architecture §8.2 — repository ↔ project. A repository may be connected to several projects
- * of the same workspace (decision 0005); the service checks the workspace matches.
+ * across authorized workspaces; each project needs its own workspace repository grant (decision 0010).
  */
 export const projectRepositories = pgTable(
   'project_repositories',
@@ -134,6 +172,17 @@ export const githubInstallStates = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
     stateHash: text('state_hash').notNull(),
+    mode: text('mode').$type<'install' | 'connect' | 'choose'>().notNull().default('install'),
+    /** Short-lived choices from GitHub user authorization; no provider credentials. */
+    verifiedInstallations: jsonb('verified_installations').$type<
+      {
+        id: number;
+        accountLogin: string;
+        accountType: string;
+        suspendedAt: string | null;
+        repositoryIds: number[];
+      }[]
+    >(),
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),

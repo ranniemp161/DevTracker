@@ -147,7 +147,8 @@ function ConnectForm({
   if (active.length === 0) {
     return (
       <Alert tone="info">
-        To connect a repository, first install the GitHub App from the {settingsLink}.
+        To connect a repository, first connect GitHub and choose repository access in the{' '}
+        {settingsLink}.
       </Alert>
     );
   }
@@ -219,8 +220,8 @@ function ConnectForm({
         </Select>
       </div>
       <p className="text-xs text-fg-subtle">
-        Only repositories the GitHub App was given access to are listed. Change that on GitHub, then
-        reload this page.
+        Only repositories allowed for this workspace are listed. Manage repository access in{' '}
+        {settingsLink}.
       </p>
       <Button type="submit" variant="primary" disabled={busy || !repoId}>
         {busy ? 'Connecting…' : 'Connect repository'}
