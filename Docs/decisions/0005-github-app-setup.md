@@ -23,6 +23,16 @@ If any check fails, the browser is sent back to workspace settings with `?github
 
 When a GitHub organization member asks an organization owner to approve the app (`setup_action=request`), nothing is installed and settings shows `?github=requested`.
 
+## 1a. Connecting an installation that already exists (added after live use; superseded)
+
+> Superseded by [0010](0010-shared-github-connections.md): **Connect existing installation** now starts at `GET /github/install?mode=connect`, lets the admin pick from verified installations, and creates a per-workspace connection instead of binding the installation to one workspace. The text below records the earlier one-workspace version.
+
+If the App is already installed on the user's GitHub account, `installations/new` shows that installation's settings and **never redirects back**, so DevTrack records nothing. Settings therefore also offers **Connect existing**:
+
+- `GET /github/connect?workspaceId=` starts GitHub user authorization (`/login/oauth/authorize`) with the same browser-bound state and returns to the same callback, now with a `code` and no `installation_id`.
+- DevTrack exchanges the code, lists `GET /user/installations`, revokes the token, and hides installations that belong to another workspace. One candidate is bound directly; several send the user back to settings (`?github=choose&pick=<id>:<login>`) to choose, which repeats the flow with `&installationId=` carried inside the state (`<token>~<id>`) and is re-verified against GitHub's list.
+- The same checks as rule 1 apply (same browser, still an admin, GitHub confirms access). The callback must be registered on the App, as it already is.
+
 ## 2. One installation, one workspace; repositories shared within it (approved)
 
 - `github_installations.github_installation_id` is unique, so an installation can never serve two workspaces. A second workspace gets `409 GITHUB_INSTALLATION_IN_USE`. Running the flow again from the same workspace refreshes the account details.

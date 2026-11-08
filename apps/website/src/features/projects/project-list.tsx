@@ -3,7 +3,7 @@
 import type { Project, ProjectChatUnreadSummary } from '@devtrack/types';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { Alert, Badge } from '@/components/ui';
+import { Badge, ErrorState } from '@/components/ui';
 import { useApiQuery } from '@/lib/use-api-query';
 import { isAdmin } from '../workspaces/permissions';
 import { useWorkspace } from '../workspaces/workspace-context';
@@ -53,7 +53,9 @@ export function ProjectList() {
         ) : null}
       </div>
 
-      {projects.error ? <Alert>{projects.error.message}</Alert> : null}
+      {projects.error ? (
+        <ErrorState message={projects.error.message} onRetry={projects.reload} />
+      ) : null}
       {projects.data && projects.data.length === 0 ? (
         <div className="rounded-panel border border-dashed border-line-control bg-surface p-10 text-center text-sm text-fg-muted">
           {isAdmin(workspace.role)

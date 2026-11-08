@@ -45,6 +45,7 @@ export function ActivityFeed({
         if (cancelled) return;
         setEntries(page.items);
         setCursor(page.nextCursor);
+        setError(null);
       },
       (err: unknown) =>
         !cancelled && setError(err instanceof ApiError ? err.message : 'Could not load activity.'),
