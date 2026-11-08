@@ -74,7 +74,7 @@ export function Board() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
-        <TaskFilterBar workspaceId={project.workspaceId} members={members} />
+        <TaskFilterBar workspaceId={project.workspaceId} projectId={project.id} members={members} />
         <div className="flex items-center gap-3">
           <p className="text-label text-fg-muted">
             {doneCount} of {tasks.length} done

@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
   check,
+  type AnyPgColumn,
   date,
   index,
   integer,
@@ -116,6 +117,10 @@ export const tasks = pgTable(
     priority: taskPriority('priority').notNull().default('MEDIUM'),
     reporterId: uuid('reporter_id').references(() => users.id, { onDelete: 'set null' }),
     dueDate: date('due_date', { mode: 'string' }),
+    /** Optional deliverable this task counts toward; cleared when the milestone is deleted. */
+    milestoneId: uuid('milestone_id').references((): AnyPgColumn => milestones.id, {
+      onDelete: 'set null',
+    }),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
     updatedAt: timestamptz('updated_at')
       .notNull()
@@ -129,6 +134,9 @@ export const tasks = pgTable(
     unique('tasks_project_number_unique').on(t.projectId, t.taskNumber),
     index('tasks_project_status_idx')
       .on(t.projectId, t.status)
+      .where(sql`${t.deletedAt} IS NULL`),
+    index('tasks_milestone_id_idx')
+      .on(t.milestoneId)
       .where(sql`${t.deletedAt} IS NULL`),
   ],
 );
@@ -209,4 +217,26 @@ export const milestones = pgTable(
       .$onUpdate(() => new Date()),
   },
   (t) => [index('milestones_project_id_idx').on(t.projectId)],
+);
+
+/** Acceptance criteria: the checklist that defines when a milestone's deliverable is done. */
+export const milestoneCriteria = pgTable(
+  'milestone_criteria',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    milestoneId: uuid('milestone_id')
+      .notNull()
+      .references(() => milestones.id, { onDelete: 'cascade' }),
+    text: text('text').notNull(),
+    /** Display order within the milestone (ascending). */
+    position: integer('position').notNull(),
+    doneAt: timestamptz('done_at'),
+    doneBy: uuid('done_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+    updatedAt: timestamptz('updated_at')
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [index('milestone_criteria_milestone_id_idx').on(t.milestoneId, t.position)],
 );

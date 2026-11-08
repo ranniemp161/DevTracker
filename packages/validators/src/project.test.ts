@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  createMilestoneCriterionSchema,
   createProjectSchema,
   createTaskSchema,
   listTasksQuerySchema,
   projectKeySchema,
+  updateMilestoneCriterionSchema,
   updateProjectSchema,
   updateTaskSchema,
 } from './project.js';
@@ -75,5 +77,27 @@ describe('label and milestone schemas', () => {
     expect(createLabelSchema.safeParse({ name: '', color: '#000000' }).success).toBe(false);
     expect(updateMilestoneSchema.safeParse({}).success).toBe(false);
     expect(updateMilestoneSchema.parse({ status: 'COMPLETED' })).toEqual({ status: 'COMPLETED' });
+  });
+});
+
+describe('milestone links and acceptance criteria', () => {
+  const id = '3f2b8c1e-6a4d-4e7b-9c2a-1d5e8f7a6b3c';
+
+  it('accepts a milestone id or null on tasks, and a milestone filter', () => {
+    expect(createTaskSchema.parse({ title: 'T', milestoneId: id }).milestoneId).toBe(id);
+    expect(updateTaskSchema.parse({ milestoneId: null }).milestoneId).toBeNull();
+    expect(updateTaskSchema.safeParse({ milestoneId: 'nope' }).success).toBe(false);
+    expect(listTasksQuerySchema.parse({ milestoneId: 'none' }).milestoneId).toBe('none');
+    expect(listTasksQuerySchema.safeParse({ milestoneId: 'other' }).success).toBe(false);
+  });
+
+  it('trims criterion text, rejects blanks and empty updates', () => {
+    expect(createMilestoneCriterionSchema.parse({ text: '  Works on mobile ' }).text).toBe(
+      'Works on mobile',
+    );
+    expect(createMilestoneCriterionSchema.safeParse({ text: '   ' }).success).toBe(false);
+    expect(createMilestoneCriterionSchema.safeParse({ text: 'x'.repeat(501) }).success).toBe(false);
+    expect(updateMilestoneCriterionSchema.parse({ done: true })).toEqual({ done: true });
+    expect(updateMilestoneCriterionSchema.safeParse({}).success).toBe(false);
   });
 });
