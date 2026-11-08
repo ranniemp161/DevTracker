@@ -67,11 +67,6 @@ export const CalendarIcon = (p: IconProps) => (
     <path d="M4 10h16M8.5 3v4M15.5 3v4" />
   </Icon>
 );
-export const ExternalLinkIcon = (p: IconProps) => (
-  <Icon {...p}>
-    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3" />
-  </Icon>
-);
 
 export function SpinnerIcon({ size = 14, ...rest }: IconProps) {
   return (

@@ -8,6 +8,8 @@ import {
   githubPullRequests,
   githubRepositories,
   githubReviews,
+  githubWorkspaceConnections,
+  githubWorkspaceRepositories,
   inArray,
   isNull,
   ne,
@@ -53,7 +55,6 @@ interface TargetProject {
 /** A connected repository and the (non-archived) projects that receive its activity. */
 interface Target {
   repo: RepoRow;
-  workspaceId: string;
   projects: TargetProject[];
 }
 
@@ -426,6 +427,20 @@ export class GithubEventProcessor {
    * stop accepting its events. The repository row and its history are kept (§11.9).
    */
   private async disconnect(tx: Transaction, repo: RepoRow, reason: string): Promise<void> {
+    const connections = await tx
+      .select({ id: githubWorkspaceConnections.id })
+      .from(githubWorkspaceConnections)
+      .where(eq(githubWorkspaceConnections.installationId, repo.installationId));
+    if (connections.length)
+      await tx.delete(githubWorkspaceRepositories).where(
+        and(
+          inArray(
+            githubWorkspaceRepositories.connectionId,
+            connections.map((c) => c.id),
+          ),
+          eq(githubWorkspaceRepositories.githubRepositoryId, repo.githubRepositoryId),
+        ),
+      );
     const removed = await tx
       .delete(projectRepositories)
       .where(eq(projectRepositories.repositoryId, repo.id))
@@ -471,12 +486,13 @@ export class GithubEventProcessor {
     githubRepositoryId: number,
   ): Promise<Target | null> {
     const [row] = await tx
-      .select({ repo: githubRepositories, workspaceId: githubInstallations.workspaceId })
+      .select({ repo: githubRepositories })
       .from(githubRepositories)
       .innerJoin(githubInstallations, eq(githubInstallations.id, githubRepositories.installationId))
       .where(
         and(
           eq(githubInstallations.githubInstallationId, githubInstallationId),
+          eq(githubInstallations.status, 'ACTIVE'),
           eq(githubRepositories.githubRepositoryId, githubRepositoryId),
           isNull(githubRepositories.disconnectedAt),
         ),
@@ -486,16 +502,25 @@ export class GithubEventProcessor {
       .select({ id: projects.id, workspaceId: projects.workspaceId, key: projects.key })
       .from(projectRepositories)
       .innerJoin(projects, eq(projects.id, projectRepositories.projectId))
-      .where(
+      .innerJoin(
+        githubWorkspaceConnections,
         and(
-          eq(projectRepositories.repositoryId, row.repo.id),
-          // Defence in depth: never deliver into another workspace's project.
-          eq(projects.workspaceId, row.workspaceId),
-          ne(projects.status, 'ARCHIVED'),
+          eq(githubWorkspaceConnections.installationId, row.repo.installationId),
+          eq(githubWorkspaceConnections.workspaceId, projects.workspaceId),
         ),
+      )
+      .innerJoin(
+        githubWorkspaceRepositories,
+        and(
+          eq(githubWorkspaceRepositories.connectionId, githubWorkspaceConnections.id),
+          eq(githubWorkspaceRepositories.githubRepositoryId, row.repo.githubRepositoryId),
+        ),
+      )
+      .where(
+        and(eq(projectRepositories.repositoryId, row.repo.id), ne(projects.status, 'ARCHIVED')),
       );
     if (connected.length === 0) return null;
-    return { repo: row.repo, workspaceId: row.workspaceId, projects: connected };
+    return { repo: row.repo, projects: connected };
   }
 
   /**

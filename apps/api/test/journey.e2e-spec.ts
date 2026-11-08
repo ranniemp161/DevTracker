@@ -119,7 +119,11 @@ describe('§16 end-to-end journey', () => {
     const installation = (await lead.browser.get(`/api/v1/github/installations?workspaceId=${ws}`))
       .body.data.installations[0];
 
-    // 8. Select and connect a repository.
+    // 8. Explicitly allow a repository for the workspace, then connect it to the project.
+    await lead.browser
+      .put(`/api/v1/github/installations/${installation.id}/repository-access`)
+      .send({ githubRepositoryIds: [GH_REPO] })
+      .expect(204);
     const repo = (
       await lead.browser
         .post(`/api/v1/projects/${project}/repositories`)

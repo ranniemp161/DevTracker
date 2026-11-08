@@ -41,6 +41,10 @@ export async function githubFixture(t: TestApp) {
     .expect(302);
   const list = await f.owner.browser.get(`/api/v1/github/installations?workspaceId=${f.ws}`);
   const installationId: string = list.body.data.installations[0].id;
+  await f.owner.browser
+    .put(`/api/v1/github/installations/${installationId}/repository-access`)
+    .send({ githubRepositoryIds: [GH_REPO, 1002] })
+    .expect(204);
   const connected = await f.owner.browser
     .post(`/api/v1/projects/${f.project}/repositories`)
     .send({ installationId, githubRepositoryId: GH_REPO });

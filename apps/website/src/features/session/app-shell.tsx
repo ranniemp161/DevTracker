@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { DevtrackMark, MenuIcon } from '@/components/icons';
-import { Alert, Avatar, Button, ErrorState, IconButton } from '@/components/ui';
+import { Alert, Avatar, Button, IconButton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { RealtimeProvider, useRealtimeRefresh, type RealtimeEvent } from '@/lib/realtime';
 import { useApiQuery } from '@/lib/use-api-query';
@@ -38,13 +38,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (me.error && me.error.status !== 401) {
     return (
       <div className="mx-auto max-w-xl p-8">
-        <ErrorState
-          message={me.error.message || 'Unable to connect to your account session.'}
-          onRetry={() => {
-            me.reload();
-            if (verified) workspaces.reload();
-          }}
-        />
+        <Alert>{me.error.message}</Alert>
       </div>
     );
   }

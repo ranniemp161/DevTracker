@@ -5,6 +5,8 @@
 - **Scope:** Milestone M5 — architecture §7.5, §8.2, §9 "GitHub", §11.1–§11.3, §14
 - **Records:** Open decision #5 (GitHub App details), partly. Webhooks are M6.
 
+> The one-workspace restriction and repository selection rules are superseded by [0010 - Shared GitHub connections](0010-shared-github-connections.md).
+
 The first three rules were approved before implementation (§21 rule 12).
 
 ## 1. Proving who installed the app (approved)
@@ -21,7 +23,9 @@ If any check fails, the browser is sent back to workspace settings with `?github
 
 When a GitHub organization member asks an organization owner to approve the app (`setup_action=request`), nothing is installed and settings shows `?github=requested`.
 
-## 1a. Connecting an installation that already exists (added after live use)
+## 1a. Connecting an installation that already exists (added after live use; superseded)
+
+> Superseded by [0010](0010-shared-github-connections.md): **Connect existing installation** now starts at `GET /github/install?mode=connect`, lets the admin pick from verified installations, and creates a per-workspace connection instead of binding the installation to one workspace. The text below records the earlier one-workspace version.
 
 If the App is already installed on the user's GitHub account, `installations/new` shows that installation's settings and **never redirects back**, so DevTrack records nothing. Settings therefore also offers **Connect existing**:
 

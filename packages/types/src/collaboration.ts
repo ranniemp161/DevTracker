@@ -32,6 +32,8 @@ export type ActivityAction =
   | 'project.repository_connected'
   | 'project.repository_disconnected'
   | 'github_installation.installed'
+  | 'github_installation.disconnected'
+  | 'github_installation.repository_access_updated'
   | 'pull_request.opened'
   | 'pull_request.reopened'
   | 'pull_request.closed'

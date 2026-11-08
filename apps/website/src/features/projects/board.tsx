@@ -2,8 +2,7 @@
 
 import { TASK_STATUSES, type Task, type TaskStatus } from '@devtrack/types';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react';
 import { CalendarIcon, PlusIcon } from '@/components/icons';
 import {
   Alert,
@@ -19,7 +18,6 @@ import { api, ApiError } from '@/lib/api';
 import { formatDate, PRIORITY_RANK, TASK_STATUS_LABEL } from './labels';
 import { LabelChip } from './label-chip';
 import { useProject } from './project-context';
-import { TaskDetail } from './task-detail';
 import { filterTask, TaskFilterBar, useTaskFilters } from './task-filters';
 import { TaskStatusMenu } from './task-status-menu';
 import { useProjectTasks } from './use-project-tasks';
@@ -36,39 +34,12 @@ function todayIso() {
 
 /** Kanban view: one column per status; dropping a card in a column changes its status (M3 rule 8). */
 export function Board() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const activeTaskId = searchParams.get('task');
   const { project, members, readOnly } = useProject();
   const { tasks, setTasks, error, reload } = useProjectTasks(project.id);
   const { filters } = useTaskFilters();
   const [dropError, setDropError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<TaskStatus | null>(null);
   const [addingIn, setAddingIn] = useState<TaskStatus | null>(null);
-
-  const base = `/projects/${project.id}`;
-
-  function openTask(taskId: string) {
-    const next = new URLSearchParams(searchParams.toString());
-    next.set('task', taskId);
-    router.push(`${base}?${next.toString()}`, { scroll: false });
-  }
-
-  const closeTask = useCallback(() => {
-    const next = new URLSearchParams(searchParams.toString());
-    next.delete('task');
-    const qs = next.toString();
-    router.push(qs ? `${base}?${qs}` : base, { scroll: false });
-  }, [base, router, searchParams]);
-
-  useEffect(() => {
-    if (!activeTaskId) return;
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') closeTask();
-    }
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [activeTaskId, closeTask]);
 
   async function moveTask(taskId: string, status: TaskStatus) {
     const before = tasks;
@@ -141,9 +112,9 @@ export function Board() {
                 }}
                 onDragLeave={() => setDragOver((s) => (s === status ? null : s))}
                 onDrop={(e) => onDrop(e, status)}
-                className={`flex min-h-64 w-68 flex-none flex-col rounded-panel border p-2 transition-all duration-150 ${
+                className={`flex min-h-64 w-68 flex-none flex-col rounded-panel border p-2 transition-colors ${
                   dragOver === status
-                    ? 'border-primary ring-2 ring-primary/30 bg-primary-soft/60 shadow-sm'
+                    ? 'border-primary bg-primary-soft'
                     : 'border-line bg-surface-sunken'
                 }`}
               >
@@ -169,22 +140,14 @@ export function Board() {
                       onCancel={() => setAddingIn(null)}
                       onCreated={(t) => {
                         setTasks((c) => [t, ...(c ?? [])]);
+                        setAddingIn(null);
                       }}
                     />
                   ) : null}
                   {column.length === 0 && addingIn !== status ? (
-                    <button
-                      type="button"
-                      disabled={readOnly}
-                      onClick={() => !readOnly && setAddingIn(status)}
-                      className={`flex h-22 w-full items-center justify-center rounded-card border border-dashed border-line-dashed text-label text-fg-subtle transition-all duration-150 ${
-                        readOnly
-                          ? ''
-                          : 'cursor-pointer hover:border-line-control hover:bg-surface hover:text-fg hover:shadow-xs'
-                      }`}
-                    >
-                      {readOnly ? 'No tasks' : '+ Add task'}
-                    </button>
+                    <div className="flex h-22 items-center justify-center rounded-card border border-dashed border-line-dashed text-label text-fg-subtle">
+                      No tasks
+                    </div>
                   ) : null}
                   <ul className="space-y-2">
                     {column.map((task) => (
@@ -193,55 +156,16 @@ export function Board() {
                         task={task}
                         draggable={!readOnly}
                         onMove={moveTask}
-                        onSelect={openTask}
                         readOnly={readOnly}
                       />
                     ))}
                   </ul>
-                  {column.length > 0 && addingIn !== status && !readOnly ? (
-                    <button
-                      type="button"
-                      onClick={() => setAddingIn(status)}
-                      className="mt-0.5 flex w-full items-center gap-1.5 rounded-control px-2.5 py-1.5 text-xs font-medium text-fg-muted transition-colors hover:bg-surface hover:text-fg hover:shadow-xs"
-                    >
-                      <PlusIcon size={13} />
-                      <span>Add task</span>
-                    </button>
-                  ) : null}
                 </div>
               </section>
             );
           })}
         </div>
       </div>
-
-      {/* Slide-over Drawer for Task Details */}
-      {activeTaskId ? (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          <div
-            className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
-            onClick={closeTask}
-            aria-hidden="true"
-          />
-          <aside
-            role="dialog"
-            aria-modal="true"
-            aria-label="Task details"
-            className="relative z-10 flex h-full w-full flex-col border-l border-line bg-surface shadow-2xl transition-transform animate-in slide-in-from-right duration-200 ease-out sm:max-w-xl md:max-w-2xl lg:max-w-3xl"
-          >
-            <TaskDetail
-              taskId={activeTaskId}
-              onClose={closeTask}
-              isDrawer={true}
-              onTaskUpdated={(updated) => {
-                setTasks(
-                  (current) => current?.map((t) => (t.id === updated.id ? updated : t)) ?? null,
-                );
-              }}
-            />
-          </aside>
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -270,45 +194,33 @@ function TaskCard({
   task,
   draggable,
   onMove,
-  onSelect,
   readOnly,
 }: {
   task: Task;
   draggable: boolean;
   onMove: (taskId: string, status: TaskStatus) => void;
-  onSelect: (taskId: string) => void;
   readOnly: boolean;
 }) {
   const { project } = useProject();
-  const [isDragging, setIsDragging] = useState(false);
   const overdue =
     Boolean(task.dueDate) && task.status !== 'DONE' && task.dueDate!.slice(0, 10) < todayIso();
   const shownLabels = task.labels.slice(0, 2);
   const extraLabels = task.labels.length - shownLabels.length;
   const assignees = task.assignees.slice(0, 3);
-  const urgent = task.priority === 'URGENT';
 
   return (
     <li
       draggable={draggable}
       onDragStart={(e) => {
-        setIsDragging(true);
         e.dataTransfer.setData('text/devtrack-task', task.id);
         e.dataTransfer.effectAllowed = 'move';
       }}
-      onDragEnd={() => setIsDragging(false)}
-      className={`group relative flex flex-col gap-2.5 rounded-card border border-line bg-surface p-3.5 shadow-card transition-all duration-150 ${
-        draggable
-          ? 'cursor-grab active:cursor-grabbing hover:-translate-y-0.5 hover:border-line-control hover:shadow-md'
-          : ''
-      } ${isDragging ? 'scale-[0.98] border-dashed opacity-40 ring-2 ring-primary/40' : ''} ${
+      className={`relative flex flex-col gap-2.5 rounded-card border border-line bg-surface p-3.5 shadow-card transition-colors hover:border-line-control ${
         task.status === 'DONE' ? 'opacity-75' : ''
       }`}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-xs text-fg-muted transition-colors group-hover:text-fg">
-          {task.key}
-        </span>
+        <span className="font-mono text-xs text-fg-muted">{task.key}</span>
         <div className="relative z-10 flex items-center gap-1.5">
           {readOnly ? (
             <StatusDot status={task.status} />
@@ -321,7 +233,7 @@ function TaskCard({
                 <span
                   key={a.id}
                   title={`@${a.username}`}
-                  className="rounded-full ring-2 ring-surface transition-transform group-hover:scale-105"
+                  className="rounded-full ring-2 ring-surface"
                 >
                   <Avatar name={a.username} url={a.avatarUrl} seed={a.id} size="xs" />
                 </span>
@@ -336,46 +248,26 @@ function TaskCard({
           )}
         </div>
       </div>
-      {/* Stretched link: click opens drawer, cmd/ctrl-click opens in new tab */}
+      {/* Stretched link: the whole card opens the task, the status menu sits above it. */}
       <Link
         href={`/projects/${project.id}/tasks/${task.id}`}
-        onClick={(e) => {
-          if (!e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) {
-            e.preventDefault();
-            onSelect(task.id);
-          }
-        }}
         className="line-clamp-3 rounded-chip text-sm leading-snug font-medium text-fg after:absolute after:inset-0 after:rounded-card"
       >
         {task.title}
       </Link>
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-        {urgent ? (
-          <span className="inline-flex items-center gap-1 rounded-chip bg-danger-soft px-1.5 py-0.5 text-xs font-semibold text-danger">
-            <PriorityIcon priority={task.priority} />
-          </span>
-        ) : (
-          <PriorityIcon priority={task.priority} />
-        )}
+        <PriorityIcon priority={task.priority} />
         {shownLabels.map((l) => (
           <LabelChip key={l.id} label={l} />
         ))}
-        {extraLabels > 0 ? (
-          <span className="rounded-chip bg-surface-muted px-1.5 py-0.5 text-xs font-medium text-fg-muted">
-            +{extraLabels}
-          </span>
-        ) : null}
+        {extraLabels > 0 ? <span className="text-xs text-fg-muted">+{extraLabels}</span> : null}
       </div>
       {task.dueDate ? (
-        <div className="border-t border-line-subtle pt-2 text-xs">
+        <div className="border-t border-line-subtle pt-2 text-xs text-fg-muted">
           <span
-            className={`inline-flex items-center gap-1.5 ${
-              overdue
-                ? 'rounded-chip bg-danger-soft px-1.5 py-0.5 font-medium text-danger'
-                : 'text-fg-muted'
-            }`}
+            className={`inline-flex items-center gap-1.5 ${overdue ? 'font-medium text-danger' : ''}`}
           >
-            <CalendarIcon size={13} />
+            <CalendarIcon size={14} />
             {overdue ? 'Overdue · ' : ''}
             {formatDate(task.dueDate)}
           </span>
@@ -422,16 +314,15 @@ function ColumnQuickAdd({
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!title.trim() || pending) return;
+    if (!title.trim()) return;
     setPending(true);
     setError(null);
     try {
       const { task } = await api<{ task: Task }>(`/projects/${project.id}/tasks`, {
-        body: { title: title.trim(), status },
+        body: { title, status },
       });
       handleTitleChange('');
       onCreated(task);
-      setTimeout(() => input.current?.focus(), 50);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not create the task.');
     } finally {
@@ -443,7 +334,7 @@ function ColumnQuickAdd({
     <form
       onSubmit={submit}
       onKeyDown={(e) => e.key === 'Escape' && onCancel()}
-      className="space-y-2 rounded-card border border-primary/50 bg-surface p-2.5 shadow-raised ring-1 ring-primary/20"
+      className="space-y-2 rounded-card border border-line-control bg-surface p-2.5 shadow-raised"
     >
       <label className="sr-only" htmlFor={`quick-add-${status}`}>
         New task title for {TASK_STATUS_LABEL[status]}
@@ -453,7 +344,7 @@ function ColumnQuickAdd({
         id={`quick-add-${status}`}
         value={title}
         onChange={(e) => handleTitleChange(e.target.value)}
-        placeholder="Task title… (Enter to add)"
+        placeholder="Task title"
         maxLength={200}
         className="h-8 w-full rounded-control border border-line-control bg-surface px-2.5 text-sm placeholder:text-fg-subtle focus-visible:border-primary"
       />
@@ -462,22 +353,19 @@ function ColumnQuickAdd({
           {error}
         </p>
       ) : null}
-      <div className="flex items-center justify-between gap-1.5">
-        <span className="text-[11px] text-fg-subtle">Enter to add · Esc</span>
-        <div className="flex gap-1.5">
-          <Button variant="ghost" size="sm" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            variant="primary"
-            size="sm"
-            loading={pending}
-            disabled={!title.trim()}
-          >
-            {pending ? 'Adding…' : 'Add task'}
-          </Button>
-        </div>
+      <div className="flex justify-end gap-1.5">
+        <Button variant="ghost" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button
+          type="submit"
+          variant="primary"
+          size="sm"
+          loading={pending}
+          disabled={!title.trim()}
+        >
+          {pending ? 'Adding…' : 'Add task'}
+        </Button>
       </div>
     </form>
   );

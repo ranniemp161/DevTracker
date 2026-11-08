@@ -5,6 +5,22 @@ export const listInstallationsQuerySchema = z.object({
 });
 export type ListInstallationsQuery = z.infer<typeof listInstallationsQuerySchema>;
 
+const githubIdSchema = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
+
+export const connectGithubInstallationSchema = z.object({
+  workspaceId: z.uuid(),
+  githubInstallationId: githubIdSchema,
+});
+export type ConnectGithubInstallationInput = z.infer<typeof connectGithubInstallationSchema>;
+
+export const updateGithubRepositoryAccessSchema = z.object({
+  githubRepositoryIds: z
+    .array(githubIdSchema)
+    .max(1000)
+    .refine((ids) => new Set(ids).size === ids.length, 'Choose each repository once.'),
+});
+export type UpdateGithubRepositoryAccessInput = z.infer<typeof updateGithubRepositoryAccessSchema>;
+
 /** `POST /projects/:id/repositories`. Repositories are identified by GitHub's stable numeric ID. */
 export const connectRepositorySchema = z.object({
   installationId: z.uuid({ error: 'Choose a GitHub installation.' }),

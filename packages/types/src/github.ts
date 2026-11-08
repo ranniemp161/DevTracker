@@ -4,7 +4,7 @@ import type { UserRef } from './project.js';
 export const GITHUB_INSTALLATION_STATUSES = ['ACTIVE', 'SUSPENDED', 'REMOVED'] as const;
 export type GithubInstallationStatus = (typeof GITHUB_INSTALLATION_STATUSES)[number];
 
-/** A GitHub App installation bound to a workspace (architecture §11.2). */
+/** A workspace connection to a GitHub App installation. `id` is the scoped connection ID. */
 export interface GithubInstallation {
   id: string;
   workspaceId: string;
@@ -16,6 +16,17 @@ export interface GithubInstallation {
   installedBy: UserRef | null;
   installedAt: string;
   suspendedAt: string | null;
+}
+
+/** Verified, short-lived choices from the current browser's GitHub authorization. */
+export interface AvailableGithubInstallation {
+  githubInstallationId: number;
+  accountLogin: string;
+  accountType: string;
+}
+
+export interface GithubRepositoryAccess extends AvailableRepository {
+  allowed: boolean;
 }
 
 /** `GET /github/installations?workspaceId=` */

@@ -127,6 +127,8 @@ export class FakeGithubAppClient implements Pick<GithubAppClient, keyof GithubAp
   installations = new Map<number, FakeInstallation>();
   /** OAuth code from the install callback -> installation IDs that GitHub user can access. */
   codes = new Map<string, number[]>();
+  /** Optional restriction for a user whose repository access is narrower than the App's. */
+  userRepositoryIds = new Map<string, number[]>();
   revoked: string[] = [];
   /** GitHub repository ID -> its existing pull requests (for the import on connect/sync). */
   pullRequests = new Map<number, PullRequestPayload[]>();
@@ -134,6 +136,7 @@ export class FakeGithubAppClient implements Pick<GithubAppClient, keyof GithubAp
   reset(): void {
     this.installations.clear();
     this.codes.clear();
+    this.userRepositoryIds.clear();
     this.pullRequests.clear();
     this.revoked = [];
   }
@@ -163,17 +166,20 @@ export class FakeGithubAppClient implements Pick<GithubAppClient, keyof GithubAp
     const { repos: _repos, unavailable: _unavailable, ...info } = inst;
     return info;
   }
-  async listUserInstallations(userToken: string): Promise<GithubInstallationInfo[]> {
-    const allowed = this.codes.get(userToken.replace(/^ghu_/, '')) ?? [];
-    return allowed.flatMap((id) => {
-      const inst = this.installations.get(id);
-      if (!inst) return [];
-      const { repos: _repos, unavailable: _unavailable, ...info } = inst;
-      return [info];
-    });
-  }
   async revokeUserToken(userToken: string): Promise<void> {
     this.revoked.push(userToken);
+  }
+  async listUserInstallations(userToken: string): Promise<GithubInstallationInfo[]> {
+    const ids = this.codes.get(userToken.replace(/^ghu_/, '')) ?? [];
+    return (await Promise.all(ids.map((id) => this.findUserInstallation(userToken, id)))).filter(
+      (i): i is GithubInstallationInfo => i !== null,
+    );
+  }
+  async listUserRepositories(userToken: string, installationId: number): Promise<GithubRepo[]> {
+    const code = userToken.replace(/^ghu_/, '');
+    if (!(this.codes.get(code) ?? []).includes(installationId)) return [];
+    const permitted = this.userRepositoryIds.get(code);
+    return this.usable(installationId).repos.filter((r) => !permitted || permitted.includes(r.id));
   }
   async listInstallationRepositories(installationId: number): Promise<GithubRepo[]> {
     return this.usable(installationId).repos;

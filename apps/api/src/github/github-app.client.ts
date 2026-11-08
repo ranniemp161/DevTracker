@@ -133,12 +133,17 @@ export class GithubAppClient {
   }
 
   /** Exchanges the `code` from the installation callback for a short-lived user token. */
-  async exchangeInstallCode(code: string): Promise<string | null> {
+  async exchangeInstallCode(code: string, redirectUri?: string): Promise<string | null> {
     const app = this.app();
     const res = await this.fetch('https://github.com/login/oauth/access_token', {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ client_id: app.clientId, client_secret: app.clientSecret, code }),
+      body: JSON.stringify({
+        client_id: app.clientId,
+        client_secret: app.clientSecret,
+        code,
+        ...(redirectUri ? { redirect_uri: redirectUri } : {}),
+      }),
     });
     if (!res.ok) throw githubApiError();
     const parsed = userTokenSchema.safeParse(await res.json().catch(() => null));
@@ -155,6 +160,13 @@ export class GithubAppClient {
     userToken: string,
     installationId: number,
   ): Promise<GithubInstallationInfo | null> {
+    return (
+      (await this.listUserInstallations(userToken)).find((i) => i.id === installationId) ?? null
+    );
+  }
+
+  async listUserInstallations(userToken: string): Promise<GithubInstallationInfo[]> {
+    const installations: GithubInstallationInfo[] = [];
     for (let page = 1; page <= 10; page++) {
       const res = await this.fetch(`${API}/user/installations?per_page=100&page=${page}`, {
         headers: { ...API_HEADERS, Authorization: `Bearer ${userToken}` },
@@ -162,41 +174,36 @@ export class GithubAppClient {
       if (!res.ok) throw githubApiError();
       const parsed = userInstallationsSchema.safeParse(await res.json().catch(() => null));
       if (!parsed.success) throw githubApiError();
-      const match = parsed.data.installations.find((i) => i.id === installationId);
-      if (match) {
-        return {
+      for (const match of parsed.data.installations) {
+        installations.push({
           id: match.id,
           accountLogin: match.account?.login ?? 'unknown',
           accountType: match.account?.type ?? 'Unknown',
           suspendedAt: match.suspended_at ? new Date(match.suspended_at) : null,
-        };
+        });
       }
       if (page * 100 >= parsed.data.total_count) break;
     }
-    return null;
+    return installations;
   }
 
-  /** Every installation of this App that the user behind `userToken` can access on GitHub. */
-  async listUserInstallations(userToken: string): Promise<GithubInstallationInfo[]> {
-    const found: GithubInstallationInfo[] = [];
-    for (let page = 1; page <= 10; page++) {
-      const res = await this.fetch(`${API}/user/installations?per_page=100&page=${page}`, {
-        headers: { ...API_HEADERS, Authorization: `Bearer ${userToken}` },
-      });
-      if (!res.ok) throw githubApiError();
-      const parsed = userInstallationsSchema.safeParse(await res.json().catch(() => null));
-      if (!parsed.success) throw githubApiError();
-      found.push(
-        ...parsed.data.installations.map((i) => ({
-          id: i.id,
-          accountLogin: i.account?.login ?? 'unknown',
-          accountType: i.account?.type ?? 'Unknown',
-          suspendedAt: i.suspended_at ? new Date(i.suspended_at) : null,
-        })),
+  /** The intersection of the user's access and the App's access, never the App's full scope. */
+  async listUserRepositories(userToken: string, installationId: number): Promise<GithubRepo[]> {
+    const repos: GithubRepo[] = [];
+    for (let page = 1; page * 100 <= MAX_LISTED_REPOSITORIES; page++) {
+      const res = await this.fetch(
+        `${API}/user/installations/${installationId}/repositories?per_page=100&page=${page}`,
+        {
+          headers: { ...API_HEADERS, Authorization: `Bearer ${userToken}` },
+        },
       );
+      if (!res.ok) throw githubApiError();
+      const parsed = installationReposSchema.safeParse(await res.json().catch(() => null));
+      if (!parsed.success) throw githubApiError();
+      repos.push(...parsed.data.repositories.map(toRepo));
       if (page * 100 >= parsed.data.total_count) break;
     }
-    return found;
+    return repos;
   }
 
   /** Best effort: the user token is not needed after verification. */

@@ -18,3 +18,6 @@ Thumbs.db
 *.log
 
 design/
+
+# Local Graphify graphs, reports, HTML, and caches.
+/graphify-out/

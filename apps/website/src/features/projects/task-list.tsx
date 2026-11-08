@@ -4,7 +4,7 @@ import type { Task } from '@devtrack/types';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import {
-  ErrorState,
+  Alert,
   Avatar,
   Button,
   EmptyState,
@@ -76,7 +76,7 @@ export function TaskList() {
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
         <TaskFilterBar workspaceId={project.workspaceId} members={members} />
       </div>
-      {error ? <ErrorState message={error} onRetry={() => setVersion((v) => v + 1)} /> : null}
+      {error ? <Alert>{error}</Alert> : null}
       <div className="overflow-x-auto rounded-card border border-line bg-surface">
         <table className="w-full min-w-176 text-left text-sm">
           <thead className="border-b border-line bg-surface-sunken text-xs text-fg-muted">
