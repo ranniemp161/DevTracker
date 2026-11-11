@@ -33,6 +33,7 @@ import { CommentThread } from '../collaboration/comment-thread';
 import { TaskPullRequests } from '../github/task-pull-requests';
 import { useProject } from './project-context';
 import { TaskLabels } from './task-labels';
+import { TaskTime } from './task-time';
 
 export function TaskDetail() {
   const { taskId } = useParams<{ taskId: string }>();
@@ -461,6 +462,8 @@ function TaskEditor({
             branchTip={`${task.key}-${slugify(task.title)}`}
             onChange={onActivity}
           />
+
+          <TaskTime taskId={task.id} status={task.status} />
 
           <dl className="space-y-2 border-t border-line pt-4 text-label">
             <DetailRow label="Reporter">

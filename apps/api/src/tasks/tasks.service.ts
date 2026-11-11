@@ -1,5 +1,6 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import {
+  activityLogs,
   and,
   desc,
   eq,
@@ -26,6 +27,7 @@ import {
   type Task,
   type TaskLabel,
   type TaskStatus,
+  type TaskTimeInStatus,
   type UserRef,
 } from '@devtrack/types';
 import type { CreateTaskInput, ListTasksQuery, UpdateTaskInput } from '@devtrack/validators';
@@ -35,6 +37,7 @@ import { DATABASE } from '../database/database.module';
 import { EventRecorder, type Actor } from '../events/event-recorder.service';
 import { ProjectAccessService, type ProjectRow } from '../projects/project-access.service';
 import { TaskAccessService, type TaskRow } from './task-access.service';
+import { isTaskStatus, timeInStatus, type StatusChange } from './time-in-status';
 
 const userRef = { id: users.id, username: users.username, avatarUrl: users.avatarUrl };
 
@@ -182,6 +185,51 @@ export class TasksService {
   async get(userId: string, taskId: string): Promise<Task> {
     const { task, access } = await this.taskAccess.require(userId, taskId);
     return (await this.load([task.id], access.project.key))[0]!;
+  }
+
+  /**
+   * Time spent in each status, read from the task's own activity history. Every status change
+   * is logged in the transaction that makes it, so the history is complete (record 0011).
+   */
+  async timeInStatus(userId: string, taskId: string): Promise<TaskTimeInStatus> {
+    const { task } = await this.taskAccess.require(userId, taskId);
+    const rows = await this.db
+      .select({
+        action: activityLogs.action,
+        metadata: activityLogs.metadata,
+        at: activityLogs.createdAt,
+      })
+      .from(activityLogs)
+      .where(
+        and(
+          eq(activityLogs.taskId, task.id),
+          eq(activityLogs.entityType, 'task'),
+          inArray(activityLogs.action, ['created', 'updated']),
+        ),
+      )
+      .orderBy(activityLogs.createdAt, activityLogs.id);
+
+    const changes: StatusChange[] = [];
+    let initial: unknown = rows.find((r) => r.action === 'created')?.metadata.status;
+    for (const row of rows) {
+      if (row.action !== 'updated') continue;
+      const change = (row.metadata.changes as { status?: { from?: unknown; to?: unknown } })
+        ?.status;
+      if (!isTaskStatus(change?.to)) continue;
+      if (changes.length === 0 && !isTaskStatus(initial)) initial = change.from;
+      changes.push({ at: row.at, to: change.to });
+    }
+
+    return {
+      taskId: task.id,
+      ...timeInStatus({
+        createdAt: task.createdAt,
+        initialStatus: isTaskStatus(initial) ? initial : task.status,
+        changes,
+        completedAt: task.completedAt,
+        now: new Date(),
+      }),
+    };
   }
 
   async update(actor: Actor, taskId: string, input: UpdateTaskInput): Promise<Task> {

@@ -10,7 +10,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import type { Task } from '@devtrack/types';
+import type { Task, TaskTimeInStatus } from '@devtrack/types';
 import {
   addAssigneesSchema,
   attachLabelSchema,
@@ -67,6 +67,15 @@ export class TasksController {
     @Param('id', UuidParamPipe) id: string,
   ): Promise<{ task: Task }> {
     return { task: await this.tasks.get(user.id, id) };
+  }
+
+  /** Decision record 0011 — real time spent in each status, from the task's history. */
+  @Get('tasks/:id/time-in-status')
+  async timeInStatus(
+    @CurrentUser() user: User,
+    @Param('id', UuidParamPipe) id: string,
+  ): Promise<{ time: TaskTimeInStatus }> {
+    return { time: await this.tasks.timeInStatus(user.id, id) };
   }
 
   @Patch('tasks/:id')

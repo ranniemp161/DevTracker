@@ -72,6 +72,22 @@ export interface Task {
   completedAt: string | null;
 }
 
+/**
+ * How long a task has spent in each status, derived from its status-change history
+ * (decision record 0011). Real elapsed time, never an estimate.
+ */
+export interface TaskTimeInStatus {
+  taskId: string;
+  /** When these numbers were computed; the current status is counted up to this moment. */
+  asOf: string;
+  /** When the task entered its current status. */
+  currentSince: string;
+  /** Seconds per status, summed over every visit, in workflow order. Unvisited statuses are omitted. */
+  totals: { status: TaskStatus; seconds: number }[];
+  /** First move into In progress until completion. Null unless the task is done and was started. */
+  cycleSeconds: number | null;
+}
+
 export interface Label {
   id: string;
   workspaceId: string;
