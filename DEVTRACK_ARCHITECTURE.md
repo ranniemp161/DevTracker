@@ -1455,7 +1455,7 @@ Do not implement these unless scope is deliberately changed:
 - Full chat/messaging system.
 - Calendar view.
 - Gantt charts.
-- Time tracking and timesheets.
+- Time tracking and timesheets. _(Scope opened by decision records 0011 and 0012: per-task time in status, estimates and logged time.)_
 - File attachments and file management.
 - Advanced automation rules.
 - AI project assistant.

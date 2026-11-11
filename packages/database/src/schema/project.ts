@@ -117,6 +117,8 @@ export const tasks = pgTable(
     priority: taskPriority('priority').notNull().default('MEDIUM'),
     reporterId: uuid('reporter_id').references(() => users.id, { onDelete: 'set null' }),
     dueDate: date('due_date', { mode: 'string' }),
+    /** Expected effort in minutes (record 0012). Compared against logged time entries. */
+    estimateMinutes: integer('estimate_minutes'),
     /** Optional deliverable this task counts toward; cleared when the milestone is deleted. */
     milestoneId: uuid('milestone_id').references((): AnyPgColumn => milestones.id, {
       onDelete: 'set null',
@@ -138,6 +140,33 @@ export const tasks = pgTable(
     index('tasks_milestone_id_idx')
       .on(t.milestoneId)
       .where(sql`${t.deletedAt} IS NULL`),
+    check('tasks_estimate_positive', sql`${t.estimateMinutes} IS NULL OR ${t.estimateMinutes} > 0`),
+  ],
+);
+
+/** Time someone logged against a task (record 0012). Hard-deleted; activity keeps the trail. */
+export const timeEntries = pgTable(
+  'time_entries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    /** Who logged it. */
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    minutes: integer('minutes').notNull(),
+    /** The calendar day the work was done. */
+    spentOn: date('spent_on', { mode: 'string' }).notNull(),
+    note: text('note'),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+    updatedAt: timestamptz('updated_at')
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index('time_entries_task_id_idx').on(t.taskId, t.spentOn),
+    check('time_entries_minutes_range', sql`${t.minutes} BETWEEN 1 AND 1440`),
   ],
 );
 

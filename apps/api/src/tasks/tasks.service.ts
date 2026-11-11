@@ -1,5 +1,6 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import {
+  activityLogs,
   and,
   desc,
   eq,
@@ -16,6 +17,7 @@ import {
   taskAssignees,
   taskLabels,
   tasks,
+  timeEntries,
   users,
   type Database,
   type Executor,
@@ -26,6 +28,7 @@ import {
   type Task,
   type TaskLabel,
   type TaskStatus,
+  type TaskTimeInStatus,
   type UserRef,
 } from '@devtrack/types';
 import type { CreateTaskInput, ListTasksQuery, UpdateTaskInput } from '@devtrack/validators';
@@ -35,6 +38,7 @@ import { DATABASE } from '../database/database.module';
 import { EventRecorder, type Actor } from '../events/event-recorder.service';
 import { ProjectAccessService, type ProjectRow } from '../projects/project-access.service';
 import { TaskAccessService, type TaskRow } from './task-access.service';
+import { isTaskStatus, timeInStatus, type StatusChange } from './time-in-status';
 
 const userRef = { id: users.id, username: users.username, avatarUrl: users.avatarUrl };
 
@@ -95,6 +99,7 @@ export class TasksService {
           reporterId: actor.id,
           dueDate: input.dueDate ?? null,
           milestoneId,
+          estimateMinutes: input.estimateMinutes ?? null,
           completedAt: status === 'DONE' ? new Date() : null,
         })
         .returning();
@@ -184,6 +189,51 @@ export class TasksService {
     return (await this.load([task.id], access.project.key))[0]!;
   }
 
+  /**
+   * Time spent in each status, read from the task's own activity history. Every status change
+   * is logged in the transaction that makes it, so the history is complete (record 0011).
+   */
+  async timeInStatus(userId: string, taskId: string): Promise<TaskTimeInStatus> {
+    const { task } = await this.taskAccess.require(userId, taskId);
+    const rows = await this.db
+      .select({
+        action: activityLogs.action,
+        metadata: activityLogs.metadata,
+        at: activityLogs.createdAt,
+      })
+      .from(activityLogs)
+      .where(
+        and(
+          eq(activityLogs.taskId, task.id),
+          eq(activityLogs.entityType, 'task'),
+          inArray(activityLogs.action, ['created', 'updated']),
+        ),
+      )
+      .orderBy(activityLogs.createdAt, activityLogs.id);
+
+    const changes: StatusChange[] = [];
+    let initial: unknown = rows.find((r) => r.action === 'created')?.metadata.status;
+    for (const row of rows) {
+      if (row.action !== 'updated') continue;
+      const change = (row.metadata.changes as { status?: { from?: unknown; to?: unknown } })
+        ?.status;
+      if (!isTaskStatus(change?.to)) continue;
+      if (changes.length === 0 && !isTaskStatus(initial)) initial = change.from;
+      changes.push({ at: row.at, to: change.to });
+    }
+
+    return {
+      taskId: task.id,
+      ...timeInStatus({
+        createdAt: task.createdAt,
+        initialStatus: isTaskStatus(initial) ? initial : task.status,
+        changes,
+        completedAt: task.completedAt,
+        now: new Date(),
+      }),
+    };
+  }
+
   async update(actor: Actor, taskId: string, input: UpdateTaskInput): Promise<Task> {
     const { task, access } = await this.taskAccess.require(actor.id, taskId, { write: true });
     const changes = describeChanges(task, input);
@@ -213,6 +263,7 @@ export class TasksService {
             priority: input.priority,
             dueDate: input.dueDate,
             milestoneId: input.milestoneId === undefined ? undefined : (nextMilestone?.id ?? null),
+            estimateMinutes: input.estimateMinutes,
             status: input.status,
             completedAt: input.status ? completionFor(input.status, task) : undefined,
           })
@@ -444,6 +495,15 @@ export class TasksService {
       .innerJoin(labels, eq(labels.id, taskLabels.labelId))
       .where(inArray(taskLabels.taskId, ids))
       .orderBy(labels.name);
+    const logged = await this.db
+      .select({
+        taskId: timeEntries.taskId,
+        minutes: sql<number>`sum(${timeEntries.minutes})::int`,
+      })
+      .from(timeEntries)
+      .where(inArray(timeEntries.taskId, ids))
+      .groupBy(timeEntries.taskId);
+    const loggedByTask = new Map(logged.map((l) => [l.taskId, l.minutes]));
 
     const assigneesByTask = new Map<string, UserRef[]>();
     for (const a of assignees) {
@@ -470,6 +530,8 @@ export class TasksService {
         labels: labelsByTask.get(task.id) ?? [],
         dueDate: task.dueDate,
         milestoneId: task.milestoneId,
+        estimateMinutes: task.estimateMinutes,
+        loggedMinutes: loggedByTask.get(task.id) ?? 0,
         createdAt: task.createdAt.toISOString(),
         updatedAt: task.updatedAt.toISOString(),
         completedAt: task.completedAt?.toISOString() ?? null,
@@ -493,7 +555,7 @@ function scope(project: ProjectRow, task: TaskRow) {
  */
 function describeChanges(task: TaskRow, input: UpdateTaskInput): Record<string, unknown> {
   const changes: Record<string, unknown> = {};
-  for (const field of ['title', 'status', 'priority', 'dueDate'] as const) {
+  for (const field of ['title', 'status', 'priority', 'dueDate', 'estimateMinutes'] as const) {
     if (input[field] !== undefined && input[field] !== task[field]) {
       changes[field] = { from: task[field], to: input[field] };
     }

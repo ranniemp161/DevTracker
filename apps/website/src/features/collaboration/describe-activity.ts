@@ -1,5 +1,5 @@
 import type { ActivityEntry, TaskPriority, TaskStatus } from '@devtrack/types';
-import { PRIORITY_LABEL, TASK_STATUS_LABEL } from '../projects/labels';
+import { formatMinutes, PRIORITY_LABEL, TASK_STATUS_LABEL } from '../projects/labels';
 
 type Change = { from?: unknown; to?: unknown; changed?: boolean };
 
@@ -10,12 +10,14 @@ const FIELD_LABEL: Record<string, string> = {
   dueDate: 'due date',
   description: 'description',
   milestone: 'milestone',
+  estimateMinutes: 'estimate',
 };
 
 function value(field: string, v: unknown): string {
   if (v === null || v === undefined || v === '') return 'none';
   if (field === 'status') return TASK_STATUS_LABEL[v as TaskStatus] ?? String(v);
   if (field === 'priority') return PRIORITY_LABEL[v as TaskPriority] ?? String(v);
+  if (field === 'estimateMinutes') return formatMinutes(Number(v));
   return String(v);
 }
 
@@ -46,6 +48,16 @@ export function describeActivity(entry: ActivityEntry): string {
       return `added label "${label ?? '?'}"`;
     case 'task.unlabeled':
       return `removed label "${label ?? '?'}"`;
+    case 'task.time_logged':
+      return `logged ${formatMinutes(Number(m.minutes ?? 0))}`;
+    case 'task.time_updated': {
+      const minutes = (m.minutes ?? {}) as Change;
+      return minutes.from === minutes.to
+        ? 'edited a time entry'
+        : `changed a time entry from ${formatMinutes(Number(minutes.from))} to ${formatMinutes(Number(minutes.to))}`;
+    }
+    case 'task.time_removed':
+      return `removed a ${formatMinutes(Number(m.minutes ?? 0))} time entry`;
     case 'comment.created':
       return 'commented';
     case 'comment.deleted':

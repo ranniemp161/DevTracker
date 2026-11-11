@@ -39,6 +39,26 @@ export const PROJECT_STATUS_LABEL: Record<ProjectStatus, string> = {
   ARCHIVED: 'Archived',
 };
 
+/** Elapsed time in its two largest units: `45m`, `3h 20m`, `2d 4h`. */
+export function formatDuration(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 1) return 'Under 1m';
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
+  const mins = minutes % 60;
+  if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+  if (hours > 0) return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  return `${mins}m`;
+}
+
+/** Effort in hours and minutes, the way it is typed: `45m`, `4h`, `4h 30m`. */
+export function formatMinutes(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hours === 0) return `${mins}m`;
+  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+}
+
 export function formatDate(iso: string | null): string {
   if (!iso) return '—';
   // Dates are calendar dates (YYYY-MM-DD); format without time-zone shifts.
