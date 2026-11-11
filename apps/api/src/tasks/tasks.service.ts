@@ -17,6 +17,7 @@ import {
   taskAssignees,
   taskLabels,
   tasks,
+  timeEntries,
   users,
   type Database,
   type Executor,
@@ -98,6 +99,7 @@ export class TasksService {
           reporterId: actor.id,
           dueDate: input.dueDate ?? null,
           milestoneId,
+          estimateMinutes: input.estimateMinutes ?? null,
           completedAt: status === 'DONE' ? new Date() : null,
         })
         .returning();
@@ -261,6 +263,7 @@ export class TasksService {
             priority: input.priority,
             dueDate: input.dueDate,
             milestoneId: input.milestoneId === undefined ? undefined : (nextMilestone?.id ?? null),
+            estimateMinutes: input.estimateMinutes,
             status: input.status,
             completedAt: input.status ? completionFor(input.status, task) : undefined,
           })
@@ -492,6 +495,15 @@ export class TasksService {
       .innerJoin(labels, eq(labels.id, taskLabels.labelId))
       .where(inArray(taskLabels.taskId, ids))
       .orderBy(labels.name);
+    const logged = await this.db
+      .select({
+        taskId: timeEntries.taskId,
+        minutes: sql<number>`sum(${timeEntries.minutes})::int`,
+      })
+      .from(timeEntries)
+      .where(inArray(timeEntries.taskId, ids))
+      .groupBy(timeEntries.taskId);
+    const loggedByTask = new Map(logged.map((l) => [l.taskId, l.minutes]));
 
     const assigneesByTask = new Map<string, UserRef[]>();
     for (const a of assignees) {
@@ -518,6 +530,8 @@ export class TasksService {
         labels: labelsByTask.get(task.id) ?? [],
         dueDate: task.dueDate,
         milestoneId: task.milestoneId,
+        estimateMinutes: task.estimateMinutes,
+        loggedMinutes: loggedByTask.get(task.id) ?? 0,
         createdAt: task.createdAt.toISOString(),
         updatedAt: task.updatedAt.toISOString(),
         completedAt: task.completedAt?.toISOString() ?? null,
@@ -541,7 +555,7 @@ function scope(project: ProjectRow, task: TaskRow) {
  */
 function describeChanges(task: TaskRow, input: UpdateTaskInput): Record<string, unknown> {
   const changes: Record<string, unknown> = {};
-  for (const field of ['title', 'status', 'priority', 'dueDate'] as const) {
+  for (const field of ['title', 'status', 'priority', 'dueDate', 'estimateMinutes'] as const) {
     if (input[field] !== undefined && input[field] !== task[field]) {
       changes[field] = { from: task[field], to: input[field] };
     }

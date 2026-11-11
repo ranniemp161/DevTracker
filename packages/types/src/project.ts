@@ -67,9 +67,27 @@ export interface Task {
   dueDate: string | null;
   /** Milestone (deliverable) this task counts toward, in the same project. */
   milestoneId: string | null;
+  /** Expected effort in minutes; null when not estimated. */
+  estimateMinutes: number | null;
+  /** Sum of the task's time entries, in minutes. Real logged time, never an estimate. */
+  loggedMinutes: number;
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
+}
+
+/** Time logged against a task (decision record 0012). */
+export interface TimeEntry {
+  id: string;
+  taskId: string;
+  /** Who logged it; null if that account was deleted. */
+  user: UserRef | null;
+  minutes: number;
+  /** The day the work was done (YYYY-MM-DD). */
+  spentOn: string;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /**

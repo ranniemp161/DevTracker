@@ -8,6 +8,7 @@ import {
   type TaskPriority,
   type TaskStatus,
 } from '@devtrack/types';
+import { parseDuration } from '@devtrack/validators';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
@@ -27,13 +28,14 @@ import { api, ApiError } from '@/lib/api';
 import { useRealtimeRefresh } from '@/lib/realtime';
 import { useApiQuery } from '@/lib/use-api-query';
 import { useSession } from '../session/session-context';
-import { formatDate, PRIORITY_LABEL, TASK_STATUS_LABEL } from './labels';
+import { formatDate, formatMinutes, PRIORITY_LABEL, TASK_STATUS_LABEL } from './labels';
 import { ActivityFeed } from '../collaboration/activity-feed';
 import { CommentThread } from '../collaboration/comment-thread';
 import { TaskPullRequests } from '../github/task-pull-requests';
 import { useProject } from './project-context';
 import { TaskLabels } from './task-labels';
 import { TaskTime } from './task-time';
+import { TaskTimeEntries } from './task-time-entries';
 
 export function TaskDetail() {
   const { taskId } = useParams<{ taskId: string }>();
@@ -146,6 +148,7 @@ function TaskEditor({
   const router = useRouter();
   const { user } = useSession();
   const { project, members, readOnly } = useProject();
+  const estimateText = task.estimateMinutes ? formatMinutes(task.estimateMinutes) : '';
   const [form, setForm] = useState({
     title: task.title,
     description: task.description ?? '',
@@ -153,6 +156,7 @@ function TaskEditor({
     priority: task.priority,
     dueDate: task.dueDate ?? '',
     milestoneId: task.milestoneId ?? '',
+    estimate: estimateText,
   });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -166,7 +170,8 @@ function TaskEditor({
     form.status !== task.status ||
     form.priority !== task.priority ||
     form.dueDate !== (task.dueDate ?? '') ||
-    form.milestoneId !== (task.milestoneId ?? '');
+    form.milestoneId !== (task.milestoneId ?? '') ||
+    form.estimate.trim() !== estimateText;
   const milestonesQuery = useApiQuery<Milestone[]>(`/projects/${project.id}/milestones`);
   const milestones = milestonesQuery.data ?? [];
 
@@ -197,6 +202,13 @@ function TaskEditor({
     if (form.priority !== task.priority) body.priority = form.priority;
     if (form.dueDate !== (task.dueDate ?? '')) body.dueDate = form.dueDate || null;
     if (form.milestoneId !== (task.milestoneId ?? '')) body.milestoneId = form.milestoneId || null;
+    if (form.estimate.trim() !== estimateText) {
+      const minutes = form.estimate.trim() ? parseDuration(form.estimate) : null;
+      if (form.estimate.trim() && minutes === null) {
+        return setError('Enter the estimate like 2h 30m, or leave it empty.');
+      }
+      body.estimateMinutes = minutes;
+    }
     let unchanged = false;
     void call(
       async () => {
@@ -229,6 +241,7 @@ function TaskEditor({
       priority: task.priority,
       dueDate: task.dueDate ?? '',
       milestoneId: task.milestoneId ?? '',
+      estimate: estimateText,
     });
   }
 
@@ -402,6 +415,16 @@ function TaskEditor({
               </select>
               {readOnly ? null : <SelectChevron />}
             </PropertyRow>
+            <PropertyRow label="Estimate" htmlFor="task-estimate">
+              <input
+                id="task-estimate"
+                value={form.estimate}
+                disabled={readOnly}
+                placeholder={readOnly ? 'None' : 'e.g. 2h 30m'}
+                onChange={(e) => setForm((f) => ({ ...f, estimate: e.target.value }))}
+                className={`${valueControl} cursor-text px-2 placeholder:text-fg-subtle`}
+              />
+            </PropertyRow>
           </div>
 
           <PanelSection title="Assignees">
@@ -462,6 +485,8 @@ function TaskEditor({
             branchTip={`${task.key}-${slugify(task.title)}`}
             onChange={onActivity}
           />
+
+          <TaskTimeEntries task={task} onChanged={onSaved} />
 
           <TaskTime taskId={task.id} status={task.status} />
 
