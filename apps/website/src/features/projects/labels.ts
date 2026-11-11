@@ -51,6 +51,14 @@ export function formatDuration(seconds: number): string {
   return `${mins}m`;
 }
 
+/** Effort in hours and minutes, the way it is typed: `45m`, `4h`, `4h 30m`. */
+export function formatMinutes(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hours === 0) return `${mins}m`;
+  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+}
+
 export function formatDate(iso: string | null): string {
   if (!iso) return '—';
   // Dates are calendar dates (YYYY-MM-DD); format without time-zone shifts.

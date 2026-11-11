@@ -3,11 +3,14 @@ import {
   createMilestoneCriterionSchema,
   createProjectSchema,
   createTaskSchema,
+  createTimeEntrySchema,
   listTasksQuerySchema,
+  parseDuration,
   projectKeySchema,
   updateMilestoneCriterionSchema,
   updateProjectSchema,
   updateTaskSchema,
+  updateTimeEntrySchema,
 } from './project.js';
 
 describe('projectKeySchema', () => {
@@ -99,5 +102,40 @@ describe('milestone links and acceptance criteria', () => {
     expect(createMilestoneCriterionSchema.safeParse({ text: 'x'.repeat(501) }).success).toBe(false);
     expect(updateMilestoneCriterionSchema.parse({ done: true })).toEqual({ done: true });
     expect(updateMilestoneCriterionSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe('time tracking', () => {
+  it.each([
+    ['1h 30m', 90],
+    ['1h30m', 90],
+    ['90m', 90],
+    ['1.5h', 90],
+    ['2', 120],
+    [' 45 M ', 45],
+    ['0.25', 15],
+  ])('reads %j as %i minutes', (text, minutes) => {
+    expect(parseDuration(text)).toBe(minutes);
+  });
+  it.each(['', 'soon', '1d', '0', '0m', '-1h', '1h 30'])('rejects %j', (text) => {
+    expect(parseDuration(text)).toBeNull();
+  });
+
+  it('accepts an estimate, lets null clear it, and bounds it', () => {
+    expect(updateTaskSchema.parse({ estimateMinutes: 90 })).toEqual({ estimateMinutes: 90 });
+    expect(updateTaskSchema.parse({ estimateMinutes: null })).toEqual({ estimateMinutes: null });
+    for (const estimateMinutes of [0, 1.5, 60_001]) {
+      expect(updateTaskSchema.safeParse({ estimateMinutes }).success).toBe(false);
+    }
+  });
+
+  it('trims the note and limits an entry to a day', () => {
+    expect(createTimeEntrySchema.parse({ minutes: 30, spentOn: '2026-11-10', note: '  ' })).toEqual(
+      { minutes: 30, spentOn: '2026-11-10', note: null },
+    );
+    expect(createTimeEntrySchema.safeParse({ minutes: 1441, spentOn: '2026-11-10' }).success).toBe(
+      false,
+    );
+    expect(updateTimeEntrySchema.safeParse({}).success).toBe(false);
   });
 });

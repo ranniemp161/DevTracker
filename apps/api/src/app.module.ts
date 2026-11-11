@@ -23,6 +23,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { ProjectsModule } from './projects/projects.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { TasksModule } from './tasks/tasks.module';
+import { TimeEntriesModule } from './time-entries/time-entries.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 
 @Module({
@@ -37,6 +38,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
     InvitationsModule,
     ProjectsModule,
     TasksModule,
+    TimeEntriesModule,
     LabelsModule,
     MilestonesModule,
     CommentsModule,

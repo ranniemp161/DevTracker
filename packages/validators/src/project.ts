@@ -95,6 +95,33 @@ const userIdList = z
   .max(20, { error: 'At most 20 assignees.' })
   .transform((ids) => [...new Set(ids.map((id) => id.toLowerCase()))]);
 
+/** Longest single time entry: one day. */
+export const MAX_ENTRY_MINUTES = 1440;
+/** Largest estimate: 1,000 hours. */
+export const MAX_ESTIMATE_MINUTES = 60_000;
+
+/**
+ * Reads a typed duration into minutes: `1h 30m`, `90m`, `1.5h`, or a bare number of hours.
+ * Returns null when the text is not a duration or comes to less than a minute.
+ */
+export function parseDuration(text: string): number | null {
+  const value = text.trim();
+  if (/^\d+(?:\.\d+)?$/.test(value)) return atLeastAMinute(Number(value) * 60);
+  const match = /^(?:(\d+(?:\.\d+)?)\s*h)?\s*(?:(\d+)\s*m)?$/i.exec(value);
+  if (!match || (match[1] === undefined && match[2] === undefined)) return null;
+  return atLeastAMinute(Number(match[1] ?? 0) * 60 + Number(match[2] ?? 0));
+}
+const atLeastAMinute = (minutes: number) => (Math.round(minutes) >= 1 ? Math.round(minutes) : null);
+
+/** `null` clears the estimate. */
+const estimateMinutes = z
+  .number({ error: 'Enter the estimate like 2h 30m.' })
+  .int({ error: 'Enter the estimate like 2h 30m.' })
+  .min(1, { error: 'The estimate must be at least 1 minute.' })
+  .max(MAX_ESTIMATE_MINUTES, { error: 'The estimate must be at most 1,000 hours.' })
+  .nullable()
+  .optional();
+
 export const createTaskSchema = z.object({
   title: taskTitle,
   description: taskDescription,
@@ -103,6 +130,7 @@ export const createTaskSchema = z.object({
   dueDate: optionalDate,
   assigneeIds: userIdList.optional(),
   milestoneId: uuid.nullable().optional(),
+  estimateMinutes,
 });
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 
@@ -115,6 +143,7 @@ export const updateTaskSchema = z
     dueDate: optionalDate,
     /** `null` removes the task from its milestone. */
     milestoneId: uuid.nullable().optional(),
+    estimateMinutes,
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), { error: 'Nothing to update.' });
 export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
@@ -218,3 +247,37 @@ export const updateMilestoneCriterionSchema = z
   })
   .refine((v) => v.text !== undefined || v.done !== undefined, { error: 'Nothing to update.' });
 export type UpdateMilestoneCriterionInput = z.infer<typeof updateMilestoneCriterionSchema>;
+
+// --- Time entries (decision record 0012) ---
+
+const entryMinutes = z
+  .number({ error: 'Enter the time like 1h 30m.' })
+  .int({ error: 'Enter the time like 1h 30m.' })
+  .min(1, { error: 'Log at least 1 minute.' })
+  .max(MAX_ENTRY_MINUTES, { error: 'One entry can hold at most 24 hours.' });
+
+const entryDate = z.iso.date({ error: 'Use the format YYYY-MM-DD.' });
+
+const entryNote = z
+  .string()
+  .trim()
+  .max(500, { error: 'The note must be at most 500 characters.' })
+  .transform((v) => (v === '' ? null : v))
+  .nullable()
+  .optional();
+
+export const createTimeEntrySchema = z.object({
+  minutes: entryMinutes,
+  spentOn: entryDate,
+  note: entryNote,
+});
+export type CreateTimeEntryInput = z.infer<typeof createTimeEntrySchema>;
+
+export const updateTimeEntrySchema = z
+  .object({
+    minutes: entryMinutes.optional(),
+    spentOn: entryDate.optional(),
+    note: entryNote,
+  })
+  .refine((v) => Object.values(v).some((x) => x !== undefined), { error: 'Nothing to update.' });
+export type UpdateTimeEntryInput = z.infer<typeof updateTimeEntrySchema>;
