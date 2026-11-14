@@ -91,3 +91,16 @@ Everything is kept for the MVP. The pruning policy for `activity_logs`, `outbox_
 - Both sources are merged and paged in one SQL query (cursor: time + id), so pages never overlap or leave gaps. `limit` is 1–100 (default 50).
 - Comment activity (`comment.created`, `comment.deleted`) is left out, because the comment, or its deleted placeholder, is already in the list. The project activity feed still shows it.
 - Access matches the comments endpoint: anyone who can see the task, and 404 otherwise. `GET /tasks/:id/comments` and the project feed are unchanged.
+
+## Activity filters (added 2026-11-14)
+
+- `GET /projects/:id/activity` takes an optional `category`. The Activity page's filter chips (SPEC §5) use it, stored as `?category=`. Filtering happens on the server, so older matches aren't hidden behind unloaded pages.
+
+| Category     | Events                                                                |
+| ------------ | --------------------------------------------------------------------- |
+| `tasks`      | `task.*`, `milestone.*`                                               |
+| `comments`   | `comment.*`                                                           |
+| `repository` | `pull_request.*`, `repository.*`, `project.repository_(dis)connected` |
+| `members`    | `project.member_added`, `project.member_removed`                      |
+
+- Project created, updated and archived events appear only under "All", which is the default.

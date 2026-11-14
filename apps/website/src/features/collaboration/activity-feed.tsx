@@ -1,6 +1,7 @@
 'use client';
 
 import type { ActivityEntry } from '@devtrack/types';
+import type { ActivityCategory } from '@devtrack/validators';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Alert, Avatar, Button } from '@/components/ui';
@@ -15,6 +16,8 @@ export function ActivityFeed({
   limit = 30,
   refreshKey,
   groupByDay = false,
+  category,
+  emptyMessage = 'No activity yet.',
 }: {
   projectId: string;
   taskId?: string;
@@ -23,8 +26,13 @@ export function ActivityFeed({
   refreshKey?: unknown;
   /** Show "Today", "Yesterday" and date headings between entries. */
   groupByDay?: boolean;
+  /** Server-side filter (Activity page chips); omitted means all activity. */
+  category?: ActivityCategory;
+  emptyMessage?: string;
 }) {
-  const base = `/projects/${projectId}/activity?limit=${limit}${taskId ? `&taskId=${taskId}` : ''}`;
+  const base = `/projects/${projectId}/activity?limit=${limit}${taskId ? `&taskId=${taskId}` : ''}${
+    category ? `&category=${category}` : ''
+  }`;
   const [entries, setEntries] = useState<ActivityEntry[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -68,7 +76,7 @@ export function ActivityFeed({
 
   if (error) return <Alert>{error}</Alert>;
   if (!entries) return <p className="text-sm text-fg-subtle">Loading activity…</p>;
-  if (entries.length === 0) return <p className="text-sm text-fg-subtle">No activity yet.</p>;
+  if (entries.length === 0) return <p className="text-sm text-fg-subtle">{emptyMessage}</p>;
 
   const groups = groupByDay ? groupEntries(entries) : [{ label: '', items: entries }];
 
