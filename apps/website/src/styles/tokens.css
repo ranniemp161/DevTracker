@@ -221,6 +221,204 @@
   --dt-duration-base: 180ms;
 }
 
+/* ==========================================================================
+   Dark theme (SPEC R9, lifted 2026-11-14). Only semantic and domain tokens
+   change; primitives stay. Applied when the user picks Dark
+   (html[data-theme="dark"]), or follows a dark system setting without
+   having picked Light. lib/theme.ts sets data-theme before first paint.
+   ========================================================================== */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* Surfaces: forest-tinted grays */
+  --dt-bg: #0c1412;
+  --dt-surface: #121b18;
+  --dt-surface-sunken: #0f1715;
+  --dt-surface-muted: #1b2622;
+  --dt-surface-inverse: #e4ece8;
+
+  /* Text — every pair passes 4.5:1 on --dt-surface and --dt-bg (theme-contrast.test.ts) */
+  --dt-text: #e8eeeb;
+  --dt-text-secondary: #c5cfcb;
+  --dt-text-muted: #a3aeaa;
+  --dt-text-subtle: #8f9a96;
+  --dt-text-on-primary: #0b2e26;
+  --dt-text-on-inverse: #101816;
+  --dt-text-on-inverse-muted: #3d4743;
+
+  /* Borders */
+  --dt-border: #26322e;
+  --dt-border-subtle: #1d2825;
+  --dt-border-control: #66726e;
+  --dt-border-dashed: #33403b;
+
+  /* Brand / actions: mint on dark (SPEC §4 Logo) */
+  --dt-primary: #3fc79a;
+  --dt-primary-hover: #63d4ad;
+  --dt-primary-soft: #13342b;
+  --dt-primary-soft-text: #86dfbf;
+  --dt-accent: #3fc79a;
+
+  /* Feedback */
+  --dt-danger: #f29a9a;
+  --dt-danger-border: #5c2626;
+  --dt-danger-soft: #241212;
+  --dt-success: #3fc79a;
+  --dt-warning-text: #f0b35a;
+
+  /* Task status: soft bg / text-on-soft (dots keep their light-theme hue) */
+  --dt-status-backlog-bg: #1f2926;
+  --dt-status-backlog-fg: #b9c2be;
+  --dt-status-todo-bg: #33270f;
+  --dt-status-todo-fg: #f0b35a;
+  --dt-status-progress-bg: #142540;
+  --dt-status-progress-fg: #9cbdf6;
+  --dt-status-review-bg: #241c3d;
+  --dt-status-review-fg: #bfaef6;
+  --dt-status-done-bg: #12302a;
+  --dt-status-done-fg: #86dfbf;
+  --dt-status-blocked-bg: #3a1717;
+  --dt-status-blocked-fg: #f29a9a;
+
+  --dt-priority-bar: #c5cfcb;
+  --dt-priority-bar-empty: #3d4945;
+  --dt-priority-urgent: #f06767;
+
+  --dt-pr-open: #3fc79a;
+  --dt-pr-merged: #bfaef6;
+
+  --dt-activity-assign-bg: #172d45;
+  --dt-activity-label-bg: #3a2414;
+  --dt-activity-label-fg: #f5a46b;
+
+  --dt-avatar-1-bg: #13342b;
+  --dt-avatar-1-fg: #86dfbf;
+  --dt-avatar-2-bg: #172d45;
+  --dt-avatar-2-fg: #9cbdf6;
+  --dt-avatar-3-bg: #3a1a30;
+  --dt-avatar-3-fg: #eba0d3;
+  --dt-avatar-4-bg: #33270f;
+  --dt-avatar-4-fg: #f0b35a;
+  --dt-avatar-5-bg: #241c3d;
+  --dt-avatar-5-fg: #bfaef6;
+
+  --dt-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --dt-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --dt-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --dt-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.55);
+
+  /* Re-declared so they re-resolve against the dark values above */
+  --dt-focus-ring: 0 0 0 2px var(--dt-surface), 0 0 0 4px var(--dt-primary);
+  --dt-activity-status-bg: var(--dt-status-progress-bg);
+  --dt-activity-status-fg: var(--dt-status-progress-fg);
+  --dt-activity-assign-fg: var(--dt-status-progress-fg);
+  --dt-activity-comment-bg: var(--dt-surface-muted);
+  --dt-activity-comment-fg: var(--dt-text-secondary);
+  --dt-activity-repo-bg: var(--dt-status-review-bg);
+  --dt-activity-repo-fg: var(--dt-status-review-fg);
+  --dt-activity-member-bg: var(--dt-primary-soft);
+  --dt-activity-member-fg: var(--dt-primary-soft-text);
+  --dt-activity-other-bg: var(--dt-surface-muted);
+  --dt-activity-other-fg: var(--dt-text-muted);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    /* Surfaces: forest-tinted grays */
+    --dt-bg: #0c1412;
+    --dt-surface: #121b18;
+    --dt-surface-sunken: #0f1715;
+    --dt-surface-muted: #1b2622;
+    --dt-surface-inverse: #e4ece8;
+
+    /* Text — every pair passes 4.5:1 on --dt-surface and --dt-bg (theme-contrast.test.ts) */
+    --dt-text: #e8eeeb;
+    --dt-text-secondary: #c5cfcb;
+    --dt-text-muted: #a3aeaa;
+    --dt-text-subtle: #8f9a96;
+    --dt-text-on-primary: #0b2e26;
+    --dt-text-on-inverse: #101816;
+    --dt-text-on-inverse-muted: #3d4743;
+
+    /* Borders */
+    --dt-border: #26322e;
+    --dt-border-subtle: #1d2825;
+    --dt-border-control: #66726e;
+    --dt-border-dashed: #33403b;
+
+    /* Brand / actions: mint on dark (SPEC §4 Logo) */
+    --dt-primary: #3fc79a;
+    --dt-primary-hover: #63d4ad;
+    --dt-primary-soft: #13342b;
+    --dt-primary-soft-text: #86dfbf;
+    --dt-accent: #3fc79a;
+
+    /* Feedback */
+    --dt-danger: #f29a9a;
+    --dt-danger-border: #5c2626;
+    --dt-danger-soft: #241212;
+    --dt-success: #3fc79a;
+    --dt-warning-text: #f0b35a;
+
+    /* Task status: soft bg / text-on-soft (dots keep their light-theme hue) */
+    --dt-status-backlog-bg: #1f2926;
+    --dt-status-backlog-fg: #b9c2be;
+    --dt-status-todo-bg: #33270f;
+    --dt-status-todo-fg: #f0b35a;
+    --dt-status-progress-bg: #142540;
+    --dt-status-progress-fg: #9cbdf6;
+    --dt-status-review-bg: #241c3d;
+    --dt-status-review-fg: #bfaef6;
+    --dt-status-done-bg: #12302a;
+    --dt-status-done-fg: #86dfbf;
+    --dt-status-blocked-bg: #3a1717;
+    --dt-status-blocked-fg: #f29a9a;
+
+    --dt-priority-bar: #c5cfcb;
+    --dt-priority-bar-empty: #3d4945;
+    --dt-priority-urgent: #f06767;
+
+    --dt-pr-open: #3fc79a;
+    --dt-pr-merged: #bfaef6;
+
+    --dt-activity-assign-bg: #172d45;
+    --dt-activity-label-bg: #3a2414;
+    --dt-activity-label-fg: #f5a46b;
+
+    --dt-avatar-1-bg: #13342b;
+    --dt-avatar-1-fg: #86dfbf;
+    --dt-avatar-2-bg: #172d45;
+    --dt-avatar-2-fg: #9cbdf6;
+    --dt-avatar-3-bg: #3a1a30;
+    --dt-avatar-3-fg: #eba0d3;
+    --dt-avatar-4-bg: #33270f;
+    --dt-avatar-4-fg: #f0b35a;
+    --dt-avatar-5-bg: #241c3d;
+    --dt-avatar-5-fg: #bfaef6;
+
+    --dt-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --dt-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+    --dt-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.45);
+    --dt-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.55);
+
+    /* Re-declared so they re-resolve against the dark values above */
+    --dt-focus-ring: 0 0 0 2px var(--dt-surface), 0 0 0 4px var(--dt-primary);
+    --dt-activity-status-bg: var(--dt-status-progress-bg);
+    --dt-activity-status-fg: var(--dt-status-progress-fg);
+    --dt-activity-assign-fg: var(--dt-status-progress-fg);
+    --dt-activity-comment-bg: var(--dt-surface-muted);
+    --dt-activity-comment-fg: var(--dt-text-secondary);
+    --dt-activity-repo-bg: var(--dt-status-review-bg);
+    --dt-activity-repo-fg: var(--dt-status-review-fg);
+    --dt-activity-member-bg: var(--dt-primary-soft);
+    --dt-activity-member-fg: var(--dt-primary-soft-text);
+    --dt-activity-other-bg: var(--dt-surface-muted);
+    --dt-activity-other-fg: var(--dt-text-muted);
+  }
+}
+
 /* Respect reduced motion */
 @media (prefers-reduced-motion: reduce) {
   :root {
