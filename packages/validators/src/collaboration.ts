@@ -20,8 +20,13 @@ export const listCommentsQuerySchema = z.object({
 });
 export type ListCommentsQuery = z.infer<typeof listCommentsQuerySchema>;
 
+/** Activity page filter chips (SPEC §5 Activity). Omitted means all activity. */
+export const ACTIVITY_CATEGORIES = ['tasks', 'comments', 'repository', 'members'] as const;
+export type ActivityCategory = (typeof ACTIVITY_CATEGORIES)[number];
+
 export const listActivityQuerySchema = z.object({
   taskId: z.uuid({ error: 'Invalid task id.' }).optional(),
+  category: z.enum(ACTIVITY_CATEGORIES).optional(),
   cursor,
   limit: z.coerce.number().int().min(1).max(100).default(30),
 });

@@ -5,13 +5,14 @@ import {
   desc,
   eq,
   inArray,
+  or,
   sql,
   tasks,
   users,
   type Database,
 } from '@devtrack/database';
 import type { ActivityAction, ActivityEntry } from '@devtrack/types';
-import type { ListActivityQuery } from '@devtrack/validators';
+import type { ActivityCategory, ListActivityQuery } from '@devtrack/validators';
 import { decodeCursor, isTimeCursor, Paginated, timeCursorOf } from '../common/http/paginated';
 import { DATABASE } from '../database/database.module';
 import { ProjectAccessService } from '../projects/project-access.service';
@@ -27,7 +28,7 @@ export class ActivityService {
   async list(
     userId: string,
     projectId: string,
-    query: Pick<ListActivityQuery, 'cursor' | 'limit'> & { taskId?: string },
+    query: Pick<ListActivityQuery, 'cursor' | 'limit' | 'category'> & { taskId?: string },
     filter: { entityTypes?: string[] } = {},
   ): Promise<Paginated<ActivityEntry>> {
     const { project } = await this.access.require(userId, projectId);
@@ -43,6 +44,7 @@ export class ActivityService {
           eq(activityLogs.projectId, project.id),
           query.taskId ? eq(activityLogs.taskId, query.taskId.toLowerCase()) : undefined,
           filter.entityTypes ? inArray(activityLogs.entityType, filter.entityTypes) : undefined,
+          query.category ? categoryCondition(query.category) : undefined,
           before
             ? sql`(${activityLogs.createdAt}, ${activityLogs.id}) < (${before.t}::timestamptz, ${before.id}::uuid)`
             : undefined,
@@ -57,6 +59,28 @@ export class ActivityService {
       page.map((row) => toActivityEntry(row, project.key)),
       nextCursor,
     );
+  }
+}
+
+/**
+ * Which events each Activity filter chip shows (decision record 0004). Project created, updated
+ * and archived events appear only under "All".
+ */
+function categoryCondition(category: ActivityCategory) {
+  const projectAction = (actions: string[]) =>
+    and(eq(activityLogs.entityType, 'project'), inArray(activityLogs.action, actions));
+  switch (category) {
+    case 'tasks':
+      return inArray(activityLogs.entityType, ['task', 'milestone']);
+    case 'comments':
+      return eq(activityLogs.entityType, 'comment');
+    case 'repository':
+      return or(
+        inArray(activityLogs.entityType, ['pull_request', 'repository']),
+        projectAction(['repository_connected', 'repository_disconnected']),
+      );
+    case 'members':
+      return projectAction(['member_added', 'member_removed']);
   }
 }
 
