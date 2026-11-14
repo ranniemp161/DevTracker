@@ -2,7 +2,7 @@
 
 import type { Task } from '@devtrack/types';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Avatar,
@@ -19,12 +19,32 @@ import { LabelChip } from './label-chip';
 import { formatDate, TASK_STATUS_LABEL } from './labels';
 import { useProject } from './project-context';
 import { TaskFilterBar, useTaskFilters } from './task-filters';
+import { isListUpdating, resultCountLabel, updatingLabel } from './task-list-status';
+
+/** Fast responses shouldn't flash an "updating" state. */
+const UPDATING_DELAY_MS = 150;
+
+/**
+ * True once `key` has stayed the same for `delayMs`. Keyed by the pending query, so each
+ * new filter change waits again without resetting state synchronously.
+ */
+function useDelayedKey(key: string | null, delayMs: number): boolean {
+  const [shownFor, setShownFor] = useState<string | null>(null);
+  useEffect(() => {
+    if (key === null) return;
+    const timer = setTimeout(() => setShownFor(key), delayMs);
+    return () => clearTimeout(timer);
+  }, [key, delayMs]);
+  return key !== null && shownFor === key;
+}
 
 /** List view: newest first, filterable, cursor-paginated (M3 rule 9). */
 export function TaskList() {
   const { project, members } = useProject();
   const { filters } = useTaskFilters();
   const [rows, setRows] = useState<Task[] | null>(null);
+  /** The query `rows` came from; differs from `base` while a new filter/search loads. */
+  const [loadedBase, setLoadedBase] = useState<string | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -39,6 +59,13 @@ export function TaskList() {
   );
   query.set('limit', '50');
   const base = `/projects/${project.id}/tasks?${query.toString()}`;
+  const latestBase = useRef(base);
+  useEffect(() => {
+    latestBase.current = base;
+  }, [base]);
+
+  const updating = isListUpdating(loadedBase, base);
+  const showUpdating = useDelayedKey(updating ? base : null, UPDATING_DELAY_MS);
 
   useEffect(() => {
     let cancelled = false;
@@ -47,6 +74,7 @@ export function TaskList() {
         if (cancelled) return;
         setRows(page.items);
         setCursor(page.nextCursor);
+        setLoadedBase(base);
         setError(null);
       },
       (err: unknown) =>
@@ -58,10 +86,13 @@ export function TaskList() {
   }, [base, version]);
 
   async function loadMore() {
-    if (!cursor) return;
+    if (!cursor || updating) return;
+    const requestBase = base;
     setLoadingMore(true);
     try {
-      const page = await apiPage<Task>(`${base}&cursor=${encodeURIComponent(cursor)}`);
+      const page = await apiPage<Task>(`${requestBase}&cursor=${encodeURIComponent(cursor)}`);
+      // The filters changed while this page loaded: it belongs to the old results.
+      if (latestBase.current !== requestBase) return;
       setRows((r) => [...(r ?? []), ...page.items]);
       setCursor(page.nextCursor);
     } catch (err) {
@@ -75,10 +106,28 @@ export function TaskList() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
         <TaskFilterBar workspaceId={project.workspaceId} projectId={project.id} members={members} />
+        {rows ? (
+          <p
+            role="status"
+            aria-live="polite"
+            className={showUpdating ? 'text-label text-fg-muted' : 'sr-only'}
+          >
+            {showUpdating
+              ? updatingLabel(Boolean(filters.q))
+              : updating
+                ? ''
+                : resultCountLabel(rows.length, cursor !== null)}
+          </p>
+        ) : null}
       </div>
       {error ? <Alert>{error}</Alert> : null}
       <div className="overflow-x-auto rounded-card border border-line bg-surface">
-        <table className="w-full min-w-176 text-left text-sm">
+        <table
+          aria-busy={updating || undefined}
+          className={`w-full min-w-176 text-left text-sm transition-opacity ${
+            showUpdating ? 'opacity-60' : ''
+          }`}
+        >
           <thead className="border-b border-line bg-surface-sunken text-xs text-fg-muted">
             <tr>
               <th className="px-4 py-2.5 font-medium">Key</th>
@@ -153,7 +202,7 @@ export function TaskList() {
           </div>
         ) : null}
       </div>
-      {cursor ? (
+      {cursor && !updating ? (
         <Button onClick={loadMore} disabled={loadingMore}>
           {loadingMore ? 'Loading…' : 'Load more'}
         </Button>
