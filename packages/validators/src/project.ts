@@ -156,6 +156,52 @@ export const addAssigneesSchema = z.object({
 });
 export type AddAssigneesInput = z.infer<typeof addAssigneesSchema>;
 
+export const TASK_SEARCH_MAX_LENGTH = 100;
+
+/**
+ * What a task search matches. A task matches when its number equals `number`, or its title or
+ * description contains `text` (case-insensitive). Shared by the API (List) and the website
+ * (Board) so both apply the same rules.
+ */
+export interface TaskSearch {
+  number: number | null;
+  text: string | null;
+}
+
+/**
+ * - `DEV-12` (this project's key): task number 12 only.
+ * - `#12`: task number 12 only.
+ * - `12`: task number 12, or text containing "12".
+ * - anything else, including another project's key: text only.
+ * Returns null for an empty search.
+ */
+export function parseTaskSearch(raw: string, projectKey: string): TaskSearch | null {
+  const q = raw.trim().slice(0, TASK_SEARCH_MAX_LENGTH);
+  if (q === '') return null;
+  const keyed = /^([A-Za-z][A-Za-z0-9]{1,9})-(\d{1,9})$/.exec(q);
+  if (keyed && keyed[1]!.toUpperCase() === projectKey.toUpperCase()) {
+    return { number: Number(keyed[2]), text: null };
+  }
+  const hashed = /^#(\d{1,9})$/.exec(q);
+  if (hashed) return { number: Number(hashed[1]), text: null };
+  if (/^\d{1,9}$/.test(q)) return { number: Number(q), text: q };
+  return { number: null, text: q };
+}
+
+/** Browser-side twin of the API's search filter. */
+export function taskMatchesSearch(
+  task: { number: number; title: string; description: string | null },
+  search: TaskSearch,
+): boolean {
+  if (search.number !== null && task.number === search.number) return true;
+  if (search.text === null) return false;
+  const needle = search.text.toLocaleLowerCase();
+  return (
+    task.title.toLocaleLowerCase().includes(needle) ||
+    (task.description?.toLocaleLowerCase().includes(needle) ?? false)
+  );
+}
+
 /** Query string for GET /projects/:id/tasks (values arrive as strings). */
 export const listTasksQuerySchema = z.object({
   status: taskStatusSchema.optional(),
@@ -164,6 +210,8 @@ export const listTasksQuerySchema = z.object({
   labelId: uuid.optional(),
   /** A milestone id, or `none` for tasks without a milestone. */
   milestoneId: z.union([uuid, z.literal('none')]).optional(),
+  /** Free-text search; see `parseTaskSearch` for the matching rules. */
+  q: z.string().trim().max(TASK_SEARCH_MAX_LENGTH).optional(),
   cursor: z.string().max(100).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });

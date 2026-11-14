@@ -4,6 +4,7 @@ import {
   and,
   desc,
   eq,
+  ilike,
   inArray,
   isNull,
   labels,
@@ -11,6 +12,7 @@ import {
   milestones,
   ne,
   notInArray,
+  or,
   projectMembers,
   projects,
   sql,
@@ -31,7 +33,12 @@ import {
   type TaskTimeInStatus,
   type UserRef,
 } from '@devtrack/types';
-import type { CreateTaskInput, ListTasksQuery, UpdateTaskInput } from '@devtrack/validators';
+import {
+  parseTaskSearch,
+  type CreateTaskInput,
+  type ListTasksQuery,
+  type UpdateTaskInput,
+} from '@devtrack/validators';
 import { AppException } from '../common/errors/app.exception';
 import { decodeCursor, encodeCursor, Paginated } from '../common/http/paginated';
 import { DATABASE } from '../database/database.module';
@@ -49,6 +56,11 @@ const isTaskCursor = (v: unknown): v is TaskCursor =>
   typeof v === 'object' && v !== null && Number.isInteger((v as TaskCursor).n);
 
 /** completed_at follows the status (M3 rule 6). */
+/** Escapes LIKE wildcards so a search for `50%` or `a_b` matches those characters literally. */
+function escapeLike(text: string): string {
+  return text.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
 function completionFor(next: TaskStatus, current: TaskRow | null): Date | null | undefined {
   if (current && current.status === next) return undefined; // unchanged
   return next === 'DONE' ? new Date() : null;
@@ -162,6 +174,16 @@ export class TasksService {
           ? isNull(tasks.milestoneId)
           : eq(tasks.milestoneId, query.milestoneId.toLowerCase()),
       );
+    }
+    const search = query.q ? parseTaskSearch(query.q, project.key) : null;
+    if (search) {
+      const matches: SQL[] = [];
+      if (search.number !== null) matches.push(eq(tasks.taskNumber, search.number));
+      if (search.text !== null) {
+        const pattern = `%${escapeLike(search.text)}%`;
+        matches.push(ilike(tasks.title, pattern), ilike(tasks.description, pattern));
+      }
+      conditions.push(or(...matches)!);
     }
     if (query.cursor) {
       conditions.push(lt(tasks.taskNumber, decodeCursor(query.cursor, isTaskCursor).n));

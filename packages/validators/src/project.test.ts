@@ -6,7 +6,9 @@ import {
   createTimeEntrySchema,
   listTasksQuerySchema,
   parseDuration,
+  parseTaskSearch,
   projectKeySchema,
+  taskMatchesSearch,
   updateMilestoneCriterionSchema,
   updateProjectSchema,
   updateTaskSchema,
@@ -137,5 +139,44 @@ describe('time tracking', () => {
       false,
     );
     expect(updateTimeEntrySchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe('task search', () => {
+  it.each([
+    ['DEV-12', { number: 12, text: null }],
+    ['dev-12', { number: 12, text: null }],
+    ['#12', { number: 12, text: null }],
+    ['12', { number: 12, text: '12' }],
+    ['  login bug ', { number: null, text: 'login bug' }],
+    ['API-12', { number: null, text: 'API-12' }],
+    ['50%_off', { number: null, text: '50%_off' }],
+  ])('parses %j', (q, expected) => {
+    expect(parseTaskSearch(q, 'DEV')).toEqual(expected);
+  });
+
+  it('returns null for an empty search', () => {
+    expect(parseTaskSearch('   ', 'DEV')).toBeNull();
+  });
+
+  it('caps the search length', () => {
+    expect(parseTaskSearch('a'.repeat(150), 'DEV')!.text).toHaveLength(100);
+  });
+
+  const task = { number: 7, title: 'Fix Login redirect', description: 'Happens on v12 only' };
+  it('matches by number, title or description, ignoring case', () => {
+    expect(taskMatchesSearch(task, parseTaskSearch('#7', 'DEV')!)).toBe(true);
+    expect(taskMatchesSearch(task, parseTaskSearch('login', 'DEV')!)).toBe(true);
+    expect(taskMatchesSearch(task, parseTaskSearch('12', 'DEV')!)).toBe(true);
+    expect(taskMatchesSearch(task, parseTaskSearch('DEV-12', 'DEV')!)).toBe(false);
+    expect(taskMatchesSearch(task, parseTaskSearch('signup', 'DEV')!)).toBe(false);
+    expect(taskMatchesSearch({ ...task, description: null }, parseTaskSearch('v12', 'DEV')!)).toBe(
+      false,
+    );
+  });
+
+  it('accepts q on the list query and trims it', () => {
+    expect(listTasksQuerySchema.parse({ q: ' bug ' }).q).toBe('bug');
+    expect(listTasksQuerySchema.safeParse({ q: 'a'.repeat(101) }).success).toBe(false);
   });
 });

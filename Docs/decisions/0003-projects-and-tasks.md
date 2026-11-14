@@ -57,6 +57,11 @@ These rules were approved before implementation (§21 rule 12).
   - the cursor is opaque base64url;
   - `limit` is 1–200 (default 50);
   - filters: `status`, `priority`, `assigneeId`.
+- **Search (added 2026-11-14):** `q` (up to 100 characters, trimmed) narrows both views and combines with the other filters. `parseTaskSearch` in `@devtrack/validators` holds the rules, and both the API (List) and the website (Board, which filters tasks it has already loaded) use it:
+  - `DEV-12` (this project's key) or `#12` matches task number 12 only;
+  - a bare number such as `12` matches task number 12, or text containing "12";
+  - anything else, including another project's key, is a case-insensitive "contains" match on title or description. `%`, `_` and `\` are matched literally.
+  - There is no index: a search scans one project's tasks, which is cheap at current sizes. Add a `pg_trgm` index if searches get slow.
 
 ## 9. Labels (added to M3, approved)
 
