@@ -17,6 +17,7 @@ import {
   DevtrackMark,
   FlagIcon,
   FolderIcon,
+  MyTasksIcon,
   ListIcon,
   MoreIcon,
   PlusIcon,
@@ -121,6 +122,16 @@ export function Sidebar({
 
       {active ? (
         <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mb-3">
+            <NavLink
+              href={`${base}/my-tasks`}
+              active={pathname === `${base}/my-tasks`}
+              icon={<MyTasksIcon size={16} />}
+              onNavigate={onNavigate}
+            >
+              My tasks
+            </NavLink>
+          </div>
           <div className="flex h-7 items-center justify-between px-2.5">
             <h2 className="text-xs font-medium text-fg-muted">Projects</h2>
             {isAdmin(active.role) ? (

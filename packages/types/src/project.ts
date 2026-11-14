@@ -76,6 +76,18 @@ export interface Task {
   completedAt: string | null;
 }
 
+/** A task in the "My tasks" view, with the project it belongs to. */
+export interface MyTask extends Task {
+  project: { id: string; key: string; name: string };
+}
+
+/** GET /workspaces/:id/my-tasks: open tasks assigned to the caller, most urgent first. */
+export interface MyTasksResponse {
+  tasks: MyTask[];
+  /** More open assignments exist than were returned (the view shows "100+"). */
+  hasMore: boolean;
+}
+
 /** Time logged against a task (decision record 0012). */
 export interface TimeEntry {
   id: string;

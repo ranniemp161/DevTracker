@@ -10,7 +10,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import type { Task, TaskTimeInStatus } from '@devtrack/types';
+import type { MyTasksResponse, Task, TaskTimeInStatus } from '@devtrack/types';
 import {
   addAssigneesSchema,
   attachLabelSchema,
@@ -59,6 +59,14 @@ export class TasksController {
     @Query(new ZodValidationPipe(listTasksQuerySchema)) query: ListTasksQuery,
   ): Promise<Paginated<Task>> {
     return this.tasks.list(user.id, projectId, query);
+  }
+
+  @Get('workspaces/:id/my-tasks')
+  myTasks(
+    @CurrentUser() user: User,
+    @Param('id', UuidParamPipe) workspaceId: string,
+  ): Promise<MyTasksResponse> {
+    return this.tasks.assignedToMe(user.id, workspaceId);
   }
 
   @Get('tasks/:id')
