@@ -2,6 +2,7 @@ import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import {
   activityLogs,
   and,
+  asc,
   desc,
   eq,
   ilike,
@@ -27,6 +28,8 @@ import {
 } from '@devtrack/database';
 import {
   ErrorCode,
+  type MyTask,
+  type MyTasksResponse,
   type Task,
   type TaskLabel,
   type TaskStatus,
@@ -44,11 +47,14 @@ import { decodeCursor, encodeCursor, Paginated } from '../common/http/paginated'
 import { DATABASE } from '../database/database.module';
 import { EventRecorder, type Actor } from '../events/event-recorder.service';
 import { ProjectAccessService, type ProjectRow } from '../projects/project-access.service';
+import { WorkspaceAccessService } from '../workspaces/workspace-access.service';
 import { TaskAccessService, type TaskRow } from './task-access.service';
 import { isTaskStatus, timeInStatus, type StatusChange } from './time-in-status';
 
 const userRef = { id: users.id, username: users.username, avatarUrl: users.avatarUrl };
 const taskRowFields = { task: tasks, reporter: userRef };
+/** "My tasks" returns at most this many; the view says "100+" beyond it. */
+const MY_TASKS_LIMIT = 100;
 type TaskRowWithReporter = { task: typeof tasks.$inferSelect; reporter: UserRef | null };
 
 interface TaskCursor {
@@ -78,6 +84,7 @@ export class TasksService {
     private readonly projectAccess: ProjectAccessService,
     private readonly taskAccess: TaskAccessService,
     private readonly events: EventRecorder,
+    private readonly workspaceAccess: WorkspaceAccessService,
   ) {}
 
   /**
@@ -203,6 +210,58 @@ export class TasksService {
     const nextCursor =
       rows.length > query.limit ? encodeCursor({ n: page.at(-1)!.task.taskNumber }) : null;
     return new Paginated(await this.hydrate(page, project.key), nextCursor);
+  }
+
+  /**
+   * "My tasks": open (not Done) tasks assigned to the caller in this workspace's active projects,
+   * most urgent first (due date, undated last, then priority). Only projects the caller can
+   * still access count: their own projects, or every project for workspace Owners/Admins.
+   */
+  async assignedToMe(userId: string, workspaceId: string): Promise<MyTasksResponse> {
+    const { membership } = await this.workspaceAccess.require(userId, workspaceId);
+    const isAdmin = membership.role === 'OWNER' || membership.role === 'ADMIN';
+    const conditions: SQL[] = [
+      eq(projects.workspaceId, workspaceId),
+      ne(projects.status, 'ARCHIVED'),
+      isNull(tasks.deletedAt),
+      ne(tasks.status, 'DONE'),
+      inArray(
+        tasks.id,
+        this.db
+          .select({ id: taskAssignees.taskId })
+          .from(taskAssignees)
+          .where(eq(taskAssignees.userId, userId)),
+      ),
+    ];
+    if (!isAdmin) {
+      conditions.push(
+        inArray(
+          projects.id,
+          this.db
+            .select({ id: projectMembers.projectId })
+            .from(projectMembers)
+            .where(eq(projectMembers.userId, userId)),
+        ),
+      );
+    }
+    const rows = await this.db
+      .select({
+        ...taskRowFields,
+        project: { id: projects.id, key: projects.key, name: projects.name },
+      })
+      .from(tasks)
+      .innerJoin(projects, eq(projects.id, tasks.projectId))
+      .leftJoin(users, eq(users.id, tasks.reporterId))
+      .where(and(...conditions))
+      .orderBy(sql`${tasks.dueDate} asc nulls last`, desc(tasks.priority), asc(tasks.createdAt))
+      .limit(MY_TASKS_LIMIT + 1);
+    const page = rows.slice(0, MY_TASKS_LIMIT);
+    const projectOf = new Map(page.map((r) => [r.task.id, r.project]));
+    const hydrated = await this.hydrate(page, (task) => projectOf.get(task.id)!.key);
+    return {
+      tasks: hydrated.map((t): MyTask => ({ ...t, project: projectOf.get(t.id)! })),
+      hasMore: rows.length > MY_TASKS_LIMIT,
+    };
   }
 
   async get(userId: string, taskId: string): Promise<Task> {
@@ -514,7 +573,11 @@ export class TasksService {
    * only need the ids, so they run in parallel on the pool (3 of its 5 connections); this must
    * stay on `this.db`, never a transaction, which can't run queries concurrently.
    */
-  private async hydrate(rows: TaskRowWithReporter[], projectKey: string): Promise<Task[]> {
+  private async hydrate(
+    rows: TaskRowWithReporter[],
+    projectKey: string | ((task: TaskRowWithReporter['task']) => string),
+  ): Promise<Task[]> {
+    const keyPrefix = typeof projectKey === 'string' ? () => projectKey : projectKey;
     if (rows.length === 0) return [];
     const ids = rows.map((r) => r.task.id);
     const [assignees, attached, logged] = await Promise.all([
@@ -557,7 +620,7 @@ export class TasksService {
         id: task.id,
         projectId: task.projectId,
         number: task.taskNumber,
-        key: `${projectKey}-${task.taskNumber}`,
+        key: `${keyPrefix(task)}-${task.taskNumber}`,
         title: task.title,
         description: task.description,
         status: task.status,

@@ -43,6 +43,11 @@ export const XIcon = (p: IconProps) => (
     <path d="M6 6l12 12M18 6 6 18" />
   </Icon>
 );
+export const MyTasksIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="m4 7 2 2 3.5-3.5M4 15l2 2 3.5-3.5M13 8h7M13 16h7" />
+  </Icon>
+);
 export const SearchIcon = (p: IconProps) => (
   <Icon {...p}>
     <circle cx="11" cy="11" r="6.5" />
