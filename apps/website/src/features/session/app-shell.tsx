@@ -302,7 +302,7 @@ function Drawer({ onClose, children }: { onClose: () => void; children: ReactNod
         role="dialog"
         aria-modal="true"
         aria-label="Navigation"
-        className="absolute inset-y-0 left-0 w-72 max-w-[85vw] bg-bg shadow-overlay"
+        className="absolute inset-y-0 left-0 w-72 max-w-drawer bg-bg shadow-overlay"
       >
         {children}
       </div>

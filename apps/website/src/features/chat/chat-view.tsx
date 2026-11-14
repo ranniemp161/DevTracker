@@ -367,7 +367,7 @@ export function ChatView() {
   }
 
   return (
-    <div className="mx-auto flex h-[calc(100dvh-14rem)] min-h-[500px] max-w-3xl flex-col rounded-panel border border-line bg-surface">
+    <div className="mx-auto flex h-chat max-w-3xl flex-col rounded-panel border border-line bg-surface">
       {/* Header bar / connection warning */}
       {!isConnected ? (
         <div className="border-b border-status-todo-bg bg-status-todo-bg px-4 py-1.5 text-xs text-status-todo-fg">

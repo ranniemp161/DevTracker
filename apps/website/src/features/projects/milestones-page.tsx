@@ -189,7 +189,7 @@ function CreateMilestone({ onCreated }: { onCreated: () => void }) {
       <form
         onSubmit={form.onSubmit}
         noValidate
-        className="grid gap-3 sm:grid-cols-[1fr_1fr_160px_auto] sm:items-end"
+        className="grid gap-3 sm:grid-cols-milestone-form sm:items-end"
       >
         <Field
           label="Name"

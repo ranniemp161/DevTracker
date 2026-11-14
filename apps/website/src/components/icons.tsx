@@ -98,7 +98,7 @@ export function DevtrackMark({
   title?: string;
 }) {
   const bg = tone === 'pine' ? 'var(--dt-pine-600)' : 'var(--dt-pine-400)';
-  const fg = tone === 'pine' ? '#ffffff' : 'var(--dt-pine-900)';
+  const fg = tone === 'pine' ? 'var(--dt-text-on-primary)' : 'var(--dt-pine-900)';
   return (
     <svg
       width={size}
