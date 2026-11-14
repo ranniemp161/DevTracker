@@ -3,7 +3,10 @@
   "buildCommand": "cd ../.. && pnpm turbo run build --filter=@devtrack/realtime",
   "outputDirectory": "public",
   "regions": ["lhr1"],
+  "ignoreCommand": "npx turbo-ignore@2 @devtrack/realtime",
   "functions": {
-    "api/v1/realtime/socket.mjs": { "maxDuration": 300 }
+    "api/v1/realtime/socket.mjs": {
+      "maxDuration": 300
+    }
   }
 }
