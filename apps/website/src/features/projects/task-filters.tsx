@@ -6,22 +6,19 @@ import {
   type Label,
   type Milestone,
   type ProjectMember,
-  type Task,
 } from '@devtrack/types';
+import { TASK_SEARCH_MAX_LENGTH } from '@devtrack/validators';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useMemo, type ReactNode } from 'react';
-import { ChevronDownIcon } from '@/components/icons';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { ChevronDownIcon, SearchIcon } from '@/components/icons';
 import { useApiQuery } from '@/lib/use-api-query';
 import { PRIORITY_LABEL, TASK_STATUS_LABEL } from './labels';
+import type { TaskFilters } from './task-filter-match';
 
-export interface TaskFilters {
-  status: string;
-  priority: string;
-  assigneeId: string;
-  labelId: string;
-  /** A milestone id, or `none` for tasks without a milestone. */
-  milestoneId: string;
-}
+export { filterTask, type TaskFilters } from './task-filter-match';
+
+/** How long typing pauses before the search updates the URL. */
+const SEARCH_DEBOUNCE_MS = 250;
 
 export function useTaskFilters() {
   const searchParams = useSearchParams();
@@ -35,6 +32,7 @@ export function useTaskFilters() {
       assigneeId: searchParams.get('assigneeId') ?? '',
       labelId: searchParams.get('labelId') ?? '',
       milestoneId: searchParams.get('milestoneId') ?? '',
+      q: searchParams.get('q') ?? '',
     }),
     [searchParams],
   );
@@ -62,33 +60,59 @@ export function useTaskFilters() {
     filters.priority ||
     filters.assigneeId ||
     filters.labelId ||
-    filters.milestoneId,
+    filters.milestoneId ||
+    filters.q,
   );
 
   return { filters, setFilter, clearFilters, hasActiveFilters };
 }
 
-export function filterTask(task: Task, filters: TaskFilters): boolean {
-  if (filters.status && task.status !== filters.status) return false;
-  if (filters.priority && task.priority !== filters.priority) return false;
-  if (filters.assigneeId) {
-    if (filters.assigneeId === 'unassigned') {
-      if (task.assignees.length > 0) return false;
-    } else if (!task.assignees.some((a) => a.id === filters.assigneeId)) {
-      return false;
-    }
+/**
+ * Search box. Keeps its own draft so typing stays responsive, and writes to the URL after a
+ * short pause. When the URL changes from elsewhere (Clear filters, back button), the draft follows.
+ */
+function SearchField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const [draft, setDraft] = useState(value);
+  const [synced, setSynced] = useState(value);
+  if (value !== synced) {
+    setSynced(value);
+    // Keep a trailing space the user is still typing; only adopt real outside changes.
+    if (value !== draft.trim()) setDraft(value);
   }
-  if (filters.labelId && !task.labels.some((l) => l.id === filters.labelId)) return false;
-  if (filters.milestoneId) {
-    if (
-      filters.milestoneId === 'none'
-        ? task.milestoneId !== null
-        : task.milestoneId !== filters.milestoneId
-    ) {
-      return false;
-    }
-  }
-  return true;
+
+  useEffect(() => {
+    const next = draft.trim();
+    if (next === value) return;
+    const timer = setTimeout(() => onChange(next), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [draft, value, onChange]);
+
+  return (
+    <label className="relative inline-flex">
+      <span className="sr-only">Search tasks</span>
+      <SearchIcon
+        size={14}
+        className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-fg-subtle"
+      />
+      <input
+        type="search"
+        value={draft}
+        maxLength={TASK_SEARCH_MAX_LENGTH}
+        placeholder="Search tasks"
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && draft !== '') {
+            e.preventDefault();
+            setDraft('');
+            onChange('');
+          }
+        }}
+        className={`h-7.5 w-56 rounded-control border bg-surface pr-2.5 pl-8 text-label text-fg transition-colors placeholder:text-fg-subtle ${
+          value ? 'border-fg' : 'border-line-control'
+        }`}
+      />
+    </label>
+  );
 }
 
 /** A native select styled as a toolbar filter. Active filters get a darker border. */
@@ -140,6 +164,8 @@ export function TaskFilterBar({
 
   return (
     <div role="group" aria-label="Filters" className="flex flex-wrap items-center gap-2">
+      <SearchField value={filters.q} onChange={(v) => setFilter('q', v)} />
+
       <FilterSelect label="Status" value={filters.status} onChange={(v) => setFilter('status', v)}>
         <option value="">Status: all</option>
         {TASK_STATUSES.map((s) => (

@@ -374,6 +374,56 @@ describe('tasks', () => {
       400,
     );
   });
+
+  it('searches by title, description and key, combined with filters and pagination', async () => {
+    const { dev, bystander, project } = await setup();
+    const seed = [
+      { title: 'Fix login redirect', status: 'TODO' },
+      { title: 'Billing page', description: 'Login button overlaps the logo', status: 'DONE' },
+      { title: 'Release v12 notes', status: 'TODO' },
+      { title: '50% discount banner', status: 'TODO' },
+      { title: '500 error on signup', status: 'TODO' },
+      { title: 'LOGIN rate limit', status: 'TODO' },
+    ];
+    for (const body of seed) await createTask(dev, project, body).expect(201);
+
+    const search = async (q: string) =>
+      (
+        await dev.browser.get(`/api/v1/projects/${project}/tasks?q=${encodeURIComponent(q)}`)
+      ).body.data.map((x: { key: string }) => x.key);
+
+    expect(await search('login')).toEqual(['DEV-6', 'DEV-2', 'DEV-1']);
+    expect(await search('DEV-3')).toEqual(['DEV-3']);
+    expect(await search('dev-3')).toEqual(['DEV-3']);
+    expect(await search('#2')).toEqual(['DEV-2']);
+    // A bare number matches the task number or text containing it.
+    expect(await search('12')).toEqual(['DEV-3']);
+    expect(await search('5')).toEqual(['DEV-5', 'DEV-4']);
+    // Wildcards are literal: "50%" must not match "500 error".
+    expect(await search('50%')).toEqual(['DEV-4']);
+    expect(await search('_')).toEqual([]);
+    // Another project's key is plain text.
+    expect(await search('API-3')).toEqual([]);
+    expect(await search('   ')).toEqual(['DEV-6', 'DEV-5', 'DEV-4', 'DEV-3', 'DEV-2', 'DEV-1']);
+
+    const combined = await dev.browser.get(`/api/v1/projects/${project}/tasks?q=login&status=TODO`);
+    expect(combined.body.data.map((x: { key: string }) => x.key)).toEqual(['DEV-6', 'DEV-1']);
+
+    const page1 = await dev.browser.get(`/api/v1/projects/${project}/tasks?q=login&limit=2`);
+    expect(page1.body.data.map((x: { key: string }) => x.key)).toEqual(['DEV-6', 'DEV-2']);
+    const page2 = await dev.browser.get(
+      `/api/v1/projects/${project}/tasks?q=login&limit=2&cursor=${page1.body.meta.nextCursor}`,
+    );
+    expect(page2.body.data.map((x: { key: string }) => x.key)).toEqual(['DEV-1']);
+    expect(page2.body.meta).toMatchObject({ hasMore: false });
+
+    expect(
+      (await dev.browser.get(`/api/v1/projects/${project}/tasks?q=${'a'.repeat(101)}`)).status,
+    ).toBe(400);
+    expect((await bystander.browser.get(`/api/v1/projects/${project}/tasks?q=login`)).status).toBe(
+      404,
+    );
+  });
 });
 
 describe('isolation (architecture §6, §16)', () => {

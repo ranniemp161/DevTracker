@@ -99,7 +99,7 @@ export function Board() {
         <div className="flex w-max gap-3.5">
           {TASK_STATUSES.map((status) => {
             const column = tasks
-              .filter((t) => t.status === status && filterTask(t, filters))
+              .filter((t) => t.status === status && filterTask(t, filters, project.key))
               .sort(byPriorityThenAge);
             return (
               <section
