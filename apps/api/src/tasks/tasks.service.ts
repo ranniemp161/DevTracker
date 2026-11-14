@@ -48,6 +48,8 @@ import { TaskAccessService, type TaskRow } from './task-access.service';
 import { isTaskStatus, timeInStatus, type StatusChange } from './time-in-status';
 
 const userRef = { id: users.id, username: users.username, avatarUrl: users.avatarUrl };
+const taskRowFields = { task: tasks, reporter: userRef };
+type TaskRowWithReporter = { task: typeof tasks.$inferSelect; reporter: UserRef | null };
 
 interface TaskCursor {
   n: number;
@@ -189,21 +191,18 @@ export class TasksService {
       conditions.push(lt(tasks.taskNumber, decodeCursor(query.cursor, isTaskCursor).n));
     }
 
+    // Full rows (with reporter) in one query, so `load` doesn't read them a second time.
     const rows = await this.db
-      .select({ id: tasks.id, number: tasks.taskNumber })
+      .select(taskRowFields)
       .from(tasks)
+      .leftJoin(users, eq(users.id, tasks.reporterId))
       .where(and(...conditions))
       .orderBy(desc(tasks.taskNumber))
       .limit(query.limit + 1);
     const page = rows.slice(0, query.limit);
-    const nextCursor = rows.length > query.limit ? encodeCursor({ n: page.at(-1)!.number }) : null;
-    return new Paginated(
-      await this.load(
-        page.map((r) => r.id),
-        project.key,
-      ),
-      nextCursor,
-    );
+    const nextCursor =
+      rows.length > query.limit ? encodeCursor({ n: page.at(-1)!.task.taskNumber }) : null;
+    return new Paginated(await this.hydrate(page, project.key), nextCursor);
   }
 
   async get(userId: string, taskId: string): Promise<Task> {
@@ -495,36 +494,54 @@ export class TasksService {
   }
 
   /** Loads tasks with reporter, assignees and labels, preserving the order of `ids`. */
+  /** Tasks by id, in the given order. */
   private async load(ids: string[], projectKey: string): Promise<Task[]> {
     if (ids.length === 0) return [];
     const rows = await this.db
-      .select({ task: tasks, reporter: userRef })
+      .select(taskRowFields)
       .from(tasks)
       .leftJoin(users, eq(users.id, tasks.reporterId))
       .where(inArray(tasks.id, ids));
-    const assignees = await this.db
-      .select({ taskId: taskAssignees.taskId, user: userRef })
-      .from(taskAssignees)
-      .innerJoin(users, eq(users.id, taskAssignees.userId))
-      .where(inArray(taskAssignees.taskId, ids))
-      .orderBy(taskAssignees.assignedAt);
-    const attached = await this.db
-      .select({
-        taskId: taskLabels.taskId,
-        label: { id: labels.id, name: labels.name, color: labels.color },
-      })
-      .from(taskLabels)
-      .innerJoin(labels, eq(labels.id, taskLabels.labelId))
-      .where(inArray(taskLabels.taskId, ids))
-      .orderBy(labels.name);
-    const logged = await this.db
-      .select({
-        taskId: timeEntries.taskId,
-        minutes: sql<number>`sum(${timeEntries.minutes})::int`,
-      })
-      .from(timeEntries)
-      .where(inArray(timeEntries.taskId, ids))
-      .groupBy(timeEntries.taskId);
+    const byId = new Map(rows.map((r) => [r.task.id, r]));
+    return this.hydrate(
+      ids.map((id) => byId.get(id)!),
+      projectKey,
+    );
+  }
+
+  /**
+   * Adds assignees, labels and logged time to task rows, keeping their order. The three lookups
+   * only need the ids, so they run in parallel on the pool (3 of its 5 connections); this must
+   * stay on `this.db`, never a transaction, which can't run queries concurrently.
+   */
+  private async hydrate(rows: TaskRowWithReporter[], projectKey: string): Promise<Task[]> {
+    if (rows.length === 0) return [];
+    const ids = rows.map((r) => r.task.id);
+    const [assignees, attached, logged] = await Promise.all([
+      this.db
+        .select({ taskId: taskAssignees.taskId, user: userRef })
+        .from(taskAssignees)
+        .innerJoin(users, eq(users.id, taskAssignees.userId))
+        .where(inArray(taskAssignees.taskId, ids))
+        .orderBy(taskAssignees.assignedAt),
+      this.db
+        .select({
+          taskId: taskLabels.taskId,
+          label: { id: labels.id, name: labels.name, color: labels.color },
+        })
+        .from(taskLabels)
+        .innerJoin(labels, eq(labels.id, taskLabels.labelId))
+        .where(inArray(taskLabels.taskId, ids))
+        .orderBy(labels.name),
+      this.db
+        .select({
+          taskId: timeEntries.taskId,
+          minutes: sql<number>`sum(${timeEntries.minutes})::int`,
+        })
+        .from(timeEntries)
+        .where(inArray(timeEntries.taskId, ids))
+        .groupBy(timeEntries.taskId),
+    ]);
     const loggedByTask = new Map(logged.map((l) => [l.taskId, l.minutes]));
 
     const assigneesByTask = new Map<string, UserRef[]>();
@@ -535,9 +552,7 @@ export class TasksService {
     for (const l of attached) {
       labelsByTask.set(l.taskId, [...(labelsByTask.get(l.taskId) ?? []), l.label]);
     }
-    const byId = new Map(rows.map((r) => [r.task.id, r]));
-    return ids.map((id) => {
-      const { task, reporter } = byId.get(id)!;
+    return rows.map(({ task, reporter }) => {
       return {
         id: task.id,
         projectId: task.projectId,
