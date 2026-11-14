@@ -4,9 +4,20 @@ import type { ActivityEntry } from '@devtrack/types';
 import type { ActivityCategory } from '@devtrack/validators';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { Alert, Avatar, Button } from '@/components/ui';
+import type { ReactNode } from 'react';
+import {
+  BranchIcon,
+  ChatIcon,
+  PlusIcon,
+  StatusChangeIcon,
+  TagIcon,
+  UserIcon,
+  UserPlusIcon,
+} from '@/components/icons';
+import { Alert, Button } from '@/components/ui';
 import { apiPage, ApiError } from '@/lib/api';
 import { useRealtimeRefresh } from '@/lib/realtime';
+import { activityKind, type ActivityKind } from './activity-kind';
 import { describeActivity, timeAgo } from './describe-activity';
 
 /** Newest-first activity list with "Load more". Pass `taskId` for a single task's history. */
@@ -90,16 +101,11 @@ export function ActivityFeed({
             </h3>
           ) : null}
           {((items) => (
-            <ol className="space-y-3">
+            <ol className="divide-y divide-line-subtle">
               {items.map((e) => (
-                <li key={e.id} className="flex gap-3 text-sm">
-                  <Avatar
-                    name={e.actor?.username ?? '?'}
-                    url={e.actor?.avatarUrl ?? null}
-                    seed={e.actor?.id}
-                    size="sm"
-                  />
-                  <p className="min-w-0 flex-1 text-fg-secondary">
+                <li key={e.id} className="flex items-start gap-3 py-2.5 text-sm">
+                  <KindIcon kind={activityKind(e)} />
+                  <p className="min-w-0 flex-1 pt-1 text-fg-secondary">
                     <span className="font-medium text-fg">{actorLabel(e)}</span>{' '}
                     {describeActivity(e)}
                     {!taskId && e.task ? (
@@ -117,13 +123,14 @@ export function ActivityFeed({
                         )}
                       </>
                     ) : null}
-                    <span
-                      className="block text-xs text-fg-subtle"
-                      title={new Date(e.createdAt).toLocaleString()}
-                    >
-                      {timeAgo(e.createdAt)}
-                    </span>
                   </p>
+                  <time
+                    dateTime={e.createdAt}
+                    title={new Date(e.createdAt).toLocaleString()}
+                    className="shrink-0 pt-1 text-xs whitespace-nowrap text-fg-subtle"
+                  >
+                    {timeAgo(e.createdAt)}
+                  </time>
                 </li>
               ))}
             </ol>
@@ -165,4 +172,46 @@ function groupEntries(entries: ActivityEntry[]) {
     else groups.push({ label, items: [entry] });
   }
   return groups;
+}
+
+const KIND_STYLE: Record<ActivityKind, { className: string; icon: ReactNode }> = {
+  status: {
+    className: 'bg-activity-status-bg text-activity-status-fg',
+    icon: <StatusChangeIcon size={15} />,
+  },
+  assign: {
+    className: 'bg-activity-assign-bg text-activity-assign-fg',
+    icon: <UserIcon size={15} />,
+  },
+  comment: {
+    className: 'bg-activity-comment-bg text-activity-comment-fg',
+    icon: <ChatIcon size={15} />,
+  },
+  repo: { className: 'bg-activity-repo-bg text-activity-repo-fg', icon: <BranchIcon size={15} /> },
+  member: {
+    className: 'bg-activity-member-bg text-activity-member-fg',
+    icon: <UserPlusIcon size={15} />,
+  },
+  label: { className: 'bg-activity-label-bg text-activity-label-fg', icon: <TagIcon size={15} /> },
+  create: {
+    className: 'bg-activity-member-bg text-activity-member-fg',
+    icon: <PlusIcon size={15} />,
+  },
+  other: {
+    className: 'bg-activity-other-bg text-activity-other-fg',
+    icon: <span className="size-1.5 rounded-full bg-current" />,
+  },
+};
+
+/** 30px tinted circle showing what kind of event this is (decorative; the text says it). */
+function KindIcon({ kind }: { kind: ActivityKind }) {
+  const { className, icon } = KIND_STYLE[kind];
+  return (
+    <span
+      aria-hidden="true"
+      className={`flex size-7.5 shrink-0 items-center justify-center rounded-full ${className}`}
+    >
+      {icon}
+    </span>
+  );
 }

@@ -114,6 +114,22 @@
   --dt-pr-open: #1f7a5c;
   --dt-pr-merged: #5a3bb8;
 
+  /* Activity feed icon circles (SPEC §5 Activity) — bg / fg per event kind */
+  --dt-activity-status-bg: var(--dt-status-progress-bg);
+  --dt-activity-status-fg: var(--dt-status-progress-fg);
+  --dt-activity-assign-bg: #dcebfa;
+  --dt-activity-assign-fg: var(--dt-status-progress-fg);
+  --dt-activity-comment-bg: var(--dt-surface-muted);
+  --dt-activity-comment-fg: var(--dt-text-secondary);
+  --dt-activity-repo-bg: var(--dt-status-review-bg);
+  --dt-activity-repo-fg: var(--dt-status-review-fg);
+  --dt-activity-member-bg: var(--dt-primary-soft);
+  --dt-activity-member-fg: var(--dt-primary-soft-text);
+  --dt-activity-label-bg: #fdeee4;
+  --dt-activity-label-fg: #9a3d07;
+  --dt-activity-other-bg: var(--dt-surface-muted);
+  --dt-activity-other-fg: var(--dt-text-muted);
+
   /* Avatars (bg / fg) — assign by hashing the user id */
   --dt-avatar-1-bg: #e7f3ee;
   --dt-avatar-1-fg: #0b5a47;
@@ -315,6 +331,21 @@ html {
 
   --color-pr-open: var(--dt-pr-open);
   --color-pr-merged: var(--dt-pr-merged);
+
+  --color-activity-status-bg: var(--dt-activity-status-bg);
+  --color-activity-status-fg: var(--dt-activity-status-fg);
+  --color-activity-assign-bg: var(--dt-activity-assign-bg);
+  --color-activity-assign-fg: var(--dt-activity-assign-fg);
+  --color-activity-comment-bg: var(--dt-activity-comment-bg);
+  --color-activity-comment-fg: var(--dt-activity-comment-fg);
+  --color-activity-repo-bg: var(--dt-activity-repo-bg);
+  --color-activity-repo-fg: var(--dt-activity-repo-fg);
+  --color-activity-member-bg: var(--dt-activity-member-bg);
+  --color-activity-member-fg: var(--dt-activity-member-fg);
+  --color-activity-label-bg: var(--dt-activity-label-bg);
+  --color-activity-label-fg: var(--dt-activity-label-fg);
+  --color-activity-other-bg: var(--dt-activity-other-bg);
+  --color-activity-other-fg: var(--dt-activity-other-fg);
 
   --radius-chip: var(--dt-radius-sm);
   --radius-control: var(--dt-radius-md);
