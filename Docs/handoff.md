@@ -252,9 +252,6 @@ All seven build steps are done (#17, #18, then refined in #20 and #22):
 
 The branch `feature/ui-redesign` was never merged and is out of date, because #17 shipped the same work.
 
-Small token-rule deviations still open (SPEC §1):
+Token-rule clean-up (SPEC §1): the arbitrary values in the chat panel, the mobile drawer and the milestone form, and the logo's hardcoded white, were replaced with tokens and named utilities (branch `fix/website-token-deviations`). One deviation is still open:
 
-- `features/chat/chat-view.tsx`: `h-[calc(100dvh-14rem)]` and `min-h-[500px]` are arbitrary values. Add layout tokens for them.
-- `features/session/app-shell.tsx`: the drawer uses `max-w-[85vw]`.
-- `components/icons.tsx`: the logo hardcodes `#ffffff` instead of a token.
 - `features/projects/label-chip.tsx`: `LABEL_COLORS` (the label colour picker) uses Tailwind hexes, not the `--dt-label-*` palette. These values are stored in the database as label colours, so changing them needs a decision about labels that already exist.
