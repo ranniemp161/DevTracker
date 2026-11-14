@@ -375,6 +375,46 @@ describe('tasks', () => {
     );
   });
 
+  it('sorts by status in Board order, newest first within a status, with gap-free paging', async () => {
+    const { dev, project } = await setup();
+    const statuses = ['DONE', 'TODO', 'BLOCKED', 'TODO', 'BACKLOG', 'IN_PROGRESS', 'DONE'];
+    for (const [i, status] of statuses.entries()) {
+      await createTask(dev, project, { title: `Task ${i + 1}`, status }).expect(201);
+    }
+    const expected = ['DEV-5', 'DEV-4', 'DEV-2', 'DEV-6', 'DEV-7', 'DEV-1', 'DEV-3'];
+
+    const all = await dev.browser.get(`/api/v1/projects/${project}/tasks?sort=status`);
+    expect(all.body.data.map((x: { key: string }) => x.key)).toEqual(expected);
+
+    const walked: string[] = [];
+    let cursor: string | null = null;
+    do {
+      const res = await dev.browser.get(
+        `/api/v1/projects/${project}/tasks?sort=status&limit=2${cursor ? `&cursor=${cursor}` : ''}`,
+      );
+      expect(res.status).toBe(200);
+      walked.push(...res.body.data.map((x: { key: string }) => x.key));
+      cursor = res.body.meta.nextCursor;
+    } while (cursor);
+    expect(walked).toEqual(expected);
+
+    // Combines with filters and search.
+    const todo = await dev.browser.get(`/api/v1/projects/${project}/tasks?sort=status&q=task 4`);
+    expect(todo.body.data.map((x: { key: string }) => x.key)).toEqual(['DEV-4']);
+
+    // A cursor from one sort order is refused by the other.
+    const numberCursor = (await dev.browser.get(`/api/v1/projects/${project}/tasks?limit=1`)).body
+      .meta.nextCursor;
+    expect(
+      (
+        await dev.browser.get(
+          `/api/v1/projects/${project}/tasks?sort=status&cursor=${numberCursor}`,
+        )
+      ).status,
+    ).toBe(400);
+    expect((await dev.browser.get(`/api/v1/projects/${project}/tasks?sort=nope`)).status).toBe(400);
+  });
+
   it('searches by title, description and key, combined with filters and pagination', async () => {
     const { dev, bystander, project } = await setup();
     const seed = [

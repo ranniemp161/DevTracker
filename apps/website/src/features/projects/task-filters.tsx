@@ -116,7 +116,7 @@ function SearchField({ value, onChange }: { value: string; onChange: (value: str
 }
 
 /** A native select styled as a toolbar filter. Active filters get a darker border. */
-function FilterSelect({
+export function FilterSelect({
   label,
   value,
   onChange,

@@ -62,6 +62,7 @@ These rules were approved before implementation (§21 rule 12).
   - a bare number such as `12` matches task number 12, or text containing "12";
   - anything else, including another project's key, is a case-insensitive "contains" match on title or description. `%`, `_` and `\` are matched literally.
   - There is no index: a search scans one project's tasks, which is cheap at current sizes. Add a `pg_trgm` index if searches get slow.
+- **Group by status (added 2026-11-14):** `sort=status` orders tasks in Board order (Postgres enum order: Backlog → To do → In progress → In review → Done → Blocked), newest first within a status. The cursor carries the status as well as the number, and a cursor from one sort is refused by the other. The List's "Group by: status" (`?group=status`) uses it, so every group above the last loaded one is complete. The last group shows "N+" while more pages exist.
 
 ## 9. Labels (added to M3, approved)
 

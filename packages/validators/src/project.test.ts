@@ -65,8 +65,11 @@ describe('task schemas', () => {
     expect(listTasksQuerySchema.parse({ limit: '25', status: 'DONE' })).toEqual({
       limit: 25,
       status: 'DONE',
+      sort: 'number',
     });
     expect(listTasksQuerySchema.parse({}).limit).toBe(50);
+    expect(listTasksQuerySchema.parse({ sort: 'status' }).sort).toBe('status');
+    expect(listTasksQuerySchema.safeParse({ sort: 'priority' }).success).toBe(false);
     expect(listTasksQuerySchema.safeParse({ limit: '500' }).success).toBe(false);
   });
 });

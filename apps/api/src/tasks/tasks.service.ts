@@ -59,9 +59,14 @@ type TaskRowWithReporter = { task: typeof tasks.$inferSelect; reporter: UserRef 
 
 interface TaskCursor {
   n: number;
+  /** Present for `sort=status`: the status of the last row. */
+  s?: TaskStatus;
 }
 const isTaskCursor = (v: unknown): v is TaskCursor =>
-  typeof v === 'object' && v !== null && Number.isInteger((v as TaskCursor).n);
+  typeof v === 'object' &&
+  v !== null &&
+  Number.isInteger((v as TaskCursor).n) &&
+  ((v as TaskCursor).s === undefined || isTaskStatus((v as TaskCursor).s));
 
 /** completed_at follows the status (M3 rule 6). */
 /** Escapes LIKE wildcards so a search for `50%` or `a_b` matches those characters literally. */
@@ -194,8 +199,20 @@ export class TasksService {
       }
       conditions.push(or(...matches)!);
     }
+    const byStatus = query.sort === 'status';
     if (query.cursor) {
-      conditions.push(lt(tasks.taskNumber, decodeCursor(query.cursor, isTaskCursor).n));
+      const after = decodeCursor(query.cursor, isTaskCursor);
+      if (byStatus !== (after.s !== undefined)) {
+        throw AppException.validation([
+          { path: 'cursor', message: 'This cursor belongs to a different sort order.' },
+        ]);
+      }
+      // Postgres orders enum values by declaration, which is the Board order (TASK_STATUSES).
+      conditions.push(
+        byStatus
+          ? sql`(${tasks.status} > ${after.s}::task_status or (${tasks.status} = ${after.s}::task_status and ${tasks.taskNumber} < ${after.n}))`
+          : lt(tasks.taskNumber, after.n),
+      );
     }
 
     // Full rows (with reporter) in one query, so `load` doesn't read them a second time.
@@ -204,11 +221,16 @@ export class TasksService {
       .from(tasks)
       .leftJoin(users, eq(users.id, tasks.reporterId))
       .where(and(...conditions))
-      .orderBy(desc(tasks.taskNumber))
+      .orderBy(
+        ...(byStatus ? [asc(tasks.status), desc(tasks.taskNumber)] : [desc(tasks.taskNumber)]),
+      )
       .limit(query.limit + 1);
     const page = rows.slice(0, query.limit);
+    const last = page.at(-1)?.task;
     const nextCursor =
-      rows.length > query.limit ? encodeCursor({ n: page.at(-1)!.task.taskNumber }) : null;
+      rows.length > query.limit && last
+        ? encodeCursor(byStatus ? { n: last.taskNumber, s: last.status } : { n: last.taskNumber })
+        : null;
     return new Paginated(await this.hydrate(page, project.key), nextCursor);
   }
 
