@@ -13,6 +13,7 @@ import {
   ActivityIcon,
   BoardIcon,
   ChatIcon,
+  CheckIcon,
   ChevronDownIcon,
   DevtrackMark,
   FlagIcon,
@@ -25,6 +26,7 @@ import {
   UsersIcon,
 } from '@/components/icons';
 import { Avatar, avatarTone, IconButton } from '@/components/ui';
+import { applyThemeChoice, readThemeChoice, THEME_CHOICES, type ThemeChoice } from '@/lib/theme';
 import { NotificationBell } from '../collaboration/notification-bell';
 import { isAdmin } from '../workspaces/permissions';
 
@@ -283,6 +285,7 @@ function ProjectSubNav({
 
 function UserRow({ user, onLogout }: { user: PublicUser; onLogout: () => void }) {
   const [open, setOpen] = useState(false);
+  const [theme, setTheme] = useState<ThemeChoice>('system');
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -307,15 +310,39 @@ function UserRow({ user, onLogout }: { user: PublicUser; onLogout: () => void })
         aria-label="Account menu"
         aria-expanded={open}
         aria-haspopup="menu"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          // Read on open: the choice lives in localStorage, which the server can't see.
+          if (!open) setTheme(readThemeChoice());
+          setOpen((o) => !o);
+        }}
       >
         <MoreIcon size={16} />
       </IconButton>
       {open ? (
         <div
           role="menu"
-          className="absolute right-2 bottom-full z-30 mb-1 w-40 rounded-card border border-line bg-surface p-1 shadow-overlay"
+          className="absolute right-2 bottom-full z-30 mb-1 w-44 rounded-card border border-line bg-surface p-1 shadow-overlay"
         >
+          <div role="group" aria-label="Theme">
+            <p className="px-2.5 pt-1.5 pb-1 text-xs font-medium text-fg-muted">Theme</p>
+            {THEME_CHOICES.map((c) => (
+              <button
+                key={c.value}
+                type="button"
+                role="menuitemradio"
+                aria-checked={theme === c.value}
+                onClick={() => {
+                  applyThemeChoice(c.value);
+                  setTheme(c.value);
+                }}
+                className="flex h-8 w-full items-center justify-between rounded-control px-2.5 text-left text-sm text-fg-secondary hover:bg-surface-muted"
+              >
+                {c.label}
+                {theme === c.value ? <CheckIcon size={14} className="text-primary" /> : null}
+              </button>
+            ))}
+          </div>
+          <div role="separator" className="my-1 border-t border-line-subtle" />
           <button
             type="button"
             role="menuitem"

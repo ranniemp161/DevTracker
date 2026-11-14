@@ -127,15 +127,16 @@ export function SpinnerIcon({ size = 14, ...rest }: IconProps) {
 /** DevTrack brand mark. `tone="mint"` is for dark surfaces. */
 export function DevtrackMark({
   size = 24,
-  tone = 'pine',
+  tone = 'auto',
   title,
 }: {
   size?: number;
-  tone?: 'pine' | 'mint';
+  /** `auto` follows the theme (pine on light, mint on dark); `mint` is for forest panels. */
+  tone?: 'auto' | 'mint';
   title?: string;
 }) {
-  const bg = tone === 'pine' ? 'var(--dt-pine-600)' : 'var(--dt-pine-400)';
-  const fg = tone === 'pine' ? 'var(--dt-text-on-primary)' : 'var(--dt-pine-900)';
+  const bg = tone === 'auto' ? 'var(--dt-primary)' : 'var(--dt-pine-400)';
+  const fg = tone === 'auto' ? 'var(--dt-text-on-primary)' : 'var(--dt-pine-900)';
   return (
     <svg
       width={size}
