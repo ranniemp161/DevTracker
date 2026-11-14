@@ -132,7 +132,7 @@ export function ActivityFeed({
 }
 
 /** DevTrack user, else the GitHub login for GitHub events, else "System". */
-function actorLabel(e: ActivityEntry): string {
+export function actorLabel(e: ActivityEntry): string {
   if (e.actor) return `@${e.actor.username}`;
   const github = (e.metadata as { github?: { login?: string } | null }).github;
   return github?.login ? `${github.login} (GitHub)` : 'System';

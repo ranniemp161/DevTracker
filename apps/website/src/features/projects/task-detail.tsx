@@ -30,8 +30,7 @@ import { useRealtimeRefresh } from '@/lib/realtime';
 import { useApiQuery } from '@/lib/use-api-query';
 import { useSession } from '../session/session-context';
 import { formatDate, formatMinutes, PRIORITY_LABEL, TASK_STATUS_LABEL } from './labels';
-import { ActivityFeed } from '../collaboration/activity-feed';
-import { CommentThread } from '../collaboration/comment-thread';
+import { TaskTimeline } from '../collaboration/task-timeline';
 import { TaskPullRequests } from '../github/task-pull-requests';
 import { useProject } from './project-context';
 import { TaskLabels } from './task-labels';
@@ -546,18 +545,7 @@ function TaskEditor({
 
         <div className="space-y-8 px-4 pb-8 sm:px-7 lg:col-start-1 lg:row-start-2 lg:px-12">
           <div className="space-y-8 border-t border-line pt-6">
-            <CommentThread task={task} onActivity={onActivity} />
-            <section aria-labelledby="history-heading" className="space-y-3">
-              <h2 id="history-heading" className="text-md font-semibold">
-                History
-              </h2>
-              <ActivityFeed
-                projectId={project.id}
-                taskId={task.id}
-                limit={15}
-                refreshKey={historyKey}
-              />
-            </section>
+            <TaskTimeline task={task} refreshKey={historyKey} onActivity={onActivity} />
           </div>
         </div>
       </div>
