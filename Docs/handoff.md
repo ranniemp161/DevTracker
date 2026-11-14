@@ -1,11 +1,11 @@
 # DevTrack: handoff for the next engineering agent
 
-> Update (2026-11-07): Section 5 is the original handoff plan. The standalone
-> authenticated server and website URL cutover are now deployed. Transport and
-> fake-ticket rejection pass; real-user and two-browser acceptance are pending.
-> See decision 0007 and `apps/realtime/README.md` for implementation and evidence.
+> Update (2026-11-14): Real-time now runs in its own Vercel function
+> (`apps/realtime`, PRs #13–#14). Section 5 is kept as the record of that work.
+> What's left is release verification (§6). Features added after the release
+> are in §9–§10.
 
-**Date:** 2026-11-07. **Repository:** `ranniemp161/DevTracker` (GitHub), working copy `D:\Projects\DevTracker` (Windows, Git Bash and PowerShell).
+**Date:** 2026-11-14 (first written 2026-11-07). **Repository:** `ranniemp161/DevTracker` (GitHub), working copy `D:\Projects\DevTracker` (Windows, Git Bash and PowerShell).
 
 Read this whole file first. It says what is done, what is live, what is broken and how to fix it, and which traps have already been solved. **Don't undo those fixes** (§4).
 
@@ -23,10 +23,11 @@ DevTrack is an internal project-management app with GitHub integration: workspac
 **Source of truth, in this order:**
 
 1. `DEVTRACK_ARCHITECTURE.md`, especially §21, the rules for engineering agents.
-2. The decision records in `Docs/decisions/0001`–`0008`. Each milestone's rules are there.
+2. The decision records in `Docs/decisions/0001`–`0012`. Each milestone's rules are there (0009–0012 cover chat, shared GitHub connections, time in status, and time entries).
 3. `Docs/deploy-runbook.md` and `Docs/release-checklist.md`.
+4. For UI work: `design/SPEC.md` and `Docs/ui-redesign-plan.md`.
 
-Milestones M1–M8 are all merged to `main`. CI (`.github/workflows/ci.yml`) runs formatting, lint, typecheck, tests, build and a migration-drift check on every PR, and is green.
+Milestones M1–M8 are all merged to `main`, and so are the post-release features in §9–§10. CI (`.github/workflows/ci.yml`) runs formatting, lint, typecheck, tests, build and a migration-drift check on every PR, and is green.
 
 ## 2. Production (Vercel, Hobby plan)
 
@@ -60,9 +61,9 @@ Config is validated at start-up in `apps/api/src/config/app-config.ts`. A missin
 - the GitHub App (installation, repositories, pull requests arriving by webhook);
 - database and Redis connections.
 
-**Broken: real-time (Socket.IO) on Vercel.** This is the main open task (§5).
+**Real-time:** moved to the standalone server `apps/realtime` (`https://devtrack-realtime-poc.vercel.app`), and the website points at it. In production, the transport check and the fake-ticket rejection pass. The publisher startup fix (#14, decision 0007 "Publisher startup correction") is merged. These still need checking in production: the API is deployed with #14, a real user's ticket is accepted, and two browsers see each other's changes (§5 "Done when").
 
-**Not done yet:**
+**Not done yet (as far as the repo shows):**
 
 - GitHub Actions scheduled jobs (§6);
 - the production acceptance checklist (§6).
@@ -90,7 +91,9 @@ Why each piece exists:
 - Vercel **preview** deployments are behind Vercel login (302), so test against production URLs, or use `vercel curl`.
 - Read production logs with `vercel logs https://api-woad-seven-42.vercel.app --since 10m`.
 
-## 5. Main task: make real-time work on Vercel
+## 5. Real-time on Vercel (implemented; acceptance pending)
+
+> Option A below was built (`apps/realtime`, PRs #13–#14). Only the "Done when" checks 2–4 are still open.
 
 **Symptom:** the browser's socket to `https://api-woad-seven-42.vercel.app/api/v1/realtime/socket` fails. A raw upgrade request returns **HTTP 404 with Express/helmet headers**. So the request reaches the Express app, but Socket.IO never sees it. Vercel's NestJS integration hands requests to the Express app, while Socket.IO (Nest's `IoAdapter` in `apps/api/src/realtime/realtime-io.adapter.ts`) listens on the Node HTTP server, which on Vercel doesn't receive them. Locally everything works, and `apps/api/test/realtime.e2e-spec.ts` passes.
 
@@ -217,8 +220,41 @@ Implemented according to [`Docs/project-chat-and-ux-plan.md`](file:///D:/Project
 ### 9.4 Core UX Improvements
 
 - **Workspace Navigation:** Fixed workspace switcher in header to resolve workspace from current project on `/projects/:id` routes.
-- **Horizontal Scrollable Tabs:** Project navigation tabs scroll smoothly on mobile/narrow viewports.
+- **Horizontal Scrollable Tabs:** Project navigation tabs scroll smoothly on mobile/narrow viewports. _(Superseded by the redesign: the sidebar shell replaced the tab strip.)_
 - **Unified URL Filters:** Shared query parameters (`?status=...&priority=...&assignee=...&label=...`) across Kanban Board and List views with tab-switching query preservation. Added "unassigned" option support.
-- **Accessible Kanban Status Action:** Each task card includes a compact status `<select>` for keyboard and touch accessibility alongside drag-and-drop.
+- **Accessible Kanban Status Action:** Each task card has a status control for keyboard and touch, alongside drag-and-drop. _(Now the status menu button in `task-status-menu.tsx`, SPEC R2.)_
 - **Task Creation Draft Retention:** `QuickAdd` preserves draft title in session storage across reloads and tab navigations.
 - **Task Detail Enhancements:** Clear grouping with a direct "Discuss in chat" button linking to `/projects/[id]/chat?task=[taskId]`.
+
+## 10. Post-release features and UI redesign (PRs #17–#26)
+
+### 10.1 Features
+
+| PR  | Change                                                                                              | Decision |
+| --- | --------------------------------------------------------------------------------------------------- | -------- |
+| #19 | Connect a GitHub App installation that already exists to a workspace (no install callback needed)   | 0005     |
+| #20 | Board: task detail drawer (`?task=<id>`), quick-add at the bottom of each column, card interactions | —        |
+| #21 | One GitHub installation shared by several workspaces                                                | 0010     |
+| #22 | Tasks linked to milestones, plus milestone acceptance criteria (SPEC R3)                            | —        |
+| #23 | The task Save bar no longer spins forever                                                           | —        |
+| #24 | Time spent in each task status, worked out from the activity history                                | 0011     |
+| #25 | Task estimates and logged time entries (migration `0010_time_entries.sql`; landed through #24)      | 0012     |
+| #26 | Website unit tests for duration and date labels                                                     | —        |
+
+### 10.2 UI redesign (`design/SPEC.md` §7)
+
+All seven build steps are done (#17, #18, then refined in #20 and #22):
+
+- `apps/website/src/styles/tokens.css` is in place, and the legacy alias block has been removed. No legacy classes remain in `apps/website/src`.
+- The primitives are in `components/ui.tsx` and `components/icons.tsx`, and the app icon is in `app/icon.svg`.
+- The sidebar shell with its mobile drawer is in `app-shell.tsx`, and the project tab strip is gone.
+- Every route in SPEC §5 has a page.
+
+The branch `feature/ui-redesign` was never merged and is out of date, because #17 shipped the same work.
+
+Small token-rule deviations still open (SPEC §1):
+
+- `features/chat/chat-view.tsx`: `h-[calc(100dvh-14rem)]` and `min-h-[500px]` are arbitrary values. Add layout tokens for them.
+- `features/session/app-shell.tsx`: the drawer uses `max-w-[85vw]`.
+- `components/icons.tsx`: the logo hardcodes `#ffffff` instead of a token.
+- `features/projects/label-chip.tsx`: `LABEL_COLORS` (the label colour picker) uses Tailwind hexes, not the `--dt-label-*` palette. These values are stored in the database as label colours, so changing them needs a decision about labels that already exist.
