@@ -153,7 +153,7 @@ export function TaskList() {
       <div className="overflow-x-auto rounded-card border border-line bg-surface">
         <table
           aria-busy={updating || undefined}
-          className={`w-full min-w-176 text-left text-sm transition-opacity ${
+          className={`hidden w-full min-w-176 text-left text-sm transition-opacity md:table ${
             showUpdating ? 'opacity-60' : ''
           }`}
         >
@@ -192,6 +192,29 @@ export function TaskList() {
               : rows?.map((t) => <TaskRow key={t.id} task={t} projectId={project.id} />)}
           </tbody>
         </table>
+        {/* Under 768px the table becomes stacked rows (SPEC §6): title, then a meta line. */}
+        <ul
+          aria-label="Tasks"
+          aria-busy={updating || undefined}
+          className={`divide-y divide-line-subtle transition-opacity md:hidden ${
+            showUpdating ? 'opacity-60' : ''
+          }`}
+        >
+          {groups
+            ? groups.map((g) => (
+                <Fragment key={g.status}>
+                  <li className="flex items-center gap-2 bg-surface-sunken px-4 py-2 text-label font-medium text-fg-secondary">
+                    <StatusDot status={g.status} />
+                    {TASK_STATUS_LABEL[g.status]}
+                    <span className="font-normal text-fg-muted">{g.countLabel}</span>
+                  </li>
+                  {g.tasks.map((t) => (
+                    <StackedRow key={t.id} task={t} projectId={project.id} />
+                  ))}
+                </Fragment>
+              ))
+            : rows?.map((t) => <StackedRow key={t.id} task={t} projectId={project.id} />)}
+        </ul>
         {rows && rows.length === 0 ? (
           <div className="p-4">
             <EmptyState>No tasks match these filters.</EmptyState>
@@ -254,5 +277,43 @@ function TaskRow({ task: t, projectId }: { task: Task; projectId: string }) {
       </td>
       <td className="px-4 py-2.5 whitespace-nowrap text-fg-muted">{formatDate(t.dueDate)}</td>
     </tr>
+  );
+}
+
+/** Phone layout of one task: the title on top, then key · status · priority · due · people. */
+function StackedRow({ task: t, projectId }: { task: Task; projectId: string }) {
+  return (
+    <li className="space-y-1.5 px-4 py-3">
+      <Link
+        href={`/projects/${projectId}/tasks/${t.id}`}
+        className="block font-medium break-words text-fg hover:underline"
+      >
+        {t.title}
+      </Link>
+      {t.labels.length > 0 ? (
+        <div className="flex flex-wrap gap-1">
+          {t.labels.map((l) => (
+            <LabelChip key={l.id} label={l} />
+          ))}
+        </div>
+      ) : null}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted">
+        <span className="font-mono">{t.key}</span>
+        <span className="inline-flex items-center gap-1.5">
+          <StatusDot status={t.status} />
+          {TASK_STATUS_LABEL[t.status]}
+        </span>
+        <PriorityIcon priority={t.priority} />
+        {t.dueDate ? <span>Due {formatDate(t.dueDate)}</span> : null}
+        <span className="flex -space-x-1.5">
+          {t.assignees.length === 0 ? <UnassignedAvatar /> : null}
+          {t.assignees.map((a) => (
+            <span key={a.id} title={`@${a.username}`} className="rounded-full ring-2 ring-surface">
+              <Avatar name={a.username} url={a.avatarUrl} seed={a.id} size="xs" />
+            </span>
+          ))}
+        </span>
+      </div>
+    </li>
   );
 }
