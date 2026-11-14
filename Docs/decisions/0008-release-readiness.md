@@ -88,6 +88,7 @@ Rules 1–3 were approved before implementation (§21 rule 12).
 
   Steps are in `Docs/deploy-runbook.md`.
 
+- **Function region: London (`lhr1`), added 2026-11-14.** The Neon database is in `eu-west-2` (London). The functions first ran in Vercel's default `iad1` (Washington, D.C.), so every query crossed the Atlantic (about 70 ms each). A task list (about 7 sequential queries) took ~880 ms, against ~400 ms for `/health`, which runs no query. `apps/api`, `apps/website` (its `/api` proxy is a function) and `apps/realtime` each set `"regions": ["lhr1"]` in `vercel.json`. Upstash Redis should be in the same region. **Rule:** keep the functions in the database's region, and if the database moves, move them with it.
 - The API honours the platform `PORT` when `API_PORT` isn't set.
 - Migrations are applied **before** each deploy that needs them (`pnpm db:migrate` against the production database). They never run inside a function.
 - Still to confirm on the first deploy (0007): a Nest Socket.IO gateway on Vercel, and the client-IP forwarding in rule 4 (`/internal/status` and API logs show it).
