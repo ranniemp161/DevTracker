@@ -180,6 +180,10 @@
   --dt-board-column-width: 272px;
   --dt-card-min-width: 320px; /* project cards */
   --dt-task-aside-width: 320px; /* task detail properties panel */
+  --dt-chat-height: calc(100dvh - 14rem); /* project chat panel: viewport minus shell chrome */
+  --dt-chat-min-height: 500px;
+  --dt-drawer-max-width: 85vw; /* mobile navigation drawer */
+  --dt-date-field-width: 160px; /* due-date field in inline forms */
 
   /* ---------- Radius ---------- */
   --dt-radius-xs: 4px; /* kbd, inline code */

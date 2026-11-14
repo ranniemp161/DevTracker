@@ -14,6 +14,22 @@ body {
   grid-template-columns: minmax(0, 1fr) var(--dt-task-aside-width);
 }
 
+/* New milestone form: name, description, due date, submit. */
+@utility grid-cols-milestone-form {
+  grid-template-columns: 1fr 1fr var(--dt-date-field-width) auto;
+}
+
+/* Project chat: panel fills the viewport below the shell chrome. */
+@utility h-chat {
+  height: var(--dt-chat-height);
+  min-height: var(--dt-chat-min-height);
+}
+
+/* Mobile navigation drawer: never wider than most of the viewport. */
+@utility max-w-drawer {
+  max-width: var(--dt-drawer-max-width);
+}
+
 /* All projects: responsive card grid, 320px minimum per card. */
 @utility grid-cols-cards {
   grid-template-columns: repeat(auto-fill, minmax(var(--dt-card-min-width), 1fr));
