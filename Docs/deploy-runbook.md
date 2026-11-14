@@ -33,6 +33,8 @@ Create **devtrack-api** (Root Directory `apps/api`) and **devtrack-website** (Ro
 
 **Check:** both projects appear in the Vercel dashboard, linked to the GitHub repository.
 
+**Region:** `apps/api`, `apps/website` and `apps/realtime` each pin their functions to London (`lhr1`) in `vercel.json`, the same region as the Neon database (`eu-west-2`). See 0008 §7. After a deploy, the `x-vercel-id` response header ends in `::lhr1::…` (for example, `curl -sI https://api-woad-seven-42.vercel.app/api/v1/health`).
+
 ## 2. Environment variables
 
 Set these for **Production** in each project (Settings → Environment Variables, or `vercel env add NAME production`). The URLs below are the projects' `*.vercel.app` domains; use custom domains if you have them.
