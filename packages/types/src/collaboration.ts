@@ -86,3 +86,10 @@ export interface Notification {
   readAt: string | null;
   createdAt: string;
 }
+
+/**
+ * One entry in a task's timeline (GET /tasks/:id/timeline): a comment, or a change from the
+ * task's activity history. Comment activity is not repeated, because the comment itself is here.
+ */
+export type TimelineItem =
+  { kind: 'comment'; comment: Comment } | { kind: 'activity'; entry: ActivityEntry };

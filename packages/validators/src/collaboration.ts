@@ -56,3 +56,11 @@ export function parseMentions(text: string): string[] {
   }
   return found;
 }
+
+/** GET /tasks/:id/timeline: comments and history (`all`), or comments only. Oldest first. */
+export const listTimelineQuerySchema = z.object({
+  kind: z.enum(['all', 'comments']).default('all'),
+  cursor,
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+export type ListTimelineQuery = z.infer<typeof listTimelineQuerySchema>;

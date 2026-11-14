@@ -84,3 +84,10 @@ Everything is kept for the MVP. The pruning policy for `activity_logs`, `outbox_
 - Comments, activity and notifications are paginated by `(created_at, id)`. Their `created_at` columns use millisecond precision (`timestamptz(3)`), so cursors built from JavaScript dates match stored values exactly.
 - `TaskAccessService` (moved out of `TasksService`) is the shared "load a live task and authorize through its project" entry point.
 - **Tooling:** `.gitattributes` now forces LF line endings. Without it, `core.autocrlf=true` checkouts produced CRLF/LF churn against Prettier. The API's Vitest config was renamed to `vitest.config.mts` to remove an ESM-in-CommonJS warning.
+
+## Task timeline (added 2026-11-14)
+
+- `GET /tasks/:id/timeline?kind=all|comments&cursor&limit` returns a task's comments and activity in one list, oldest first, for the task detail Activity section (SPEC §5). Items are `{ kind: 'comment', comment }` or `{ kind: 'activity', entry }`, in the same shapes as the comments and activity endpoints.
+- Both sources are merged and paged in one SQL query (cursor: time + id), so pages never overlap or leave gaps. `limit` is 1–100 (default 50).
+- Comment activity (`comment.created`, `comment.deleted`) is left out, because the comment, or its deleted placeholder, is already in the list. The project activity feed still shows it.
+- Access matches the comments endpoint: anyone who can see the task, and 404 otherwise. `GET /tasks/:id/comments` and the project feed are unchanged.
