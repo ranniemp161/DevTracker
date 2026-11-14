@@ -1,5 +1,6 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import {
+  activityLogs,
   and,
   asc,
   commentMentions,
@@ -8,12 +9,18 @@ import {
   inArray,
   sql,
   taskAssignees,
+  tasks,
   users,
   type Database,
   type Executor,
 } from '@devtrack/database';
-import type { Comment, UserRef } from '@devtrack/types';
-import { parseMentions, type ListCommentsQuery } from '@devtrack/validators';
+import type { Comment, TimelineItem, UserRef } from '@devtrack/types';
+import {
+  parseMentions,
+  type ListCommentsQuery,
+  type ListTimelineQuery,
+} from '@devtrack/validators';
+import { activityRowFields, toActivityEntry } from '../activity/activity.service';
 import { AppException } from '../common/errors/app.exception';
 import { decodeCursor, isTimeCursor, Paginated, timeCursorOf } from '../common/http/paginated';
 import { isUuid } from '../common/pipes/uuid-param.pipe';
@@ -112,6 +119,75 @@ export class CommentsService {
     const page = rows.slice(0, query.limit);
     const nextCursor = rows.length > query.limit ? timeCursorOf(page.at(-1)!) : null;
     return new Paginated(await this.load(page.map((r) => r.id)), nextCursor);
+  }
+
+  /**
+   * A task's comments and history in one list, oldest first (SPEC §5 task detail). Both sources
+   * are merged and paged in SQL so pages never overlap or leave gaps. Comment activity
+   * (`comment.created`/`comment.deleted`) is left out: the comment, or its placeholder, is
+   * already in the list.
+   */
+  async timeline(
+    userId: string,
+    taskId: string,
+    query: ListTimelineQuery,
+  ): Promise<Paginated<TimelineItem>> {
+    const { task, access } = await this.taskAccess.require(userId, taskId);
+    const after = query.cursor ? decodeCursor(query.cursor, isTimeCursor) : null;
+    const afterClause = after
+      ? sql`where (created_at, id) > (${after.t}::timestamptz, ${after.id}::uuid)`
+      : sql``;
+    const history =
+      query.kind === 'all'
+        ? sql`union all
+          select ${activityLogs.id} as id, ${activityLogs.createdAt} as created_at, 'activity' as kind
+          from ${activityLogs}
+          where ${activityLogs.taskId} = ${task.id} and ${activityLogs.entityType} <> 'comment'`
+        : sql``;
+    const result = await this.db.execute<{ id: string; created_at: Date | string; kind: string }>(
+      sql`select id, created_at, kind from (
+          select ${comments.id} as id, ${comments.createdAt} as created_at, 'comment' as kind
+          from ${comments}
+          where ${comments.taskId} = ${task.id}
+          ${history}
+        ) timeline
+        ${afterClause}
+        order by created_at asc, id asc
+        limit ${query.limit + 1}`,
+    );
+    const rows = result.rows.map((r) => ({
+      id: r.id,
+      createdAt: new Date(r.created_at),
+      kind: r.kind as 'comment' | 'activity',
+    }));
+    const page = rows.slice(0, query.limit);
+    const nextCursor = rows.length > query.limit ? timeCursorOf(page.at(-1)!) : null;
+
+    const commentIds = page.filter((r) => r.kind === 'comment').map((r) => r.id);
+    const activityIds = page.filter((r) => r.kind === 'activity').map((r) => r.id);
+    const [loadedComments, activityRows] = await Promise.all([
+      this.load(commentIds),
+      activityIds.length === 0
+        ? Promise.resolve([])
+        : this.db
+            .select(activityRowFields)
+            .from(activityLogs)
+            .leftJoin(users, eq(users.id, activityLogs.actorId))
+            .leftJoin(tasks, eq(tasks.id, activityLogs.taskId))
+            .where(inArray(activityLogs.id, activityIds)),
+    ]);
+    const commentById = new Map(loadedComments.map((c) => [c.id, c]));
+    const entryById = new Map(
+      activityRows.map((row) => [row.log.id, toActivityEntry(row, access.project.key)]),
+    );
+    return new Paginated(
+      page.map((r): TimelineItem =>
+        r.kind === 'comment'
+          ? { kind: 'comment', comment: commentById.get(r.id)! }
+          : { kind: 'activity', entry: entryById.get(r.id)! },
+      ),
+      nextCursor,
+    );
   }
 
   /**

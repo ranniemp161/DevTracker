@@ -34,11 +34,7 @@ export class ActivityService {
     const before = query.cursor ? decodeCursor(query.cursor, isTimeCursor) : null;
 
     const rows = await this.db
-      .select({
-        log: activityLogs,
-        actor: { id: users.id, username: users.username, avatarUrl: users.avatarUrl },
-        task: { id: tasks.id, number: tasks.taskNumber, title: tasks.title },
-      })
+      .select(activityRowFields)
       .from(activityLogs)
       .leftJoin(users, eq(users.id, activityLogs.actorId))
       .leftJoin(tasks, eq(tasks.id, activityLogs.taskId))
@@ -58,19 +54,38 @@ export class ActivityService {
     const page = rows.slice(0, query.limit);
     const nextCursor = rows.length > query.limit ? timeCursorOf(page.at(-1)!.log) : null;
     return new Paginated(
-      page.map(({ log, actor, task }) => ({
-        id: log.id,
-        action: `${log.entityType}.${log.action}` as ActivityAction,
-        actor,
-        projectId: log.projectId,
-        task: task
-          ? { id: task.id, key: `${project.key}-${task.number}`, title: task.title }
-          : null,
-        entity: { type: log.entityType, id: log.entityId },
-        metadata: log.metadata,
-        createdAt: log.createdAt.toISOString(),
-      })),
+      page.map((row) => toActivityEntry(row, project.key)),
       nextCursor,
     );
   }
+}
+
+/** Columns `toActivityEntry` needs; join `users` (actor) and `tasks` (task) as left joins. */
+export const activityRowFields = {
+  log: activityLogs,
+  actor: { id: users.id, username: users.username, avatarUrl: users.avatarUrl },
+  task: { id: tasks.id, number: tasks.taskNumber, title: tasks.title },
+};
+
+interface ActivityRow {
+  log: typeof activityLogs.$inferSelect;
+  actor: ActivityEntry['actor'];
+  task: { id: string; number: number; title: string } | null;
+}
+
+/** Shared by the project feed and the task timeline, so both describe events the same way. */
+export function toActivityEntry(
+  { log, actor, task }: ActivityRow,
+  projectKey: string,
+): ActivityEntry {
+  return {
+    id: log.id,
+    action: `${log.entityType}.${log.action}` as ActivityAction,
+    actor,
+    projectId: log.projectId,
+    task: task ? { id: task.id, key: `${projectKey}-${task.number}`, title: task.title } : null,
+    entity: { type: log.entityType, id: log.entityId },
+    metadata: log.metadata,
+    createdAt: log.createdAt.toISOString(),
+  };
 }

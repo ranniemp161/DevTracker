@@ -10,13 +10,15 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import type { Comment } from '@devtrack/types';
+import type { Comment, TimelineItem } from '@devtrack/types';
 import {
   createCommentSchema,
   listCommentsQuerySchema,
+  listTimelineQuerySchema,
   updateCommentSchema,
   type CreateCommentInput,
   type ListCommentsQuery,
+  type ListTimelineQuery,
   type UpdateCommentInput,
 } from '@devtrack/validators';
 import { CurrentUser } from '../common/decorators/auth.decorators';
@@ -53,6 +55,15 @@ export class CommentsController {
     @Query(new ZodValidationPipe(listCommentsQuerySchema)) query: ListCommentsQuery,
   ): Promise<Paginated<Comment>> {
     return this.comments.list(user.id, taskId, query);
+  }
+
+  @Get('tasks/:id/timeline')
+  timeline(
+    @CurrentUser() user: User,
+    @Param('id', UuidParamPipe) taskId: string,
+    @Query(new ZodValidationPipe(listTimelineQuerySchema)) query: ListTimelineQuery,
+  ): Promise<Paginated<TimelineItem>> {
+    return this.comments.timeline(user.id, taskId, query);
   }
 
   @Patch('comments/:id')
