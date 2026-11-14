@@ -12,11 +12,24 @@ import type { AppConfig } from '../config/app-config';
  */
 export const REALTIME_PATH = '/api/v1/realtime/socket';
 
+/** Startup gives up on Redis after this many failed attempts (decision record 0007). */
+export const REDIS_STARTUP_RETRIES = 5;
+const REDIS_CONNECT_TIMEOUT_MS = 5_000;
+const REDIS_MAX_BACKOFF_MS = 2_000;
+
+/** Only the error code, never the message: provider messages can contain the Redis URL. */
+function redisErrorCode(err: unknown): string {
+  const code = (err as { code?: unknown } | null)?.code;
+  return typeof code === 'string' ? code : 'unknown';
+}
+
 /**
  * Socket.IO server options for DevTrack:
  * - WebSocket transport only: Vercel Functions do not support HTTP long-polling.
  * - CORS limited to the website origin. Authentication uses a ticket, not cookies.
  * - With `REDIS_URL`, the Redis adapter broadcasts across function instances.
+ * - If Redis can't be reached at startup, the API still starts. Live updates pause: the
+ *   publisher leaves outbox rows unpublished until a transport is ready (`isTransportReady`).
  */
 export class RealtimeIoAdapter extends IoAdapter {
   private readonly redisLogger = new Logger(RealtimeIoAdapter.name);
@@ -32,19 +45,70 @@ export class RealtimeIoAdapter extends IoAdapter {
     super(app);
   }
 
-  /** Connects to Redis before the app starts, if configured. */
+  /** Without Redis configured (local dev, tests) the in-process server is the transport. */
+  private transportReady: () => boolean = () => !this.config.realtime.redisUrl;
+
+  /** Whether `server.to(...).emit()` currently reaches other instances. */
+  isTransportReady(): boolean {
+    return this.transportReady();
+  }
+
+  /**
+   * Connects to Redis before the app starts, if configured. Bounded: each attempt times out
+   * after 5 s and startup gives up after a few retries, so a Redis outage can't hold up the API.
+   * Once connected, the clients keep reconnecting with capped backoff.
+   */
   async connect(): Promise<void> {
-    if (!this.config.realtime.redisUrl) return;
-    const pub = createClient({ url: this.config.realtime.redisUrl });
+    const url = this.config.realtime.redisUrl;
+    if (!url) return;
+    let initialized = false;
+    const pub = createClient({
+      url,
+      socket: {
+        connectTimeout: REDIS_CONNECT_TIMEOUT_MS,
+        reconnectStrategy: (retries) =>
+          !initialized && retries >= REDIS_STARTUP_RETRIES
+            ? false
+            : Math.min(100 * 2 ** Math.min(retries, 5), REDIS_MAX_BACKOFF_MS),
+      },
+    });
     const sub = pub.duplicate();
-    const onError = (err: Error) => this.redisLogger.error(`Redis error: ${err.message}`);
-    pub.on('error', onError);
-    sub.on('error', onError);
-    await Promise.all([pub.connect(), sub.connect()]);
-    this.redisAdapter = createAdapter(pub, sub);
-    this.closeRedis = async () => {
-      await Promise.allSettled([pub.quit(), sub.quit()]);
+    for (const [role, client] of [
+      ['publisher', pub],
+      ['subscriber', sub],
+    ] as const) {
+      let failing = false;
+      client.on('error', (err: unknown) => {
+        if (failing) return; // one line per outage, not one per retry
+        failing = true;
+        this.redisLogger.error(`Redis ${role} connection failed (${redisErrorCode(err)})`);
+      });
+      client.on('ready', () => {
+        if (failing) this.redisLogger.log(`Redis ${role} connection restored`);
+        failing = false;
+      });
+    }
+    const close = async () => {
+      await Promise.allSettled(
+        [pub, sub].map(async (client) => {
+          if (client.isReady) await client.quit();
+          else if (client.isOpen) client.destroy();
+        }),
+      );
     };
+
+    const results = await Promise.allSettled([pub.connect(), sub.connect()]);
+    if (results.some((r) => r.status === 'rejected')) {
+      await close();
+      this.redisLogger.warn(
+        'Redis unavailable at startup; serving without live updates (outbox rows stay queued)',
+      );
+      return;
+    }
+    initialized = true;
+    this.redisAdapter = createAdapter(pub, sub);
+    this.transportReady = () => pub.isReady && sub.isReady;
+    this.closeRedis = close;
   }
 
   override createIOServer(port: number, options?: ServerOptions): Server {

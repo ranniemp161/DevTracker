@@ -39,5 +39,9 @@ export async function setupRealtime(app: NestExpressApplication, config: AppConf
   // Publishing must not depend on Nest discovering/initializing a gateway. On Vercel the
   // REST API still needs a Redis-backed Socket.IO server even when it accepts no sockets.
   const server = adapter.createIOServer(0);
-  app.get(OutboxPublisher).attach(server, () => adapter.close(server));
+  app.get(OutboxPublisher).attach(
+    server,
+    () => adapter.close(server),
+    () => adapter.isTransportReady(),
+  );
 }
