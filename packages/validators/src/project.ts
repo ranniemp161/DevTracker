@@ -212,6 +212,11 @@ export const listTasksQuerySchema = z.object({
   milestoneId: z.union([uuid, z.literal('none')]).optional(),
   /** Free-text search; see `parseTaskSearch` for the matching rules. */
   q: z.string().trim().max(TASK_SEARCH_MAX_LENGTH).optional(),
+  /**
+   * `number`: newest first (default). `status`: Board order (Backlog → … → Blocked), newest
+   * first within a status, so a grouped List fills one status at a time.
+   */
+  sort: z.enum(['number', 'status']).default('number'),
   cursor: z.string().max(100).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });

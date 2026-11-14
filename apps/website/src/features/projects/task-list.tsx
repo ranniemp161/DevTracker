@@ -2,7 +2,8 @@
 
 import type { Task } from '@devtrack/types';
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Avatar,
@@ -18,8 +19,14 @@ import { useRealtimeRefresh } from '@/lib/realtime';
 import { LabelChip } from './label-chip';
 import { formatDate, TASK_STATUS_LABEL } from './labels';
 import { useProject } from './project-context';
-import { TaskFilterBar, useTaskFilters } from './task-filters';
-import { isListUpdating, resultCountLabel, updatingLabel } from './task-list-status';
+import { FilterSelect, TaskFilterBar, useTaskFilters } from './task-filters';
+import {
+  groupByStatus,
+  isListUpdating,
+  parseListGrouping,
+  resultCountLabel,
+  updatingLabel,
+} from './task-list-status';
 
 /** Fast responses shouldn't flash an "updating" state. */
 const UPDATING_DELAY_MS = 150;
@@ -42,6 +49,17 @@ function useDelayedKey(key: string | null, delayMs: number): boolean {
 export function TaskList() {
   const { project, members } = useProject();
   const { filters } = useTaskFilters();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const grouping = parseListGrouping(searchParams.get('group'));
+  function setGrouping(next: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === 'status') params.set('group', 'status');
+    else params.delete('group');
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname);
+  }
   const [rows, setRows] = useState<Task[] | null>(null);
   /** The query `rows` came from; differs from `base` while a new filter/search loads. */
   const [loadedBase, setLoadedBase] = useState<string | null>(null);
@@ -57,6 +75,7 @@ export function TaskList() {
   const query = new URLSearchParams(
     Object.entries(filters).filter(([, v]) => v !== '') as [string, string][],
   );
+  if (grouping === 'status') query.set('sort', 'status');
   query.set('limit', '50');
   const base = `/projects/${project.id}/tasks?${query.toString()}`;
   const latestBase = useRef(base);
@@ -102,10 +121,20 @@ export function TaskList() {
     }
   }
 
+  const groups = rows && grouping === 'status' ? groupByStatus(rows, cursor !== null) : null;
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
         <TaskFilterBar workspaceId={project.workspaceId} projectId={project.id} members={members} />
+        <FilterSelect
+          label="Group by"
+          value={grouping === 'status' ? 'status' : ''}
+          onChange={setGrouping}
+        >
+          <option value="">Group by: none</option>
+          <option value="status">Group by: status</option>
+        </FilterSelect>
         {rows ? (
           <p
             role="status"
@@ -139,54 +168,28 @@ export function TaskList() {
             </tr>
           </thead>
           <tbody className="divide-y divide-line-subtle">
-            {rows?.map((t) => (
-              <tr key={t.id} className="transition-colors hover:bg-surface-sunken">
-                <td className="px-4 py-2.5 font-mono text-xs whitespace-nowrap text-fg-muted">
-                  {t.key}
-                </td>
-                <td className="px-4 py-2.5">
-                  <Link
-                    href={`/projects/${project.id}/tasks/${t.id}`}
-                    className="font-medium text-fg hover:underline"
-                  >
-                    {t.title}
-                  </Link>
-                  {t.labels.length > 0 ? (
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {t.labels.map((l) => (
-                        <LabelChip key={l.id} label={l} />
-                      ))}
-                    </div>
-                  ) : null}
-                </td>
-                <td className="px-4 py-2.5 whitespace-nowrap">
-                  <span className="inline-flex items-center gap-2">
-                    <StatusDot status={t.status} />
-                    {TASK_STATUS_LABEL[t.status]}
-                  </span>
-                </td>
-                <td className="px-4 py-2.5">
-                  <PriorityIcon priority={t.priority} />
-                </td>
-                <td className="px-4 py-2.5">
-                  <div className="flex -space-x-1.5">
-                    {t.assignees.length === 0 ? <UnassignedAvatar /> : null}
-                    {t.assignees.map((a) => (
-                      <span
-                        key={a.id}
-                        title={`@${a.username}`}
-                        className="rounded-full ring-2 ring-surface"
+            {groups
+              ? groups.map((g) => (
+                  <Fragment key={g.status}>
+                    <tr className="bg-surface-sunken">
+                      <th
+                        colSpan={6}
+                        scope="colgroup"
+                        className="px-4 py-2 text-left text-label font-medium text-fg-secondary"
                       >
-                        <Avatar name={a.username} url={a.avatarUrl} seed={a.id} size="xs" />
-                      </span>
+                        <span className="inline-flex items-center gap-2">
+                          <StatusDot status={g.status} />
+                          {TASK_STATUS_LABEL[g.status]}
+                          <span className="font-normal text-fg-muted">{g.countLabel}</span>
+                        </span>
+                      </th>
+                    </tr>
+                    {g.tasks.map((t) => (
+                      <TaskRow key={t.id} task={t} projectId={project.id} />
                     ))}
-                  </div>
-                </td>
-                <td className="px-4 py-2.5 whitespace-nowrap text-fg-muted">
-                  {formatDate(t.dueDate)}
-                </td>
-              </tr>
-            ))}
+                  </Fragment>
+                ))
+              : rows?.map((t) => <TaskRow key={t.id} task={t} projectId={project.id} />)}
           </tbody>
         </table>
         {rows && rows.length === 0 ? (
@@ -208,5 +211,48 @@ export function TaskList() {
         </Button>
       ) : null}
     </div>
+  );
+}
+
+function TaskRow({ task: t, projectId }: { task: Task; projectId: string }) {
+  return (
+    <tr className="transition-colors hover:bg-surface-sunken">
+      <td className="px-4 py-2.5 font-mono text-xs whitespace-nowrap text-fg-muted">{t.key}</td>
+      <td className="px-4 py-2.5">
+        <Link
+          href={`/projects/${projectId}/tasks/${t.id}`}
+          className="font-medium text-fg hover:underline"
+        >
+          {t.title}
+        </Link>
+        {t.labels.length > 0 ? (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {t.labels.map((l) => (
+              <LabelChip key={l.id} label={l} />
+            ))}
+          </div>
+        ) : null}
+      </td>
+      <td className="px-4 py-2.5 whitespace-nowrap">
+        <span className="inline-flex items-center gap-2">
+          <StatusDot status={t.status} />
+          {TASK_STATUS_LABEL[t.status]}
+        </span>
+      </td>
+      <td className="px-4 py-2.5">
+        <PriorityIcon priority={t.priority} />
+      </td>
+      <td className="px-4 py-2.5">
+        <div className="flex -space-x-1.5">
+          {t.assignees.length === 0 ? <UnassignedAvatar /> : null}
+          {t.assignees.map((a) => (
+            <span key={a.id} title={`@${a.username}`} className="rounded-full ring-2 ring-surface">
+              <Avatar name={a.username} url={a.avatarUrl} seed={a.id} size="xs" />
+            </span>
+          ))}
+        </div>
+      </td>
+      <td className="px-4 py-2.5 whitespace-nowrap text-fg-muted">{formatDate(t.dueDate)}</td>
+    </tr>
   );
 }
