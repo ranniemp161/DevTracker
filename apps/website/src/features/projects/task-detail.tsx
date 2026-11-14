@@ -13,6 +13,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { CheckIcon, ChevronDownIcon } from '@/components/icons';
+import { useToast } from '@/components/toaster';
 import {
   Alert,
   Avatar,
@@ -146,6 +147,7 @@ function TaskEditor({
   onFieldsSaved: () => void;
 }) {
   const router = useRouter();
+  const toast = useToast();
   const { user } = useSession();
   const { project, members, readOnly } = useProject();
   const estimateText = task.estimateMinutes ? formatMinutes(task.estimateMinutes) : '';
@@ -515,7 +517,10 @@ function TaskEditor({
                     onClick={() =>
                       call(
                         () => api(`/tasks/${task.id}`, { method: 'DELETE' }),
-                        () => router.push(base),
+                        () => {
+                          toast.show(`Deleted ${task.key}`);
+                          router.push(base);
+                        },
                       )
                     }
                   >

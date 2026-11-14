@@ -4,6 +4,7 @@ import { TASK_STATUSES, type Task, type TaskStatus } from '@devtrack/types';
 import Link from 'next/link';
 import { useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react';
 import { CalendarIcon, PlusIcon } from '@/components/icons';
+import { useToast } from '@/components/toaster';
 import {
   Alert,
   Avatar,
@@ -41,9 +42,16 @@ export function Board() {
   const [dragOver, setDragOver] = useState<TaskStatus | null>(null);
   const [addingIn, setAddingIn] = useState<TaskStatus | null>(null);
 
-  async function moveTask(taskId: string, status: TaskStatus) {
-    const before = tasks;
-    const task = tasks?.find((t) => t.id === taskId);
+  const toast = useToast();
+  // Undo runs after later renders; it must see the board as it is then, not as it was.
+  const tasksRef = useRef(tasks);
+  useEffect(() => {
+    tasksRef.current = tasks;
+  }, [tasks]);
+
+  async function moveTask(taskId: string, status: TaskStatus, { isUndo = false } = {}) {
+    const before = tasksRef.current;
+    const task = before?.find((t) => t.id === taskId);
     if (!task || task.status === status) return;
     setDropError(null);
     setTasks((current) => current?.map((t) => (t.id === taskId ? { ...t, status } : t)) ?? null);
@@ -53,9 +61,29 @@ export function Board() {
         body: { status },
       });
       setTasks((current) => current?.map((t) => (t.id === taskId ? updated : t)) ?? null);
+      if (isUndo) {
+        toast.show(`Moved ${task.key} back to ${TASK_STATUS_LABEL[status]}`);
+      } else {
+        toast.show(`Moved ${task.key} to ${TASK_STATUS_LABEL[status]}`, {
+          label: 'Undo',
+          onClick: () => undoMove(taskId, status, task.status),
+        });
+      }
     } catch (err) {
       setTasks(before); // roll back the optimistic move
       setDropError(err instanceof ApiError ? err.message : 'Could not move the task.');
+    }
+  }
+
+  /** Moves a task back, unless someone changed it again after our move. */
+  async function undoMove(taskId: string, movedTo: TaskStatus, previous: TaskStatus) {
+    const current = tasksRef.current?.find((t) => t.id === taskId);
+    if (!current) {
+      toast.show('That task is no longer on the board.');
+    } else if (current.status !== movedTo) {
+      toast.show(`${current.key} changed again since, so it wasn't moved back.`);
+    } else {
+      await moveTask(taskId, previous, { isUndo: true });
     }
   }
 

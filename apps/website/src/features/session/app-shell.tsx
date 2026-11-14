@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { DevtrackMark, MenuIcon } from '@/components/icons';
+import { ToastProvider } from '@/components/toaster';
 import { Alert, Avatar, Button, IconButton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { RealtimeProvider, useRealtimeRefresh, type RealtimeEvent } from '@/lib/realtime';
@@ -69,7 +70,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   // Real-time updates need a verified account (the API refuses other connections).
   return (
     <SessionContext.Provider value={session}>
-      {verified ? <RealtimeProvider>{page}</RealtimeProvider> : page}
+      <ToastProvider>{verified ? <RealtimeProvider>{page}</RealtimeProvider> : page}</ToastProvider>
     </SessionContext.Provider>
   );
 }
