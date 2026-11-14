@@ -226,3 +226,12 @@ were changed in this fix.
   - `test/realtime.e2e-spec.ts` uses a real Socket.IO client against a listening app. It covers tickets, refused and expired connections, revoked sessions, the maximum connection age, room authorization, delivery to project and user rooms, and the scheduled sweep.
   - Other suites run with `publishAfterResponse: false` so they can assert on unpublished outbox rows.
 - **Restored from M6:** the activity feed's "`<login>` (GitHub)" label for GitHub senders. Its M6 edit hadn't applied.
+
+### API behaviour when Redis is unavailable (2026-11-14, approved)
+
+Before this change, the API connected to Redis with default client settings before serving. An Upstash outage could hold a starting function indefinitely, and connection errors were logged with the provider message, which can contain the Redis URL.
+
+- **Bounded startup:** each connection attempt times out after 5 s, and startup gives up after 5 retries (backoff capped at 2 s). Once connected, the clients keep reconnecting with the same capped backoff.
+- **Degrade, don't fail:** if Redis can't be reached at startup, the API still serves REST and logs one warning. Live updates pause: `OutboxPublisher.flush()` sends nothing while the transport isn't ready and returns `paused: true`, so outbox rows stay unpublished instead of being marked published to no one. The next flush on a Redis-connected instance (after a write, or the scheduled sweep) delivers them. Rows older than 15 minutes are skipped as before, and clients reconcile on reconnect (§6).
+- **A startup-degraded instance doesn't retry Redis.** Its successors do. Mid-life disconnects pause publishing only until the clients reconnect.
+- **Logs** carry only the error code (`ECONNREFUSED`), never the message or URL, and appear once per outage, not once per retry.

@@ -19,6 +19,8 @@ const STALE_AFTER_MS = 15 * 60 * 1000;
 export interface FlushResult {
   published: number;
   skippedStale: number;
+  /** True when nothing was sent because the transport (Redis) is down; rows stay queued. */
+  paused?: true;
 }
 
 /**
@@ -36,13 +38,20 @@ export class OutboxPublisher implements OnApplicationShutdown {
   private running: Promise<FlushResult> | null = null;
   private again = false;
   private closeTransport: (() => Promise<void>) | null = null;
+  private transportReady: () => boolean = () => true;
+  private pausedLogged = false;
 
   constructor(@Inject(DATABASE) private readonly db: Database) {}
 
   /** Called explicitly by setupRealtime before app.init(), independently of gateway hooks. */
-  attach(server: Server, closeTransport?: () => Promise<void>): void {
+  attach(
+    server: Server,
+    closeTransport?: () => Promise<void>,
+    transportReady: () => boolean = () => true,
+  ): void {
     this.server = server;
     this.closeTransport = closeTransport ?? null;
+    this.transportReady = transportReady;
   }
 
   async onApplicationShutdown(): Promise<void> {
@@ -57,6 +66,18 @@ export class OutboxPublisher implements OnApplicationShutdown {
    * running in parallel inside this process.
    */
   flush(): Promise<FlushResult> {
+    if (!this.server) {
+      return Promise.reject(new Error('Realtime publisher transport has not been initialized'));
+    }
+    // Emitting without Redis would reach no one; marking rows published would lose them.
+    if (!this.transportReady()) {
+      if (!this.pausedLogged) {
+        this.pausedLogged = true;
+        this.logger.warn('Realtime transport unavailable; outbox rows stay queued');
+      }
+      return Promise.resolve({ published: 0, skippedStale: 0, paused: true });
+    }
+    this.pausedLogged = false;
     if (this.running) {
       this.again = true;
       return this.running;
