@@ -33,6 +33,32 @@ export const ChevronRightIcon = (p: IconProps) => (
     <path d="m9 6 6 6-6 6" />
   </Icon>
 );
+/** Activity feed icons (paths from design/screens/activity.html). */
+export const StatusChangeIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3M18 3v4h-4M6 21v-4h4" />
+  </Icon>
+);
+export const BranchIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M6 3v12M18 9a3 3 0 1 0 0-.01M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 12c0 4-6 3-12 6" />
+  </Icon>
+);
+export const UserPlusIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M9 4.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7zM2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5M19 8v6M16 11h6" />
+  </Icon>
+);
+export const UserIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM4 21c1-4 4-6 8-6s7 2 8 6" />
+  </Icon>
+);
+export const TagIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M3 12V4h8l10 10-8 8zM7.5 7.5h.01" />
+  </Icon>
+);
 export const PlusIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M12 5v14M5 12h14" />
