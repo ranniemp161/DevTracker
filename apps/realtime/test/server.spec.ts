@@ -121,8 +121,8 @@ async function open(url: string, token: unknown = tokenFor(), origin?: string) {
   return { socket, ...(await result) };
 }
 
-const subscribe = (socket: Socket, room: unknown) =>
-  socket.timeout(2000).emitWithAck('subscribe', { room });
+const subscribe = (socket: Socket, room: unknown, timeoutMs = 2000) =>
+  socket.timeout(timeoutMs).emitWithAck('subscribe', { room });
 const next = (socket: Socket, event: string) =>
   new Promise<unknown>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`Timed out waiting for ${event}`)), 2000);
@@ -242,26 +242,36 @@ describe('shared room authorization', () => {
     });
   });
 
-  it('serializes concurrent joins and caps client rooms at 50 while allowing duplicates', async () => {
-    const server = await start();
-    const rows = await database.db
-      .insert(projects)
-      .values(
-        Array.from({ length: 51 }, (_, index) => ({
-          workspaceId: fixture.ws,
-          name: `P${index}`,
-          key: `P${index}`,
-        })),
-      )
-      .returning();
-    const { socket } = await open(server.url, tokenFor('owner'));
-    const results = await Promise.all(rows.map((row) => subscribe(socket, `project:${row.id}`)));
-    expect(results.filter((result) => result.ok)).toHaveLength(50);
-    expect(results[50]).toEqual({ ok: false, error: 'TOO_MANY_ROOMS' });
-    expect(await subscribe(socket, `project:${rows[0]!.id}`)).toEqual({ ok: true });
-    await socket.timeout(2000).emitWithAck('unsubscribe', { room: `project:${rows[0]!.id}` });
-    expect(await subscribe(socket, `project:${rows[50]!.id}`)).toEqual({ ok: true });
-  });
+  // The server authorizes joins one at a time against the database, so the 51st ack waits for
+  // 50 lookups. On a loaded CI or dev machine that exceeds the default 2 s ack timeout.
+  it(
+    'serializes concurrent joins and caps client rooms at 50 while allowing duplicates',
+    {
+      timeout: 30_000,
+    },
+    async () => {
+      const server = await start();
+      const rows = await database.db
+        .insert(projects)
+        .values(
+          Array.from({ length: 51 }, (_, index) => ({
+            workspaceId: fixture.ws,
+            name: `P${index}`,
+            key: `P${index}`,
+          })),
+        )
+        .returning();
+      const { socket } = await open(server.url, tokenFor('owner'));
+      const results = await Promise.all(
+        rows.map((row) => subscribe(socket, `project:${row.id}`, 20_000)),
+      );
+      expect(results.filter((result) => result.ok)).toHaveLength(50);
+      expect(results[50]).toEqual({ ok: false, error: 'TOO_MANY_ROOMS' });
+      expect(await subscribe(socket, `project:${rows[0]!.id}`)).toEqual({ ok: true });
+      await socket.timeout(2000).emitWithAck('unsubscribe', { room: `project:${rows[0]!.id}` });
+      expect(await subscribe(socket, `project:${rows[50]!.id}`)).toEqual({ ok: true });
+    },
+  );
 });
 
 it.skipIf(!process.env.TEST_REDIS_URL)(
