@@ -14,12 +14,14 @@ import type { MyTasksResponse, Task, TaskTimeInStatus } from '@devtrack/types';
 import {
   addAssigneesSchema,
   attachLabelSchema,
+  bulkUpdateTasksSchema,
   changeTaskStatusSchema,
   createTaskSchema,
   listTasksQuerySchema,
   updateTaskSchema,
   type AddAssigneesInput,
   type AttachLabelInput,
+  type BulkUpdateTasksInput,
   type ChangeTaskStatusInput,
   type CreateTaskInput,
   type ListTasksQuery,
@@ -84,6 +86,15 @@ export class TasksController {
     @Param('id', UuidParamPipe) id: string,
   ): Promise<{ time: TaskTimeInStatus }> {
     return { time: await this.tasks.timeInStatus(user.id, id) };
+  }
+
+  @Patch('projects/:id/tasks/bulk')
+  bulkUpdate(
+    @CurrentUser() user: User,
+    @Param('id', UuidParamPipe) projectId: string,
+    @Body(new ZodValidationPipe(bulkUpdateTasksSchema)) body: BulkUpdateTasksInput,
+  ): Promise<{ tasks: Task[] }> {
+    return this.tasks.bulkUpdate(user, projectId, body);
   }
 
   @Patch('tasks/:id')

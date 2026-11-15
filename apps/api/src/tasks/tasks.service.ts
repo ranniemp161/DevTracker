@@ -38,6 +38,7 @@ import {
 } from '@devtrack/types';
 import {
   parseTaskSearch,
+  type BulkUpdateTasksInput,
   type CreateTaskInput,
   type ListTasksQuery,
   type UpdateTaskInput,
@@ -380,6 +381,107 @@ export class TasksService {
       });
     }
     return (await this.load([task.id], access.project.key))[0]!;
+  }
+
+  /**
+   * One change applied to many tasks of a project, all or nothing (decision record 0003 §8).
+   * Every task gets the same activity and live events as a single edit would, so boards,
+   * timelines and notifications stay correct.
+   */
+  async bulkUpdate(
+    actor: Actor,
+    projectId: string,
+    input: BulkUpdateTasksInput,
+  ): Promise<{ tasks: Task[] }> {
+    const { project } = await this.projectAccess.require(actor.id, projectId, { write: true });
+    const rows = await this.db
+      .select()
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.projectId, project.id),
+          inArray(tasks.id, input.taskIds),
+          isNull(tasks.deletedAt),
+        ),
+      );
+    if (rows.length !== input.taskIds.length) {
+      throw AppException.notFound('Some of these tasks were not found in this project.');
+    }
+    const assigneeIds = input.addAssigneeIds ?? [];
+    await this.assertProjectMembers(project.id, assigneeIds);
+    const labelIds = input.addLabelIds ?? [];
+    const labelRows =
+      labelIds.length === 0
+        ? []
+        : await this.db
+            .select({ id: labels.id, name: labels.name })
+            .from(labels)
+            .where(and(inArray(labels.id, labelIds), eq(labels.workspaceId, project.workspaceId)));
+    if (labelRows.length !== labelIds.length) throw AppException.notFound('Label not found.');
+    const people = assigneeIds.length === 0 ? [] : await this.usernames(this.db, assigneeIds);
+    const fields: UpdateTaskInput = { status: input.status, priority: input.priority };
+
+    await this.db.transaction(async (tx) => {
+      for (const task of rows) {
+        const changes = describeChanges(task, fields);
+        if (Object.keys(changes).length > 0) {
+          await tx
+            .update(tasks)
+            .set({
+              status: input.status,
+              priority: input.priority,
+              completedAt: input.status ? completionFor(input.status, task) : undefined,
+            })
+            .where(eq(tasks.id, task.id));
+          await this.events.activity(tx, {
+            ...scope(project, task),
+            actor,
+            action: 'task.updated',
+            metadata: { key: taskKey(project, task), changes },
+            event: { type: 'task.updated', payload: { taskId: task.id, changes } },
+          });
+        }
+
+        if (assigneeIds.length > 0) {
+          const added = await tx
+            .insert(taskAssignees)
+            .values(assigneeIds.map((id) => ({ taskId: task.id, userId: id })))
+            .onConflictDoNothing()
+            .returning({ userId: taskAssignees.userId });
+          const newIds = new Set(added.map((a) => a.userId));
+          for (const person of people.filter((p) => newIds.has(p.id))) {
+            await this.events.activity(tx, {
+              ...scope(project, task),
+              actor,
+              action: 'task.assigned',
+              metadata: { key: taskKey(project, task), user: person },
+              event: {
+                type: 'task.assigned',
+                payload: { taskId: task.id, userId: person.id, assigned: true },
+              },
+            });
+          }
+          if (newIds.size > 0) await this.notifyAssigned(tx, actor, project, task, [...newIds]);
+        }
+
+        for (const label of labelRows) {
+          const added = await tx
+            .insert(taskLabels)
+            .values({ taskId: task.id, labelId: label.id })
+            .onConflictDoNothing()
+            .returning({ labelId: taskLabels.labelId });
+          if (added.length === 0) continue;
+          await this.events.activity(tx, {
+            ...scope(project, task),
+            actor,
+            action: 'task.labeled',
+            metadata: { key: taskKey(project, task), label },
+            event: { type: 'task.updated', payload: { taskId: task.id, labelAdded: label.id } },
+          });
+        }
+      }
+    });
+    return { tasks: await this.load(input.taskIds, project.key) };
   }
 
   /** Soft delete: the reporter or a workspace Owner/Admin (M3 rule 5). */

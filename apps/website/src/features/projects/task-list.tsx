@@ -4,6 +4,7 @@ import type { Task } from '@devtrack/types';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Fragment, useEffect, useRef, useState } from 'react';
+import { BulkActionBar } from './bulk-action-bar';
 import {
   Alert,
   Avatar,
@@ -27,6 +28,13 @@ import {
   resultCountLabel,
   updatingLabel,
 } from './task-list-status';
+import { selectionState, toggleAll, toggleOne } from './task-selection';
+
+/** Row checkbox props; omitted when the viewer can't edit (read-only project). */
+interface RowSelect {
+  checked: boolean;
+  onToggle: () => void;
+}
 
 /** Fast responses shouldn't flash an "updating" state. */
 const UPDATING_DELAY_MS = 150;
@@ -47,7 +55,7 @@ function useDelayedKey(key: string | null, delayMs: number): boolean {
 
 /** List view: newest first, filterable, cursor-paginated (M3 rule 9). */
 export function TaskList() {
-  const { project, members } = useProject();
+  const { project, members, readOnly } = useProject();
   const { filters } = useTaskFilters();
   const router = useRouter();
   const pathname = usePathname();
@@ -123,6 +131,22 @@ export function TaskList() {
 
   const groups = rows && grouping === 'status' ? groupByStatus(rows, cursor !== null) : null;
 
+  // Selection belongs to one query: changing filters, search or grouping starts fresh.
+  const [selection, setSelection] = useState<{ base: string; ids: Set<string> }>({
+    base: '',
+    ids: new Set(),
+  });
+  const selected = selection.base === base && !updating ? selection.ids : new Set<string>();
+  const loadedIds = rows?.map((t) => t.id) ?? [];
+  const setSelected = (ids: Set<string>) => setSelection({ base, ids });
+  const canSelect = !readOnly && rows !== null && rows.length > 0;
+  const rowSelect = (id: string): RowSelect | undefined =>
+    canSelect
+      ? { checked: selected.has(id), onToggle: () => setSelected(toggleOne(selected, id)) }
+      : undefined;
+  const allState = selectionState(selected, loadedIds);
+  const columns = canSelect ? 7 : 6;
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
@@ -159,6 +183,15 @@ export function TaskList() {
         >
           <thead className="border-b border-line bg-surface-sunken text-xs text-fg-muted">
             <tr>
+              {canSelect ? (
+                <th className="w-10 py-2.5 pl-4">
+                  <SelectBox
+                    label="Select all loaded tasks"
+                    state={allState}
+                    onToggle={() => setSelected(toggleAll(selected, loadedIds))}
+                  />
+                </th>
+              ) : null}
               <th className="px-4 py-2.5 font-medium">Key</th>
               <th className="px-4 py-2.5 font-medium">Title</th>
               <th className="px-4 py-2.5 font-medium">Status</th>
@@ -173,7 +206,7 @@ export function TaskList() {
                   <Fragment key={g.status}>
                     <tr className="bg-surface-sunken">
                       <th
-                        colSpan={6}
+                        colSpan={columns}
                         scope="colgroup"
                         className="px-4 py-2 text-left text-label font-medium text-fg-secondary"
                       >
@@ -185,11 +218,18 @@ export function TaskList() {
                       </th>
                     </tr>
                     {g.tasks.map((t) => (
-                      <TaskRow key={t.id} task={t} projectId={project.id} />
+                      <TaskRow
+                        key={t.id}
+                        task={t}
+                        projectId={project.id}
+                        select={rowSelect(t.id)}
+                      />
                     ))}
                   </Fragment>
                 ))
-              : rows?.map((t) => <TaskRow key={t.id} task={t} projectId={project.id} />)}
+              : rows?.map((t) => (
+                  <TaskRow key={t.id} task={t} projectId={project.id} select={rowSelect(t.id)} />
+                ))}
           </tbody>
         </table>
         {/* Under 768px the table becomes stacked rows (SPEC §6): title, then a meta line. */}
@@ -209,11 +249,18 @@ export function TaskList() {
                     <span className="font-normal text-fg-muted">{g.countLabel}</span>
                   </li>
                   {g.tasks.map((t) => (
-                    <StackedRow key={t.id} task={t} projectId={project.id} />
+                    <StackedRow
+                      key={t.id}
+                      task={t}
+                      projectId={project.id}
+                      select={rowSelect(t.id)}
+                    />
                   ))}
                 </Fragment>
               ))
-            : rows?.map((t) => <StackedRow key={t.id} task={t} projectId={project.id} />)}
+            : rows?.map((t) => (
+                <StackedRow key={t.id} task={t} projectId={project.id} select={rowSelect(t.id)} />
+              ))}
         </ul>
         {rows && rows.length === 0 ? (
           <div className="p-4">
@@ -233,13 +280,71 @@ export function TaskList() {
           {loadingMore ? 'Loading…' : 'Load more'}
         </Button>
       ) : null}
+      {canSelect && selected.size > 0 ? (
+        <BulkActionBar
+          projectId={project.id}
+          workspaceId={project.workspaceId}
+          members={members}
+          selectedIds={[...selected]}
+          onApplied={() => {
+            setSelected(new Set());
+            setVersion((v) => v + 1);
+          }}
+          onClear={() => setSelected(new Set())}
+        />
+      ) : null}
     </div>
   );
 }
 
-function TaskRow({ task: t, projectId }: { task: Task; projectId: string }) {
+/** Native checkbox; `some` shows the indeterminate dash (the header box). */
+function SelectBox({
+  label,
+  state,
+  onToggle,
+}: {
+  label: string;
+  state: 'none' | 'some' | 'all';
+  onToggle: () => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = state === 'some';
+  }, [state]);
   return (
-    <tr className="transition-colors hover:bg-surface-sunken">
+    <input
+      ref={ref}
+      type="checkbox"
+      aria-label={label}
+      checked={state === 'all'}
+      onChange={onToggle}
+      className="size-4 cursor-pointer accent-primary"
+    />
+  );
+}
+
+function TaskRow({
+  task: t,
+  projectId,
+  select,
+}: {
+  task: Task;
+  projectId: string;
+  select?: RowSelect;
+}) {
+  return (
+    <tr
+      className={`transition-colors hover:bg-surface-sunken ${select?.checked ? 'bg-primary-soft' : ''}`}
+    >
+      {select ? (
+        <td className="w-10 py-2.5 pl-4">
+          <SelectBox
+            label={`Select ${t.key}`}
+            state={select.checked ? 'all' : 'none'}
+            onToggle={select.onToggle}
+          />
+        </td>
+      ) : null}
       <td className="px-4 py-2.5 font-mono text-xs whitespace-nowrap text-fg-muted">{t.key}</td>
       <td className="px-4 py-2.5">
         <Link
@@ -281,38 +386,61 @@ function TaskRow({ task: t, projectId }: { task: Task; projectId: string }) {
 }
 
 /** Phone layout of one task: the title on top, then key · status · priority · due · people. */
-function StackedRow({ task: t, projectId }: { task: Task; projectId: string }) {
+function StackedRow({
+  task: t,
+  projectId,
+  select,
+}: {
+  task: Task;
+  projectId: string;
+  select?: RowSelect;
+}) {
   return (
-    <li className="space-y-1.5 px-4 py-3">
-      <Link
-        href={`/projects/${projectId}/tasks/${t.id}`}
-        className="block font-medium break-words text-fg hover:underline"
-      >
-        {t.title}
-      </Link>
-      {t.labels.length > 0 ? (
-        <div className="flex flex-wrap gap-1">
-          {t.labels.map((l) => (
-            <LabelChip key={l.id} label={l} />
-          ))}
-        </div>
+    <li className={`flex gap-3 px-4 py-3 ${select?.checked ? 'bg-primary-soft' : ''}`}>
+      {select ? (
+        <span className="pt-0.5">
+          <SelectBox
+            label={`Select ${t.key}`}
+            state={select.checked ? 'all' : 'none'}
+            onToggle={select.onToggle}
+          />
+        </span>
       ) : null}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted">
-        <span className="font-mono">{t.key}</span>
-        <span className="inline-flex items-center gap-1.5">
-          <StatusDot status={t.status} />
-          {TASK_STATUS_LABEL[t.status]}
-        </span>
-        <PriorityIcon priority={t.priority} />
-        {t.dueDate ? <span>Due {formatDate(t.dueDate)}</span> : null}
-        <span className="flex -space-x-1.5">
-          {t.assignees.length === 0 ? <UnassignedAvatar /> : null}
-          {t.assignees.map((a) => (
-            <span key={a.id} title={`@${a.username}`} className="rounded-full ring-2 ring-surface">
-              <Avatar name={a.username} url={a.avatarUrl} seed={a.id} size="xs" />
-            </span>
-          ))}
-        </span>
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <Link
+          href={`/projects/${projectId}/tasks/${t.id}`}
+          className="block font-medium break-words text-fg hover:underline"
+        >
+          {t.title}
+        </Link>
+        {t.labels.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {t.labels.map((l) => (
+              <LabelChip key={l.id} label={l} />
+            ))}
+          </div>
+        ) : null}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted">
+          <span className="font-mono">{t.key}</span>
+          <span className="inline-flex items-center gap-1.5">
+            <StatusDot status={t.status} />
+            {TASK_STATUS_LABEL[t.status]}
+          </span>
+          <PriorityIcon priority={t.priority} />
+          {t.dueDate ? <span>Due {formatDate(t.dueDate)}</span> : null}
+          <span className="flex -space-x-1.5">
+            {t.assignees.length === 0 ? <UnassignedAvatar /> : null}
+            {t.assignees.map((a) => (
+              <span
+                key={a.id}
+                title={`@${a.username}`}
+                className="rounded-full ring-2 ring-surface"
+              >
+                <Avatar name={a.username} url={a.avatarUrl} seed={a.id} size="xs" />
+              </span>
+            ))}
+          </span>
+        </div>
       </div>
     </li>
   );

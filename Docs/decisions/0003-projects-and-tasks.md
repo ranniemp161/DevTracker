@@ -63,6 +63,10 @@ These rules were approved before implementation (§21 rule 12).
   - anything else, including another project's key, is a case-insensitive "contains" match on title or description. `%`, `_` and `\` are matched literally.
   - There is no index: a search scans one project's tasks, which is cheap at current sizes. Add a `pg_trgm` index if searches get slow.
 - **Group by status (added 2026-11-14):** `sort=status` orders tasks in Board order (Postgres enum order: Backlog → To do → In progress → In review → Done → Blocked), newest first within a status. The cursor carries the status as well as the number, and a cursor from one sort is refused by the other. The List's "Group by: status" (`?group=status`) uses it, so every group above the last loaded one is complete. The last group shows "N+" while more pages exist.
+- **Bulk edit (added 2026-11-14):** `PATCH /projects/:id/tasks/bulk` with `{ taskIds (1–100), status?, priority?, addAssigneeIds?, addLabelIds? }` applies one change to many tasks.
+  - **All or nothing:** the edit runs in one transaction, so if any task is missing or in another project (404), any assignee isn't a project member (400), or any label isn't in the workspace (404), nothing changes.
+  - **Same rules as single edits:** project write access is required (an archived project gets 409, a non-member 404). Each task gets the same activity, live event and assignment notification as a single edit. Re-applying a change that's already there records nothing.
+  - **No bulk delete:** delete permission depends on each task's reporter, so delete stays per task.
 
 ## 9. Labels (added to M3, approved)
 

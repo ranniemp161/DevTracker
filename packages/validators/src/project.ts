@@ -156,6 +156,39 @@ export const addAssigneesSchema = z.object({
 });
 export type AddAssigneesInput = z.infer<typeof addAssigneesSchema>;
 
+/** Most tasks one bulk edit may change (decision record 0003 §8). */
+export const BULK_TASK_LIMIT = 100;
+
+/**
+ * PATCH /projects/:id/tasks/bulk: the same change applied to many tasks, all or nothing.
+ * Only additive or set-to-value changes; deletion stays per task (it depends on the reporter).
+ */
+export const bulkUpdateTasksSchema = z
+  .object({
+    taskIds: z
+      .array(uuid)
+      .min(1, { error: 'Choose at least one task.' })
+      .max(BULK_TASK_LIMIT, { error: `At most ${BULK_TASK_LIMIT} tasks at once.` })
+      .transform((ids) => [...new Set(ids.map((id) => id.toLowerCase()))]),
+    status: taskStatusSchema.optional(),
+    priority: taskPrioritySchema.optional(),
+    addAssigneeIds: userIdList.optional(),
+    addLabelIds: z
+      .array(uuid)
+      .max(20, { error: 'At most 20 labels.' })
+      .transform((ids) => [...new Set(ids.map((id) => id.toLowerCase()))])
+      .optional(),
+  })
+  .refine(
+    (v) =>
+      v.status !== undefined ||
+      v.priority !== undefined ||
+      (v.addAssigneeIds?.length ?? 0) > 0 ||
+      (v.addLabelIds?.length ?? 0) > 0,
+    { error: 'Choose a change to apply.' },
+  );
+export type BulkUpdateTasksInput = z.infer<typeof bulkUpdateTasksSchema>;
+
 export const TASK_SEARCH_MAX_LENGTH = 100;
 
 /**
