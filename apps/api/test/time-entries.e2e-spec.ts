@@ -139,6 +139,31 @@ describe('time entries', () => {
   });
 });
 
+describe('project timesheet', () => {
+  it('aggregates inclusive dates by task and collaborator and restricts project access', async () => {
+    const f = await projectFixture(t);
+    const task = await newTask(f);
+    const entries = `/api/v1/tasks/${task.id}/time-entries`;
+    await f.dev.browser
+      .post(entries)
+      .send({ minutes: 30, spentOn: '2026-11-01', note: 'Private note' })
+      .expect(201);
+    await f.dev.browser.post(entries).send({ minutes: 45, spentOn: '2026-11-07' }).expect(201);
+    await f.admin.browser.post(entries).send({ minutes: 120, spentOn: '2026-11-05' }).expect(201);
+    await f.dev.browser.post(entries).send({ minutes: 60, spentOn: '2026-11-08' }).expect(201);
+    const path = `/api/v1/projects/${f.project}/timesheet`;
+    const query = '?from=2026-11-01&to=2026-11-07';
+    const response = await f.dev.browser.get(path + query).expect(200);
+    expect(response.body.data.rows).toMatchObject([
+      { taskId: task.id, user: { id: f.admin.id }, minutes: 120 },
+      { taskId: task.id, user: { id: f.dev.id }, minutes: 75 },
+    ]);
+    expect(JSON.stringify(response.body.data)).not.toContain('Private note');
+    await f.bystander.browser.get(path + query).expect(404);
+    await f.dev.browser.get(path + '?from=2026-11-08&to=2026-11-07').expect(400);
+  });
+});
+
 describe('task timers', () => {
   const active = '/api/v1/time-tracker/active';
   const spentOn = '2026-11-10';

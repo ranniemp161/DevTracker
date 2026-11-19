@@ -344,6 +344,14 @@ const entryMinutes = z
 
 const entryDate = z.iso.date({ error: 'Use the format YYYY-MM-DD.' });
 
+export const projectTimesheetQuerySchema = z
+  .object({ from: entryDate, to: entryDate })
+  .refine(({ from, to }) => from <= to, {
+    path: ['to'],
+    error: 'End date must be on or after the start date.',
+  });
+export type ProjectTimesheetQuery = z.infer<typeof projectTimesheetQuerySchema>;
+
 const entryNote = z
   .string()
   .trim()

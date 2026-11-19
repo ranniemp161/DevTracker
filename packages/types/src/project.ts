@@ -98,6 +98,14 @@ export interface ActiveTaskTimer {
   canStop: boolean;
 }
 
+export interface ProjectTimesheetRow {
+  taskId: string;
+  taskNumber: number;
+  taskTitle: string;
+  user: UserRef | null;
+  minutes: number;
+}
+
 export interface TimeEntry {
   id: string;
   taskId: string;
