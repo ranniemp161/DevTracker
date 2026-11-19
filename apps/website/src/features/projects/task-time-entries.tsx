@@ -2,7 +2,7 @@
 
 import type { Task, TimeEntry } from '@devtrack/types';
 import { createTimeEntrySchema, parseDuration } from '@devtrack/validators';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { PlusIcon } from '@/components/icons';
 import { Avatar, Button, PanelSection, Skeleton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
@@ -10,13 +10,7 @@ import { useRealtimeRefresh } from '@/lib/realtime';
 import { useApiQuery } from '@/lib/use-api-query';
 import { formatDate, formatMinutes } from './labels';
 import { useProject } from './project-context';
-
-/** Today as a calendar date in the viewer's own time zone. */
-function today(): string {
-  const now = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-}
+import { localWorkDate, TaskTimerButton, useTaskTimer } from './task-timer';
 
 const field =
   'h-8 w-full rounded-control border border-line-control bg-surface px-2.5 text-sm placeholder:text-fg-subtle focus-visible:border-primary';
@@ -28,6 +22,11 @@ const field =
 export function TaskTimeEntries({ task, onChanged }: { task: Task; onChanged: () => void }) {
   const { readOnly } = useProject();
   const query = useApiQuery<{ entries: TimeEntry[] }>(`/tasks/${task.id}/time-entries`);
+  const { saved } = useTaskTimer();
+  const reloadEntries = query.reload;
+  useEffect(() => {
+    if (saved?.taskId === task.id) reloadEntries();
+  }, [saved, task.id, reloadEntries]);
   // Live updates (M7): entries logged elsewhere show up in this task's activity.
   useRealtimeRefresh(
     (e) => e.type === 'activity.created' && e.payload.taskId === task.id,
@@ -71,6 +70,7 @@ export function TaskTimeEntries({ task, onChanged }: { task: Task; onChanged: ()
           : ` of ${formatMinutes(task.estimateMinutes)} estimated`}
         {over ? ` · ${formatMinutes(task.loggedMinutes - task.estimateMinutes!)} over` : ''}
       </p>
+      {!readOnly ? <TaskTimerButton taskId={task.id} /> : null}
 
       {query.error ? (
         <p className="text-label text-fg-subtle">Could not load the time entries.</p>
@@ -189,7 +189,7 @@ function EntryForm({
   onError: (message: string) => void;
 }) {
   const [duration, setDuration] = useState(entry ? formatMinutes(entry.minutes) : '');
-  const [spentOn, setSpentOn] = useState(entry?.spentOn ?? today());
+  const [spentOn, setSpentOn] = useState(entry?.spentOn ?? localWorkDate());
   const [note, setNote] = useState(entry?.note ?? '');
 
   function submit(e: FormEvent) {

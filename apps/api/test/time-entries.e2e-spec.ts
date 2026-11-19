@@ -138,3 +138,56 @@ describe('time entries', () => {
     await f.owner.browser.delete(`/api/v1/time-entries/${entry.id}`).expect(409);
   });
 });
+
+describe('task timers', () => {
+  const active = '/api/v1/time-tracker/active';
+  const spentOn = '2026-11-10';
+
+  it('restores the active timer and logs it once when stop is retried', async () => {
+    const f = await projectFixture(t);
+    const task = await newTask(f);
+    const { browser } = f.dev;
+    await f.outsider.browser.post(`/api/v1/tasks/${task.id}/timer`).send({ spentOn }).expect(404);
+    const started = await browser
+      .post(`/api/v1/tasks/${task.id}/timer`)
+      .send({ spentOn })
+      .expect(201);
+    const { timer } = started.body.data;
+    expect(timer).toMatchObject({ taskId: task.id, projectId: f.project, canStop: true });
+    expect((await browser.get(active).expect(200)).body.data.timer).toEqual(timer);
+    expect((await f.admin.browser.get(active).expect(200)).body.data.timer).toBeNull();
+    await f.admin.browser.post(`/api/v1/time-tracker/${timer.id}/stop`).expect(409);
+
+    const stop = `/api/v1/time-tracker/${timer.id}/stop`;
+    await browser.post(stop).expect(204);
+    await browser.post(stop).expect(204);
+    expect((await browser.get(active).expect(200)).body.data.timer).toBeNull();
+    const list = await browser.get(`/api/v1/tasks/${task.id}/time-entries`).expect(200);
+    expect(list.body.data.entries).toHaveLength(1);
+    expect(list.body.data.entries[0]).toMatchObject({ id: timer.id, minutes: 1, spentOn });
+  });
+
+  it('requires the current timer to switch tasks and can discard the new timer', async () => {
+    const f = await projectFixture(t);
+    const first = await newTask(f);
+    const second = await newTask(f, { title: 'Signup page' });
+    const { browser } = f.dev;
+    const started = await browser
+      .post(`/api/v1/tasks/${first.id}/timer`)
+      .send({ spentOn })
+      .expect(201);
+    const path = `/api/v1/tasks/${second.id}/timer`;
+    await browser.post(path).send({ spentOn }).expect(409);
+    const body = { spentOn, replaceTimerId: started.body.data.timer.id };
+    const switched = await browser.post(path).send(body).expect(201);
+    const retry = await browser.post(path).send(body).expect(201);
+    expect(retry.body.data.timer).toEqual(switched.body.data.timer);
+    const list = await browser.get(`/api/v1/tasks/${first.id}/time-entries`).expect(200);
+    expect(list.body.data.entries).toHaveLength(1);
+
+    await browser.delete(`/api/v1/time-tracker/${switched.body.data.timer.id}`).expect(204);
+    expect((await browser.get(active).expect(200)).body.data.timer).toBeNull();
+    const secondList = await browser.get(`/api/v1/tasks/${second.id}/time-entries`).expect(200);
+    expect(secondList.body.data.entries).toEqual([]);
+  });
+});

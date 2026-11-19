@@ -1,7 +1,21 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { desc, eq, inArray, timeEntries, users, type Database } from '@devtrack/database';
-import type { TimeEntry } from '@devtrack/types';
-import type { CreateTimeEntryInput, UpdateTimeEntryInput } from '@devtrack/validators';
+import {
+  activeTaskTimers,
+  and,
+  desc,
+  eq,
+  inArray,
+  timeEntries,
+  users,
+  type Database,
+} from '@devtrack/database';
+import { ErrorCode, type ActiveTaskTimer, type TimeEntry } from '@devtrack/types';
+import {
+  MAX_ENTRY_MINUTES,
+  type CreateTimeEntryInput,
+  type StartTaskTimerInput,
+  type UpdateTimeEntryInput,
+} from '@devtrack/validators';
 import { AppException } from '../common/errors/app.exception';
 import { isUuid } from '../common/pipes/uuid-param.pipe';
 import { DATABASE } from '../database/database.module';
@@ -12,6 +26,15 @@ import { TaskAccessService, type TaskRow } from '../tasks/task-access.service';
 const userRef = { id: users.id, username: users.username, avatarUrl: users.avatarUrl };
 
 const entryNotFound = () => AppException.notFound('Time entry not found.');
+const timerChanged = () =>
+  new AppException(
+    HttpStatus.CONFLICT,
+    ErrorCode.CONFLICT,
+    'Your active timer changed. Try again.',
+  );
+
+type TimerRow = typeof activeTaskTimers.$inferSelect;
+type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 
 /**
  * Time logged against tasks (decision record 0012). Anyone who can edit the task can add,
@@ -38,27 +61,133 @@ export class TimeEntriesService {
 
   async create(actor: Actor, taskId: string, input: CreateTimeEntryInput): Promise<TimeEntry> {
     const { task, access } = await this.taskAccess.require(actor.id, taskId, { write: true });
-    const id = await this.db.transaction(async (tx) => {
-      const [entry] = await tx
-        .insert(timeEntries)
-        .values({
-          taskId: task.id,
-          userId: actor.id,
-          minutes: input.minutes,
-          spentOn: input.spentOn,
-          note: input.note ?? null,
-        })
-        .returning({ id: timeEntries.id });
-      await this.events.activity(tx, {
-        ...scope(access, task),
-        actor,
-        action: 'task.time_logged',
-        metadata: { key: taskKey(access, task), minutes: input.minutes },
-        event: { type: 'task.updated', payload: { taskId: task.id, timeEntryId: entry!.id } },
-      });
-      return entry!.id;
-    });
+    const id = await this.db.transaction((tx) => this.record(tx, actor, task, access, input));
     return (await this.load([id]))[0]!;
+  }
+
+  async activeTimer(userId: string): Promise<ActiveTaskTimer | null> {
+    const timer = await this.findTimer(userId);
+    if (!timer) return null;
+    try {
+      const { task, access } = await this.taskAccess.require(userId, timer.taskId);
+      return timerResponse(timer, task, access.project.status !== 'ARCHIVED');
+    } catch (err) {
+      if (err instanceof AppException && err.getStatus() === HttpStatus.NOT_FOUND) {
+        return timerResponse(timer);
+      }
+      throw err;
+    }
+  }
+
+  async startTimer(actor: Actor, taskId: string, input: StartTaskTimerInput) {
+    const { task } = await this.taskAccess.require(actor.id, taskId, { write: true });
+    const previous = await this.findTimer(actor.id);
+    if (previous?.taskId === taskId) return timerResponse(previous, task);
+    if ((previous?.id ?? undefined) !== input.replaceTimerId) throw timerChanged();
+    const previousTask = previous
+      ? await this.taskAccess.require(actor.id, previous.taskId, { write: true })
+      : null;
+    return this.db.transaction(async (tx) => {
+      const now = new Date();
+      if (previous && previousTask) {
+        const ended = await this.takeTimer(tx, actor.id, previous.id);
+        if (!ended) throw timerChanged();
+        await this.recordTimer(tx, actor, ended, previousTask, now);
+      }
+      const [timer] = await tx
+        .insert(activeTaskTimers)
+        .values({ userId: actor.id, taskId, spentOn: input.spentOn, startedAt: now })
+        .onConflictDoNothing()
+        .returning();
+      if (!timer) throw timerChanged();
+      return timerResponse(timer, task);
+    });
+  }
+
+  async stopTimer(actor: Actor, id: string): Promise<void> {
+    const timer = await this.findTimer(actor.id);
+    if (timer?.id === id) {
+      const task = await this.taskAccess.require(actor.id, timer.taskId, { write: true });
+      await this.db.transaction(async (tx) => {
+        const ended = await this.takeTimer(tx, actor.id, id);
+        if (ended) await this.recordTimer(tx, actor, ended, task, new Date());
+      });
+    }
+    const [logged] = await this.db
+      .select({ id: timeEntries.id })
+      .from(timeEntries)
+      .where(and(eq(timeEntries.id, id), eq(timeEntries.userId, actor.id)));
+    if (!logged) throw timerChanged();
+  }
+
+  async discardTimer(userId: string, id: string): Promise<void> {
+    await this.takeTimer(this.db, userId, id);
+  }
+
+  private async findTimer(userId: string) {
+    const [timer] = await this.db
+      .select()
+      .from(activeTaskTimers)
+      .where(eq(activeTaskTimers.userId, userId));
+    return timer;
+  }
+
+  private async takeTimer(db: Database | Transaction, userId: string, id: string) {
+    const [timer] = await db
+      .delete(activeTaskTimers)
+      .where(and(eq(activeTaskTimers.userId, userId), eq(activeTaskTimers.id, id)))
+      .returning();
+    return timer;
+  }
+
+  private async recordTimer(
+    tx: Transaction,
+    actor: Actor,
+    timer: TimerRow,
+    { task, access }: { task: TaskRow; access: ProjectAccess },
+    stoppedAt: Date,
+  ) {
+    const elapsed = Math.round((stoppedAt.getTime() - timer.startedAt.getTime()) / 60_000);
+    await this.record(
+      tx,
+      actor,
+      task,
+      access,
+      {
+        minutes: Math.max(1, Math.min(MAX_ENTRY_MINUTES, elapsed)),
+        spentOn: timer.spentOn,
+      },
+      timer.id,
+    );
+  }
+
+  private async record(
+    tx: Transaction,
+    actor: Actor,
+    task: TaskRow,
+    access: ProjectAccess,
+    input: CreateTimeEntryInput,
+    id?: string,
+  ) {
+    const [entry] = await tx
+      .insert(timeEntries)
+      .values({
+        id,
+        taskId: task.id,
+        userId: actor.id,
+        minutes: input.minutes,
+        spentOn: input.spentOn,
+        note: input.note ?? null,
+      })
+      .returning({ id: timeEntries.id });
+    await this.events.activity(tx, {
+      ...scope(access, task),
+      actor,
+      action: 'task.time_logged',
+      metadata: { key: taskKey(access, task), minutes: input.minutes },
+      event: { type: 'task.updated', payload: { taskId: task.id, timeEntryId: entry!.id } },
+    });
+    return entry!.id;
   }
 
   async update(actor: Actor, entryId: string, input: UpdateTimeEntryInput): Promise<TimeEntry> {
@@ -143,6 +272,17 @@ export class TimeEntriesService {
 
 const taskKey = (access: ProjectAccess, task: TaskRow) =>
   `${access.project.key}-${task.taskNumber}`;
+
+function timerResponse(timer: TimerRow, task?: TaskRow, canStop = Boolean(task)): ActiveTaskTimer {
+  return {
+    id: timer.id,
+    taskId: timer.taskId,
+    projectId: task?.projectId ?? null,
+    taskTitle: task?.title ?? null,
+    startedAt: timer.startedAt.toISOString(),
+    canStop,
+  };
+}
 
 function scope(access: ProjectAccess, task: TaskRow) {
   return {

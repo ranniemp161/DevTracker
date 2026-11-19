@@ -12,8 +12,10 @@ import {
 import type { TimeEntry } from '@devtrack/types';
 import {
   createTimeEntrySchema,
+  startTaskTimerSchema,
   updateTimeEntrySchema,
   type CreateTimeEntryInput,
+  type StartTaskTimerInput,
   type UpdateTimeEntryInput,
 } from '@devtrack/validators';
 import { CurrentUser } from '../common/decorators/auth.decorators';
@@ -26,6 +28,32 @@ import { TimeEntriesService } from './time-entries.service';
 @Controller()
 export class TimeEntriesController {
   constructor(private readonly entries: TimeEntriesService) {}
+
+  @Get('time-tracker/active')
+  async activeTimer(@CurrentUser() user: User) {
+    return { timer: await this.entries.activeTimer(user.id) };
+  }
+
+  @Post('tasks/:id/timer')
+  async startTimer(
+    @CurrentUser() user: User,
+    @Param('id', UuidParamPipe) taskId: string,
+    @Body(new ZodValidationPipe(startTaskTimerSchema)) body: StartTaskTimerInput,
+  ) {
+    return { timer: await this.entries.startTimer(user, taskId, body) };
+  }
+
+  @Post('time-tracker/:id/stop')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async stopTimer(@CurrentUser() user: User, @Param('id', UuidParamPipe) id: string) {
+    await this.entries.stopTimer(user, id);
+  }
+
+  @Delete('time-tracker/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async discardTimer(@CurrentUser() user: User, @Param('id', UuidParamPipe) id: string) {
+    await this.entries.discardTimer(user.id, id);
+  }
 
   @Get('tasks/:id/time-entries')
   async list(

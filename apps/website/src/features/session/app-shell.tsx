@@ -13,6 +13,7 @@ import { useApiQuery } from '@/lib/use-api-query';
 import { NotificationBell } from '../collaboration/notification-bell';
 import { usePendingInvitation } from '../invitations/pending-invitation';
 import { clearChatDrafts } from '../chat/chat-drafts';
+import { ActiveTimerBar, TaskTimerProvider } from '../projects/task-timer';
 import { SessionContext, type Session } from './session-context';
 import { ShellDataContext } from './shell-data';
 import { Sidebar } from './sidebar';
@@ -48,7 +49,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   const page = verified ? (
-    <VerifiedFrame session={session}>{children}</VerifiedFrame>
+    <TaskTimerProvider key={session.user.id}>
+      <VerifiedFrame session={session}>{children}</VerifiedFrame>
+    </TaskTimerProvider>
   ) : (
     <div className="min-h-dvh bg-bg">
       <header className="flex h-13 items-center justify-between border-b border-line bg-surface px-4">
@@ -200,6 +203,7 @@ function VerifiedFrame({ session, children }: { session: Session; children: Reac
               </div>
             </div>
           </header>
+          <ActiveTimerBar />
           <main
             id="main-content"
             tabIndex={-1}
@@ -217,6 +221,9 @@ function VerifiedFrame({ session, children }: { session: Session; children: Reac
             tabIndex={-1}
             className="my-2 mr-2 min-w-0 flex-1 overflow-y-auto rounded-panel border border-line bg-surface focus-visible:shadow-none"
           >
+            <div className="sticky top-0 z-10">
+              <ActiveTimerBar />
+            </div>
             {content}
           </main>
         </div>
@@ -236,6 +243,7 @@ function VerifiedFrame({ session, children }: { session: Session; children: Reac
             </span>
             <NotificationBell />
           </header>
+          <ActiveTimerBar />
           <main
             id="main-content"
             tabIndex={-1}
