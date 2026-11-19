@@ -13,11 +13,10 @@ import { useProject } from './project-context';
 import { localWorkDate, TaskTimerButton, useTaskTimer } from './task-timer';
 
 const field =
-  'h-8 w-full rounded-control border border-line-control bg-surface px-2.5 text-sm placeholder:text-fg-subtle focus-visible:border-primary';
+  'h-11 w-full rounded-control border border-line-control bg-surface px-2.5 text-base placeholder:text-fg-subtle focus-visible:border-primary lg:h-8 lg:text-sm';
 
 /**
- * Logged time on the task page (decision record 0012): the total against the estimate, each
- * entry, and a form to log more. Anyone who can edit the task can change any entry.
+ * Logged time on the task page, including the total, timer, and manual entries.
  */
 export function TaskTimeEntries({ task, onChanged }: { task: Task; onChanged: () => void }) {
   const { readOnly } = useProject();
@@ -57,20 +56,39 @@ export function TaskTimeEntries({ task, onChanged }: { task: Task; onChanged: ()
   }
 
   const entries = query.data?.entries;
-  const over = task.estimateMinutes !== null && task.loggedMinutes > task.estimateMinutes;
 
   return (
     <PanelSection title="Logged time">
-      <p className="text-label text-fg-secondary">
-        <span className={`font-medium tabular-nums ${over ? 'text-danger' : 'text-fg'}`}>
-          {formatMinutes(task.loggedMinutes)}
-        </span>
-        {task.estimateMinutes === null
-          ? ' logged'
-          : ` of ${formatMinutes(task.estimateMinutes)} estimated`}
-        {over ? ` · ${formatMinutes(task.loggedMinutes - task.estimateMinutes!)} over` : ''}
+      <p className="text-2xl font-semibold tracking-tight tabular-nums text-fg">
+        {formatMinutes(task.loggedMinutes)}
       </p>
-      {!readOnly ? <TaskTimerButton taskId={task.id} /> : null}
+      {!readOnly ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <TaskTimerButton taskId={task.id} />
+          {editing !== 'new' ? (
+            <Button
+              size="sm"
+              className="max-lg:min-h-11"
+              variant="secondary"
+              icon={<PlusIcon size={14} />}
+              onClick={() => {
+                setError(null);
+                setEditing('new');
+              }}
+            >
+              Log time
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+      {!readOnly && editing === 'new' ? (
+        <EntryForm
+          busy={busy}
+          onCancel={() => setEditing(null)}
+          onError={setError}
+          onSubmit={(body) => call(() => api(`/tasks/${task.id}/time-entries`, { body }))}
+        />
+      ) : null}
 
       {query.error ? (
         <p className="text-label text-fg-subtle">Could not load the time entries.</p>
@@ -150,27 +168,6 @@ export function TaskTimeEntries({ task, onChanged }: { task: Task; onChanged: ()
           {error}
         </p>
       ) : null}
-
-      {readOnly ? null : editing === 'new' ? (
-        <EntryForm
-          busy={busy}
-          onCancel={() => setEditing(null)}
-          onError={setError}
-          onSubmit={(body) => call(() => api(`/tasks/${task.id}/time-entries`, { body }))}
-        />
-      ) : (
-        <Button
-          size="sm"
-          variant="ghost"
-          icon={<PlusIcon size={14} />}
-          onClick={() => {
-            setError(null);
-            setEditing('new');
-          }}
-        >
-          Log time
-        </Button>
-      )}
     </PanelSection>
   );
 }

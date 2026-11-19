@@ -66,6 +66,7 @@ export function ProjectLayout({ children }: { children: ReactNode }) {
   const readOnly = p.status === 'ARCHIVED';
   // The task page has its own header bar and runs edge to edge.
   const isTaskPage = pathname.includes('/tasks/');
+  const isChatPage = pathname.endsWith('/chat');
 
   return (
     <ProjectContext.Provider
@@ -78,9 +79,11 @@ export function ProjectLayout({ children }: { children: ReactNode }) {
         reloadChatUnread,
       }}
     >
-      <div className="space-y-6">
+      <div
+        className={isChatPage ? 'flex min-h-0 flex-1 flex-col lg:block lg:space-y-6' : 'space-y-6'}
+      >
         {isTaskPage ? null : (
-          <div>
+          <div className={isChatPage ? 'hidden lg:block' : undefined}>
             <Link
               href={`/workspaces/${p.workspaceId}/projects`}
               className="text-label text-fg-muted hover:underline"

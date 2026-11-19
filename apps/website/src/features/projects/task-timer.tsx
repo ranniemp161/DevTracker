@@ -173,7 +173,7 @@ export function TaskTimerButton({ taskId }: { taskId: string }) {
   const { timer, busy, error, reload, start, finish } = useTaskTimer();
   if (error && timer === undefined) {
     return (
-      <Button size="sm" variant="secondary" onClick={reload}>
+      <Button size="sm" className="max-lg:min-h-11" variant="secondary" onClick={reload}>
         Retry loading timer
       </Button>
     );
@@ -182,6 +182,7 @@ export function TaskTimerButton({ taskId }: { taskId: string }) {
     return (
       <Button
         size="sm"
+        className="max-lg:min-h-11"
         variant="primary"
         disabled={busy || !timer.canStop}
         onClick={() => finish(false)}
@@ -193,6 +194,7 @@ export function TaskTimerButton({ taskId }: { taskId: string }) {
   return (
     <Button
       size="sm"
+      className="max-lg:min-h-11"
       variant="primary"
       disabled={busy || timer === undefined || timer?.canStop === false}
       onClick={() => start(taskId)}

@@ -8,7 +8,6 @@ import {
   type TaskPriority,
   type TaskStatus,
 } from '@devtrack/types';
-import { parseDuration } from '@devtrack/validators';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
@@ -29,7 +28,7 @@ import { api, ApiError } from '@/lib/api';
 import { useRealtimeRefresh } from '@/lib/realtime';
 import { useApiQuery } from '@/lib/use-api-query';
 import { useSession } from '../session/session-context';
-import { formatDate, formatMinutes, PRIORITY_LABEL, TASK_STATUS_LABEL } from './labels';
+import { formatDate, PRIORITY_LABEL, TASK_STATUS_LABEL } from './labels';
 import { TaskTimeline } from '../collaboration/task-timeline';
 import { TaskPullRequests } from '../github/task-pull-requests';
 import { useProject } from './project-context';
@@ -155,7 +154,6 @@ function TaskEditor({
   const toast = useToast();
   const { user } = useSession();
   const { project, members, readOnly } = useProject();
-  const estimateText = task.estimateMinutes ? formatMinutes(task.estimateMinutes) : '';
   const [form, setForm] = useState({
     title: task.title,
     description: task.description ?? '',
@@ -163,7 +161,6 @@ function TaskEditor({
     priority: task.priority,
     dueDate: task.dueDate ?? '',
     milestoneId: task.milestoneId ?? '',
-    estimate: estimateText,
   });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -177,8 +174,7 @@ function TaskEditor({
     form.status !== task.status ||
     form.priority !== task.priority ||
     form.dueDate !== (task.dueDate ?? '') ||
-    form.milestoneId !== (task.milestoneId ?? '') ||
-    form.estimate.trim() !== estimateText;
+    form.milestoneId !== (task.milestoneId ?? '');
   const milestonesQuery = useApiQuery<Milestone[]>(`/projects/${project.id}/milestones`);
   const milestones = milestonesQuery.data ?? [];
 
@@ -209,13 +205,6 @@ function TaskEditor({
     if (form.priority !== task.priority) body.priority = form.priority;
     if (form.dueDate !== (task.dueDate ?? '')) body.dueDate = form.dueDate || null;
     if (form.milestoneId !== (task.milestoneId ?? '')) body.milestoneId = form.milestoneId || null;
-    if (form.estimate.trim() !== estimateText) {
-      const minutes = form.estimate.trim() ? parseDuration(form.estimate) : null;
-      if (form.estimate.trim() && minutes === null) {
-        return setError('Enter the estimate like 2h 30m, or leave it empty.');
-      }
-      body.estimateMinutes = minutes;
-    }
     let unchanged = false;
     void call(
       async () => {
@@ -248,7 +237,6 @@ function TaskEditor({
       priority: task.priority,
       dueDate: task.dueDate ?? '',
       milestoneId: task.milestoneId ?? '',
-      estimate: estimateText,
     });
   }
 
@@ -339,20 +327,22 @@ function TaskEditor({
             </label>
             <textarea
               id="task-description"
-              rows={8}
+              rows={4}
               value={form.description}
               disabled={readOnly}
               placeholder="Add a description…"
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              className="block w-full rounded-control border border-transparent bg-transparent px-2 py-1.5 -mx-2 text-sm leading-relaxed text-fg-secondary placeholder:text-fg-subtle hover:border-line focus-visible:border-primary"
+              className="block min-h-24 w-full rounded-control border border-transparent bg-transparent px-2 py-1.5 -mx-2 text-base leading-relaxed text-fg-secondary placeholder:text-fg-subtle hover:border-line focus-visible:border-primary lg:min-h-44 lg:text-sm"
             />
           </div>
         </form>
 
         <aside
           aria-label="Task properties"
-          className="space-y-6 border-t border-line bg-surface-sunken p-6 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:border-t-0 lg:border-l"
+          className="space-y-6 border-t border-line bg-surface-sunken p-4 sm:p-6 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:border-t-0 lg:border-l"
         >
+          <TaskTimeEntries task={task} onChanged={onSaved} />
+
           <div className="space-y-1.5">
             <PropertyRow label="Status" htmlFor="task-status">
               <span className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2">
@@ -422,16 +412,6 @@ function TaskEditor({
               </select>
               {readOnly ? null : <SelectChevron />}
             </PropertyRow>
-            <PropertyRow label="Estimate" htmlFor="task-estimate">
-              <input
-                id="task-estimate"
-                value={form.estimate}
-                disabled={readOnly}
-                placeholder={readOnly ? 'None' : 'e.g. 2h 30m'}
-                onChange={(e) => setForm((f) => ({ ...f, estimate: e.target.value }))}
-                className={`${valueControl} cursor-text px-2 placeholder:text-fg-subtle`}
-              />
-            </PropertyRow>
           </div>
 
           <PanelSection title="Assignees">
@@ -492,8 +472,6 @@ function TaskEditor({
             branchTip={`${task.key}-${slugify(task.title)}`}
             onChange={onActivity}
           />
-
-          <TaskTimeEntries task={task} onChanged={onSaved} />
 
           <TaskTime taskId={task.id} status={task.status} />
 

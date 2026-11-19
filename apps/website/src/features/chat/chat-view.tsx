@@ -368,7 +368,7 @@ export function ChatView() {
   }
 
   return (
-    <div className="mx-auto flex h-chat max-w-3xl flex-col rounded-panel border border-line bg-surface">
+    <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col rounded-panel border border-line bg-surface lg:h-chat">
       <ChatPhoneNotifications key={project.id} projectId={project.id} />
       {/* Header bar / connection warning */}
       {!isConnected ? (

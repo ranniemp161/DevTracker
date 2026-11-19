@@ -123,7 +123,7 @@ export function Board() {
         </div>
       </div>
       {dropError ? <Alert>{dropError}</Alert> : null}
-      <div className="-mx-4 overflow-x-auto px-4 pb-2 sm:-mx-7 sm:px-7">
+      <div className="-mx-4 snap-x snap-proximity scroll-px-4 overflow-x-auto px-4 pb-2 sm:-mx-7 sm:scroll-px-7 sm:px-7 lg:snap-none">
         <div className="flex w-max gap-3.5">
           {TASK_STATUSES.map((status) => {
             const column = tasks
@@ -140,7 +140,7 @@ export function Board() {
                 }}
                 onDragLeave={() => setDragOver((s) => (s === status ? null : s))}
                 onDrop={(e) => onDrop(e, status)}
-                className={`flex min-h-64 w-68 flex-none flex-col rounded-panel border p-2 transition-colors ${
+                className={`flex min-h-64 w-75 max-w-[calc(100dvw-3rem)] flex-none snap-start flex-col rounded-panel border p-2 transition-colors lg:w-68 ${
                   dragOver === status
                     ? 'border-primary bg-primary-soft'
                     : 'border-line bg-surface-sunken'
