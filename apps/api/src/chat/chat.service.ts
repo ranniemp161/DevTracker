@@ -39,6 +39,7 @@ import { isUuid } from '../common/pipes/uuid-param.pipe';
 import { DATABASE } from '../database/database.module';
 import { EventRecorder, type Actor } from '../events/event-recorder.service';
 import { ProjectAccessService, type ProjectAccess } from '../projects/project-access.service';
+import { ChatPushService } from './chat-push.service';
 
 type MessageRow = typeof projectMessages.$inferSelect;
 const userRef = { id: users.id, username: users.username, avatarUrl: users.avatarUrl };
@@ -50,6 +51,7 @@ export class ChatService {
     @Inject(DATABASE) private readonly db: Database,
     private readonly projectAccess: ProjectAccessService,
     private readonly events: EventRecorder,
+    private readonly push: ChatPushService,
   ) {}
 
   async create(
@@ -173,6 +175,13 @@ export class ChatService {
         );
       }
 
+      await this.push.enqueue(
+        tx,
+        projectId,
+        message!.id,
+        actor.id,
+        others.map((user) => user.id),
+      );
       return message!.id;
     });
 

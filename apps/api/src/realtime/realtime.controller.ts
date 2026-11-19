@@ -1,5 +1,6 @@
 import { Controller, Get, HttpCode, HttpStatus, Inject, Post, Req } from '@nestjs/common';
 import type { Request } from 'express';
+import { ChatPushService } from '../chat/chat-push.service';
 import { CurrentSession, CurrentUser, Public } from '../common/decorators/auth.decorators';
 import { requireCronSecret } from '../common/guards/cron-secret';
 import { APP_CONFIG, type AppConfig } from '../config/app-config';
@@ -13,6 +14,7 @@ export class RealtimeController {
   constructor(
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     private readonly publisher: OutboxPublisher,
+    private readonly push: ChatPushService,
   ) {}
 
   /**
@@ -32,8 +34,9 @@ export class RealtimeController {
   /** Scheduled sweep for outbox rows the after-response flush missed. */
   @Public()
   @Get('internal/realtime/outbox/flush')
-  flush(@Req() req: Request): Promise<FlushResult> {
+  async flush(@Req() req: Request): Promise<FlushResult> {
     requireCronSecret(this.config, req);
-    return this.publisher.flush();
+    const [result] = await Promise.all([this.publisher.flush(), this.push.flushQuietly()]);
+    return result;
   }
 }

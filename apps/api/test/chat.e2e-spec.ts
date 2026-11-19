@@ -1,7 +1,10 @@
-import { outboxEvents, projectMessages } from '@devtrack/database';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { chatPushDeliveries, outboxEvents, projectMessages } from '@devtrack/database';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { sendNotification } from 'web-push';
 import { projectFixture, type TestUser } from './utils/fixtures';
 import { createTestApp, registerUser, type TestApp } from './utils/test-app';
+
+vi.mock('web-push', () => ({ sendNotification: vi.fn() }));
 
 let t: TestApp;
 beforeAll(async () => {
@@ -41,6 +44,66 @@ const newTask = async (u: TestUser, projectId: string) =>
       .send({ title: 'Task for chat' })
       .expect(201)
   ).body.data.task as { id: string; key: string };
+
+it('pushes ordinary messages to opted-in devices and mentions to mentions-only devices', async () => {
+  vi.stubEnv('WEB_PUSH_PUBLIC_KEY', 'test-public-key');
+  vi.stubEnv('WEB_PUSH_PRIVATE_KEY', 'test-private-key');
+  vi.stubEnv('WEB_PUSH_SUBJECT', 'mailto:push@example.com');
+  const deliver = vi.mocked(sendNotification).mockResolvedValue({
+    statusCode: 201,
+    body: '',
+    headers: {},
+  });
+  try {
+    const { dev, admin, owner, outsider, project } = await projectFixture(t);
+    const settings = `/api/v1/projects/${project}/chat/phone-notifications`;
+    const device = '/api/v1/chat/phone-notifications/device';
+    const subscription = (name: string) => ({
+      endpoint: `https://fcm.googleapis.com/fcm/send/${name}`,
+      keys: { p256dh: 'A'.repeat(87), auth: 'A'.repeat(22) },
+    });
+    await outsider.browser.put(settings).send({ mode: 'all' }).expect(404);
+    await dev.browser
+      .put(device)
+      .send({ ...subscription('dev'), endpoint: 'https://example.com/push' })
+      .expect(400);
+    await dev.browser.put(device).send(subscription('dev')).expect(204);
+    await admin.browser.put(device).send(subscription('admin')).expect(204);
+    await owner.browser.put(device).send(subscription('owner')).expect(204);
+    await dev.browser.put(settings).send({ mode: 'all' }).expect(204);
+    await admin.browser.put(settings).send({ mode: 'mentions' }).expect(204);
+    await owner.browser.put(settings).send({ mode: 'all' }).expect(204);
+    expect((await dev.browser.get(settings).expect(200)).body.data).toEqual({
+      mode: 'all',
+      publicKey: 'test-public-key',
+      deviceEnabled: true,
+    });
+
+    const ordinary = await sendMsg(owner, project, 'New message', 'push-ordinary').expect(201);
+    await vi.waitFor(() => expect(deliver).toHaveBeenCalledTimes(1));
+    expect(deliver.mock.calls[0]?.[0].endpoint).toBe(subscription('dev').endpoint);
+    expect(JSON.parse(String(deliver.mock.calls[0]?.[1]))).toEqual({
+      projectId: project,
+      messageId: ordinary.body.data.message.id,
+    });
+    await sendMsg(owner, project, 'New message', 'push-ordinary').expect(201);
+    await sendMsg(owner, project, 'Hello @admin').expect(201);
+    await vi.waitFor(async () => {
+      expect(deliver).toHaveBeenCalledTimes(3);
+      expect(await t.db.select().from(chatPushDeliveries)).toHaveLength(0);
+    });
+    expect(deliver.mock.calls.map(([sub]) => sub.endpoint).sort()).toEqual([
+      subscription('admin').endpoint,
+      subscription('dev').endpoint,
+      subscription('dev').endpoint,
+    ]);
+    await dev.browser.delete(device).expect(204);
+    expect((await dev.browser.get(settings).expect(200)).body.data.deviceEnabled).toBe(false);
+  } finally {
+    deliver.mockReset();
+    vi.unstubAllEnvs();
+  }
+});
 
 describe('project chat', () => {
   it('member and admin can send, list, and observe monotonically increasing sequences', async () => {

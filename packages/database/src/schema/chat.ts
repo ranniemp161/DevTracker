@@ -8,10 +8,58 @@ import {
   unique,
   uuid,
 } from 'drizzle-orm/pg-core';
-import { users } from './identity.js';
+import { sessions, users } from './identity.js';
 import { projects, tasks } from './project.js';
 
 const timestamptz = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
+
+export const chatPushSubscriptions = pgTable(
+  'chat_push_subscriptions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sessionId: uuid('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    endpoint: text('endpoint').notNull().unique(),
+    p256dh: text('p256dh').notNull(),
+    auth: text('auth').notNull(),
+  },
+  (t) => [index('chat_push_subscriptions_session_idx').on(t.sessionId)],
+);
+
+export const chatPushPreferences = pgTable(
+  'chat_push_preferences',
+  {
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    mode: text('mode', { enum: ['all', 'mentions'] }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.userId] })],
+);
+
+export const chatPushDeliveries = pgTable(
+  'chat_push_deliveries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    messageId: uuid('message_id')
+      .notNull()
+      .references(() => projectMessages.id, { onDelete: 'cascade' }),
+    subscriptionId: uuid('subscription_id')
+      .notNull()
+      .references(() => chatPushSubscriptions.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    nextAttemptAt: timestamptz('next_attempt_at').notNull().defaultNow(),
+  },
+  (t) => [
+    index('chat_push_deliveries_due_idx').on(t.nextAttemptAt),
+    index('chat_push_deliveries_subscription_idx').on(t.subscriptionId),
+  ],
+);
 /**
  * Millisecond precision for timestamp columns.
  */

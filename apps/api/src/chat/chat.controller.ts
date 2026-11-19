@@ -11,6 +11,7 @@ import {
   Put,
   Query,
 } from '@nestjs/common';
+import { waitUntil } from '@vercel/functions';
 import type {
   ProjectChatReadState,
   ProjectChatUnreadSummary,
@@ -33,12 +34,14 @@ import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { RATE_LIMITS, RateLimitService } from '../rate-limit/rate-limit.service';
 import type { User } from '../users/users.service';
 import { ChatService } from './chat.service';
+import { ChatPushService } from './chat-push.service';
 
 @Controller()
 export class ChatController {
   constructor(
     private readonly chat: ChatService,
     private readonly rateLimit: RateLimitService,
+    private readonly push: ChatPushService,
   ) {}
 
   @Post('projects/:id/messages')
@@ -49,7 +52,9 @@ export class ChatController {
     @Body(new ZodValidationPipe(createChatMessageSchema)) body: CreateChatMessageInput,
   ): Promise<{ message: ProjectMessage }> {
     await this.rateLimit.consume(RATE_LIMITS.commentCreatePerUser, user.id);
-    return { message: await this.chat.create(user, projectId, body) };
+    const message = await this.chat.create(user, projectId, body);
+    waitUntil(this.push.flushQuietly());
+    return { message };
   }
 
   @Get('projects/:id/messages')

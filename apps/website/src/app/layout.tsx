@@ -14,6 +14,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: { default: 'DevTrack', template: '%s · DevTrack' },
   description: 'Engineering project management with first-class GitHub integration.',
+  icons: { apple: '/app-icon-192.png' },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

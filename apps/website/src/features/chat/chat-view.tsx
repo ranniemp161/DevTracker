@@ -11,6 +11,7 @@ import { useProject } from '../projects/project-context';
 import { useSession } from '../session/session-context';
 import { ChatComposer } from './chat-composer';
 import { ChatMessageItem, type OptimisticChatMessage } from './chat-message-item';
+import { ChatPhoneNotifications } from './chat-phone-notifications';
 
 export function ChatView() {
   const { project, members, readOnly, reloadChatUnread } = useProject();
@@ -368,6 +369,7 @@ export function ChatView() {
 
   return (
     <div className="mx-auto flex h-chat max-w-3xl flex-col rounded-panel border border-line bg-surface">
+      <ChatPhoneNotifications key={project.id} projectId={project.id} />
       {/* Header bar / connection warning */}
       {!isConnected ? (
         <div className="border-b border-status-todo-bg bg-status-todo-bg px-4 py-1.5 text-xs text-status-todo-fg">

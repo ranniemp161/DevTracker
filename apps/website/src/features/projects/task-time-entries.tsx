@@ -1,7 +1,7 @@
 'use client';
 
 import type { Task, TimeEntry } from '@devtrack/types';
-import { createTimeEntrySchema, parseDuration } from '@devtrack/validators';
+import { createTimeEntrySchema, MAX_ENTRY_MINUTES } from '@devtrack/validators';
 import { useEffect, useState, type FormEvent } from 'react';
 import { PlusIcon } from '@/components/icons';
 import { Avatar, Button, PanelSection, Skeleton } from '@/components/ui';
@@ -188,14 +188,15 @@ function EntryForm({
   onCancel: () => void;
   onError: (message: string) => void;
 }) {
-  const [duration, setDuration] = useState(entry ? formatMinutes(entry.minutes) : '');
+  const [hours, setHours] = useState(entry ? String(Math.floor(entry.minutes / 60)) : '');
+  const [minutes, setMinutes] = useState(entry ? String(entry.minutes % 60) : '');
   const [spentOn, setSpentOn] = useState(entry?.spentOn ?? localWorkDate());
   const [note, setNote] = useState(entry?.note ?? '');
 
   function submit(e: FormEvent) {
     e.preventDefault();
     const parsed = createTimeEntrySchema.safeParse({
-      minutes: parseDuration(duration) ?? undefined,
+      minutes: Number(hours) * 60 + Number(minutes),
       spentOn,
       note,
     });
@@ -205,23 +206,46 @@ function EntryForm({
 
   return (
     <form onSubmit={submit} className="space-y-2">
-      <div className="flex gap-2">
-        <input
-          value={duration}
-          onChange={(e) => setDuration(e.target.value)}
-          placeholder="1h 30m"
-          aria-label="Time spent"
-          autoFocus
-          className={field}
-        />
+      <div className="grid grid-cols-2 gap-2">
+        <label className="min-w-0 space-y-1 text-label text-fg-secondary">
+          <span>Hours</span>
+          <input
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={MAX_ENTRY_MINUTES / 60}
+            step={1}
+            value={hours}
+            onChange={(e) => setHours(e.target.value)}
+            placeholder="0"
+            autoFocus
+            className={field}
+          />
+        </label>
+        <label className="min-w-0 space-y-1 text-label text-fg-secondary">
+          <span>Minutes</span>
+          <input
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={59}
+            step={1}
+            value={minutes}
+            onChange={(e) => setMinutes(e.target.value)}
+            placeholder="0"
+            className={field}
+          />
+        </label>
+      </div>
+      <label className="block space-y-1 text-label text-fg-secondary">
+        <span>Date worked</span>
         <input
           type="date"
           value={spentOn}
           onChange={(e) => setSpentOn(e.target.value)}
-          aria-label="Date worked"
           className={field}
         />
-      </div>
+      </label>
       <input
         value={note}
         onChange={(e) => setNote(e.target.value)}
@@ -231,7 +255,7 @@ function EntryForm({
         className={field}
       />
       <div className="flex gap-2">
-        <Button type="submit" size="sm" variant="primary" disabled={busy || !duration.trim()}>
+        <Button type="submit" size="sm" variant="primary" disabled={busy || (!hours && !minutes)}>
           {entry ? 'Save entry' : 'Log time'}
         </Button>
         <Button size="sm" variant="ghost" onClick={onCancel}>
