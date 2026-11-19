@@ -225,6 +225,18 @@ export const taskLabels = pgTable(
   ],
 );
 
+export const activeTaskTimers = pgTable('active_task_timers', {
+  userId: uuid('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  id: uuid('id').notNull().defaultRandom(),
+  taskId: uuid('task_id')
+    .notNull()
+    .references(() => tasks.id, { onDelete: 'cascade' }),
+  startedAt: timestamptz('started_at').notNull().defaultNow(),
+  spentOn: date('spent_on', { mode: 'string' }).notNull(),
+});
+
 export const milestoneStatus = pgEnum('milestone_status', ['OPEN', 'COMPLETED']);
 
 /** Architecture §8.2 — project milestones (M3 addition, approved). */

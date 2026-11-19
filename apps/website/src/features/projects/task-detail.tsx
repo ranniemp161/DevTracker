@@ -36,10 +36,16 @@ import { useProject } from './project-context';
 import { TaskLabels } from './task-labels';
 import { TaskTime } from './task-time';
 import { TaskTimeEntries } from './task-time-entries';
+import { useTaskTimer } from './task-timer';
 
 export function TaskDetail() {
   const { taskId } = useParams<{ taskId: string }>();
   const query = useApiQuery<{ task: Task }>(`/tasks/${taskId}`);
+  const { saved: savedTime } = useTaskTimer();
+  const reloadTask = query.reload;
+  useEffect(() => {
+    if (savedTime?.taskId === taskId) reloadTask();
+  }, [savedTime, taskId, reloadTask]);
   // Live updates (M7): refetch when this task changes elsewhere.
   useRealtimeRefresh((e) => e.type.startsWith('task.') && e.entity.id === taskId, query.reload);
   const { project } = useProject();

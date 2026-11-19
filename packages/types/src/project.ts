@@ -89,6 +89,15 @@ export interface MyTasksResponse {
 }
 
 /** Time logged against a task (decision record 0012). */
+export interface ActiveTaskTimer {
+  id: string;
+  taskId: string;
+  projectId: string | null;
+  taskTitle: string | null;
+  startedAt: string;
+  canStop: boolean;
+}
+
 export interface TimeEntry {
   id: string;
   taskId: string;

@@ -359,6 +359,12 @@ export const createTimeEntrySchema = z.object({
 });
 export type CreateTimeEntryInput = z.infer<typeof createTimeEntrySchema>;
 
+export const startTaskTimerSchema = z.object({
+  spentOn: entryDate,
+  replaceTimerId: z.uuid().optional(),
+});
+export type StartTaskTimerInput = z.infer<typeof startTaskTimerSchema>;
+
 export const updateTimeEntrySchema = z
   .object({
     minutes: entryMinutes.optional(),
