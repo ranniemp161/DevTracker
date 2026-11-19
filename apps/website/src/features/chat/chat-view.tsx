@@ -3,7 +3,8 @@
 import type { ProjectMessage, ProjectMessagePage } from '@devtrack/types';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { ChevronDownIcon } from '@/components/icons';
 import { Button, Divider, ErrorState } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useRealtimeConnected, useRealtimeRefresh, useRealtimeRoom } from '@/lib/realtime';
@@ -13,24 +14,52 @@ import { ChatComposer } from './chat-composer';
 import { ChatMessageItem, type OptimisticChatMessage } from './chat-message-item';
 import { ChatPhoneNotifications } from './chat-phone-notifications';
 
+function mergeMessages(
+  previous: OptimisticChatMessage[],
+  incoming: ProjectMessage[],
+  viewerId: string,
+) {
+  const messages = new Map(previous.map((message) => [message.id, message]));
+  for (const message of incoming) {
+    if (message.author?.id === viewerId) messages.delete(`opt-${message.clientRequestId}`);
+    messages.set(message.id, message);
+  }
+  return [...messages.values()].sort((a, b) => a.sequence - b.sequence);
+}
+
 export function ChatView() {
-  const { project, members, readOnly, reloadChatUnread } = useProject();
-  const { user } = useSession();
+  const { project } = useProject();
   const searchParams = useSearchParams();
   const targetMessageId = searchParams.get('message') ?? undefined;
+  return (
+    <ChatThread key={`${project.id}:${targetMessageId ?? ''}`} targetMessageId={targetMessageId} />
+  );
+}
+
+function ChatThread({ targetMessageId }: { targetMessageId?: string }) {
+  const { project, members, readOnly, reloadChatUnread } = useProject();
+  const { user } = useSession();
 
   const [messages, setMessages] = useState<OptimisticChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingEarlier, setLoadingEarlier] = useState(false);
   const [hasMoreBefore, setHasMoreBefore] = useState(false);
+  const [hasMoreAfter, setHasMoreAfter] = useState(false);
+  const [unreadMessageId, setUnreadMessageId] = useState<string>();
+  const [loadingNewer, setLoadingNewer] = useState(false);
+  const [historyError, setHistoryError] = useState<string>();
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [accessLost, setAccessLost] = useState(false);
-  const [showNewMessagesBtn, setShowNewMessagesBtn] = useState(false);
+  const [awayFromLatest, setAwayFromLatest] = useState(false);
   const [sending, setSending] = useState(false);
 
   const isConnected = useRealtimeConnected();
   const listContainerRef = useRef<HTMLDivElement>(null);
-  const isNearBottomRef = useRef(true);
+  const unreadDividerRef = useRef<HTMLDivElement>(null);
+  const scrollIntent = useRef<'unread' | 'latest' | null>(null);
+  const isNearBottomRef = useRef(false);
   const maxAcknowledgedSeqRef = useRef(0);
+  const historyVersionRef = useRef(0);
 
   // Follow the project room for live updates
   useRealtimeRoom(`project:${project.id}`);
@@ -39,6 +68,7 @@ export function ChatView() {
   const acknowledgeRead = useCallback(
     async (seq: number) => {
       if (seq <= maxAcknowledgedSeqRef.current) return;
+      const previous = maxAcknowledgedSeqRef.current;
       maxAcknowledgedSeqRef.current = seq;
       try {
         await api(`/projects/${project.id}/chat/read`, {
@@ -47,7 +77,7 @@ export function ChatView() {
         });
         reloadChatUnread();
       } catch {
-        // Ignored; next read update will advance
+        if (maxAcknowledgedSeqRef.current === seq) maxAcknowledgedSeqRef.current = previous;
       }
     },
     [project.id, reloadChatUnread],
@@ -56,18 +86,17 @@ export function ChatView() {
   // Load initial messages
   useEffect(() => {
     let cancelled = false;
-    const query = targetMessageId ? `around=${targetMessageId}&limit=50` : 'limit=50';
+    const query = targetMessageId ? `around=${targetMessageId}&limit=50` : 'unread=1&limit=50';
     api<ProjectMessagePage>(`/projects/${project.id}/messages?${query}`)
       .then((page) => {
         if (cancelled) return;
+        scrollIntent.current = page.unreadMessageId ? 'unread' : targetMessageId ? null : 'latest';
         setMessages(page.messages);
         setHasMoreBefore(page.hasMoreBefore);
+        setHasMoreAfter(page.hasMoreAfter);
+        setUnreadMessageId(page.unreadMessageId);
         setAccessLost(false);
         setLoading(false);
-        if (page.messages.length > 0) {
-          const highestSeq = Math.max(...page.messages.map((m) => m.sequence));
-          void acknowledgeRead(highestSeq);
-        }
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -75,51 +104,46 @@ export function ChatView() {
         if (err instanceof ApiError && (err.status === 404 || err.status === 403)) {
           setAccessLost(true);
           setMessages([]);
+        } else {
+          setHistoryError('Could not load chat history.');
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [project.id, targetMessageId, acknowledgeRead]);
+  }, [loadAttempt, project.id, targetMessageId]);
 
-  // Handle scroll events: track if near bottom and hide/show new messages button
-  const handleScroll = () => {
+  const handleScroll = useCallback(() => {
     const el = listContainerRef.current;
     if (!el) return;
     const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     const isNear = distanceToBottom < 80;
     isNearBottomRef.current = isNear;
-    if (isNear) {
-      setShowNewMessagesBtn(false);
-      // If user reaches bottom, acknowledge the highest displayed sequence
-      if (messages.length > 0) {
-        const highestSeq = Math.max(...messages.map((m) => m.sequence));
-        void acknowledgeRead(highestSeq);
-      }
+    setAwayFromLatest(!isNear);
+    if (isNear && !hasMoreAfter && !loading) {
+      const latest = messages.findLast((message) => !message.status);
+      if (latest) void acknowledgeRead(latest.sequence);
     }
-  };
+  }, [acknowledgeRead, hasMoreAfter, loading, messages]);
 
-  // Scroll to bottom helper
-  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+  // Position the initial unread page, or follow the end when already caught up.
+  useLayoutEffect(() => {
     const el = listContainerRef.current;
-    if (el) {
-      el.scrollTo({ top: el.scrollHeight, behavior });
+    if (loading || !el) return;
+    const intent = scrollIntent.current;
+    scrollIntent.current = null;
+    if (intent === 'latest') el.scrollTop = el.scrollHeight;
+    if (intent === 'unread' && unreadDividerRef.current) {
+      el.scrollTop +=
+        unreadDividerRef.current.getBoundingClientRect().top - el.getBoundingClientRect().top;
     }
-  };
-
-  // Auto-scroll on initial load or target deep-link
-  useEffect(() => {
-    if (!loading && messages.length > 0 && !targetMessageId) {
-      const el = listContainerRef.current;
-      if (el) {
-        el.scrollTo({ top: el.scrollHeight, behavior: 'auto' });
-      }
-    }
-  }, [loading, messages.length, targetMessageId]);
+    const frame = requestAnimationFrame(handleScroll);
+    return () => cancelAnimationFrame(frame);
+  }, [handleScroll, loading]);
 
   // Load earlier messages (preserves scroll position!)
   const loadEarlier = async () => {
-    if (loadingEarlier || messages.length === 0) return;
+    if (loadingEarlier || loadingNewer || messages.length === 0) return;
     const earliestSeq = Math.min(...messages.map((m) => m.sequence));
     const container = listContainerRef.current;
     const prevScrollHeight = container?.scrollHeight ?? 0;
@@ -152,34 +176,54 @@ export function ChatView() {
     }
   };
 
+  async function loadNewer(jump: boolean) {
+    if (loadingNewer || loadingEarlier) return;
+    const latest = messages.findLast((message) => !message.status);
+    if (!jump && !latest) return;
+    const version = ++historyVersionRef.current;
+    setLoadingNewer(true);
+    setHistoryError(undefined);
+    try {
+      const query = jump ? 'limit=50' : `after=${latest!.sequence}&limit=50`;
+      const page = await api<ProjectMessagePage>(`/projects/${project.id}/messages?${query}`);
+      if (version !== historyVersionRef.current) return;
+      if (jump) {
+        scrollIntent.current = 'latest';
+        setHasMoreBefore(page.hasMoreBefore);
+      }
+      setHasMoreAfter(page.hasMoreAfter);
+      setMessages((prev) => {
+        const kept = jump ? prev.filter((message) => message.status) : prev;
+        return mergeMessages(kept, page.messages, user.id);
+      });
+    } catch (err: unknown) {
+      if (version !== historyVersionRef.current) return;
+      if (err instanceof ApiError && (err.status === 404 || err.status === 403)) {
+        setAccessLost(true);
+      } else {
+        setHistoryError('Could not load newer messages. Try again.');
+      }
+    } finally {
+      if (version === historyVersionRef.current) setLoadingNewer(false);
+    }
+  }
+
   // Reconcile messages from server
   const reconcileMessages = useCallback(async () => {
+    if (loading || hasMoreAfter || loadingNewer) return;
+    const version = historyVersionRef.current;
     try {
       const page = await api<ProjectMessagePage>(`/projects/${project.id}/messages?limit=50`);
-      setMessages((prev) => {
-        // Merge latest with existing
-        const map = new Map<string, OptimisticChatMessage>();
-        for (const m of prev) map.set(m.id, m);
-        for (const m of page.messages) map.set(m.id, m);
-        const sorted = Array.from(map.values()).sort((a, b) => a.sequence - b.sequence);
-        return sorted;
-      });
-
-      if (isNearBottomRef.current) {
-        if (page.messages.length > 0) {
-          const maxSeq = Math.max(...page.messages.map((m) => m.sequence));
-          acknowledgeRead(maxSeq);
-        }
-      } else {
-        setShowNewMessagesBtn(true);
-      }
+      if (version !== historyVersionRef.current) return;
+      if (isNearBottomRef.current) scrollIntent.current = 'latest';
+      setMessages((prev) => mergeMessages(prev, page.messages, user.id));
     } catch (err: unknown) {
       if (err instanceof ApiError && (err.status === 404 || err.status === 403)) {
         setAccessLost(true);
         setMessages([]);
       }
     }
-  }, [project.id, acknowledgeRead]);
+  }, [project.id, user.id, loading, hasMoreAfter, loadingNewer]);
 
   // Real-time events refresh
   useRealtimeRefresh(
@@ -233,8 +277,7 @@ export function ChatView() {
 
     setMessages((prev) => [...prev, optimistic]);
     setSending(true);
-    isNearBottomRef.current = true;
-    requestAnimationFrame(() => scrollToBottom('smooth'));
+    if (!hasMoreAfter) scrollIntent.current = 'latest';
 
     try {
       const res = await api<{ message: ProjectMessage }>(`/projects/${project.id}/messages`, {
@@ -242,15 +285,14 @@ export function ChatView() {
         body: { body, clientRequestId, taskId },
       });
 
-      setMessages((prev) =>
-        prev.map((m) => (m.clientRequestId === clientRequestId ? res.message : m)),
-      );
+      setMessages((prev) => mergeMessages(prev, [res.message], user.id));
 
-      acknowledgeRead(res.message.sequence);
+      if (hasMoreAfter) void loadNewer(true);
+      else void acknowledgeRead(res.message.sequence);
     } catch {
       setMessages((prev) =>
         prev.map((m) =>
-          m.clientRequestId === clientRequestId
+          m.id === optimistic.id
             ? { ...m, status: 'failed', errorMessage: 'Could not send message.' }
             : m,
         ),
@@ -264,9 +306,7 @@ export function ChatView() {
   const handleRetry = async (failedMsg: OptimisticChatMessage) => {
     if (!failedMsg.body) return;
     setMessages((prev) =>
-      prev.map((m) =>
-        m.clientRequestId === failedMsg.clientRequestId ? { ...m, status: 'sending' } : m,
-      ),
+      prev.map((m) => (m.id === failedMsg.id ? { ...m, status: 'sending' } : m)),
     );
 
     try {
@@ -279,15 +319,14 @@ export function ChatView() {
         },
       });
 
-      setMessages((prev) =>
-        prev.map((m) => (m.clientRequestId === failedMsg.clientRequestId ? res.message : m)),
-      );
+      setMessages((prev) => mergeMessages(prev, [res.message], user.id));
 
-      acknowledgeRead(res.message.sequence);
+      if (hasMoreAfter) void loadNewer(true);
+      else void acknowledgeRead(res.message.sequence);
     } catch {
       setMessages((prev) =>
         prev.map((m) =>
-          m.clientRequestId === failedMsg.clientRequestId
+          m.id === failedMsg.id
             ? { ...m, status: 'failed', errorMessage: 'Could not send message.' }
             : m,
         ),
@@ -352,6 +391,20 @@ export function ChatView() {
       lastDateStr = dateStr;
     }
 
+    if (m.id === unreadMessageId) {
+      renderedElements.push(
+        <div
+          key="unread"
+          ref={unreadDividerRef}
+          className="flex items-center gap-3 py-3 text-xs font-semibold text-primary-soft-fg"
+        >
+          <span aria-hidden="true" className="h-px flex-1 bg-primary/40" />
+          Unread messages
+          <span aria-hidden="true" className="h-px flex-1 bg-primary/40" />
+        </div>,
+      );
+    }
+
     renderedElements.push(
       <ChatMessageItem
         key={m.id}
@@ -385,7 +438,12 @@ export function ChatView() {
       >
         {hasMoreBefore ? (
           <div className="py-2 text-center">
-            <Button size="sm" variant="secondary" disabled={loadingEarlier} onClick={loadEarlier}>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={loadingEarlier || loadingNewer}
+              onClick={loadEarlier}
+            >
               {loadingEarlier ? 'Loading earlier messages…' : 'Load earlier messages'}
             </Button>
           </div>
@@ -393,6 +451,15 @@ export function ChatView() {
 
         {loading ? (
           <p className="py-8 text-center text-sm text-fg-subtle">Loading chat history…</p>
+        ) : historyError && messages.length === 0 ? (
+          <ErrorState
+            message={historyError}
+            onRetry={() => {
+              setHistoryError(undefined);
+              setLoading(true);
+              setLoadAttempt((attempt) => attempt + 1);
+            }}
+          />
         ) : messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center py-16 text-center text-fg-subtle">
             <p className="text-sm font-medium">No messages yet.</p>
@@ -401,21 +468,38 @@ export function ChatView() {
         ) : (
           renderedElements
         )}
+        {hasMoreAfter ? (
+          <div className="py-2 text-center">
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={loadingNewer || loadingEarlier}
+              onClick={() => void loadNewer(false)}
+            >
+              Load newer messages
+            </Button>
+          </div>
+        ) : null}
       </div>
 
-      {/* Floating "New messages" button when scrolled up */}
-      {showNewMessagesBtn ? (
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => {
-              scrollToBottom('smooth');
-              setShowNewMessagesBtn(false);
-            }}
-            className="absolute bottom-3 right-6 z-10 flex items-center gap-1.5 rounded-full bg-fg px-3 py-1.5 text-xs font-medium text-fg-on-inverse shadow-raised hover:bg-fg-secondary"
+      {historyError && messages.length > 0 ? (
+        <p role="alert" className="px-4 py-2 text-label text-danger">
+          {historyError}
+        </p>
+      ) : null}
+
+      {!loading && (awayFromLatest || hasMoreAfter) ? (
+        <div className="flex shrink-0 justify-end border-t border-line px-3 py-1.5">
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={loadingNewer || loadingEarlier}
+            onClick={() => void loadNewer(true)}
+            className="max-lg:min-h-11"
+            icon={<ChevronDownIcon size={16} />}
           >
-            ↓ New messages
-          </button>
+            Jump to latest
+          </Button>
         </div>
       ) : null}
 

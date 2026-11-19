@@ -254,7 +254,7 @@ function TaskEditor({
   const base = `/projects/${project.id}`;
 
   return (
-    <div className="-mx-4 -my-6 sm:-mx-7">
+    <div className="-mx-4 -my-6 sm:-mx-7 lg:-my-8">
       <header className="flex min-h-13 flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-2 sm:px-7">
         <nav
           aria-label="Breadcrumb"
@@ -300,14 +300,14 @@ function TaskEditor({
         </div>
       </header>
 
-      <div className="grid lg:grid-cols-task">
+      <div className="grid lg:grid-cols-task lg:grid-rows-[auto_1fr]">
         <form
           id="task-form"
           onSubmit={save}
-          className="space-y-3 px-4 py-6 sm:px-7 lg:col-start-1 lg:row-start-1 lg:px-12 lg:pt-9"
+          className="min-w-0 space-y-5 px-4 py-6 sm:px-7 lg:col-start-1 lg:row-start-1 lg:px-10 lg:pt-8"
         >
           {error ? <Alert>{error}</Alert> : null}
-          <div>
+          <div className="space-y-3">
             <label htmlFor="task-title" className="sr-only">
               Title
             </label>
@@ -320,31 +320,10 @@ function TaskEditor({
               onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
               className="block w-full rounded-control border border-transparent bg-transparent px-2 py-1 -mx-2 text-title font-semibold tracking-tight text-fg placeholder:text-fg-subtle hover:border-line focus-visible:border-primary"
             />
-          </div>
-          <div>
-            <label htmlFor="task-description" className="sr-only">
-              Description
-            </label>
-            <textarea
-              id="task-description"
-              rows={4}
-              value={form.description}
-              disabled={readOnly}
-              placeholder="Add a description…"
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              className="block min-h-24 w-full rounded-control border border-transparent bg-transparent px-2 py-1.5 -mx-2 text-base leading-relaxed text-fg-secondary placeholder:text-fg-subtle hover:border-line focus-visible:border-primary lg:min-h-44 lg:text-sm"
-            />
-          </div>
-        </form>
-
-        <aside
-          aria-label="Task properties"
-          className="space-y-6 border-t border-line bg-surface-sunken p-4 sm:p-6 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:border-t-0 lg:border-l"
-        >
-          <TaskTimeEntries task={task} onChanged={onSaved} />
-
-          <div className="space-y-1.5">
-            <PropertyRow label="Status" htmlFor="task-status">
+            <div className="relative inline-flex rounded-control border border-line-control bg-surface-sunken">
+              <label htmlFor="task-status" className="sr-only">
+                Status
+              </label>
               <span className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2">
                 <StatusDot status={form.status} />
               </span>
@@ -353,7 +332,7 @@ function TaskEditor({
                 value={form.status}
                 disabled={readOnly}
                 onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as TaskStatus }))}
-                className={`${valueControl} pl-7`}
+                className={`${valueControl} min-h-11 pl-7 lg:min-h-0`}
               >
                 {TASK_STATUSES.map((s) => (
                   <option key={s} value={s}>
@@ -362,7 +341,33 @@ function TaskEditor({
                 ))}
               </select>
               {readOnly ? null : <SelectChevron />}
-            </PropertyRow>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label htmlFor="task-description" className="block text-label font-semibold text-fg">
+              Description
+            </label>
+            <textarea
+              id="task-description"
+              rows={4}
+              value={form.description}
+              disabled={readOnly}
+              placeholder="Add a description"
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              className="block min-h-24 w-full rounded-control border border-line bg-surface px-3 py-2 text-base leading-relaxed text-fg-secondary placeholder:text-fg-subtle hover:border-line-control focus-visible:border-primary lg:text-sm"
+            />
+          </div>
+        </form>
+
+        <aside
+          aria-label="Task properties"
+          className="min-w-0 space-y-6 border-t border-line bg-surface-sunken p-4 sm:p-6 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:border-t-0 lg:border-l"
+        >
+          <div className="rounded-panel border border-line bg-surface p-4">
+            <TaskTimeEntries task={task} onChanged={onSaved} />
+          </div>
+
+          <PanelSection title="Properties">
             <PropertyRow label="Priority" htmlFor="task-priority">
               <span className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2">
                 <PriorityIcon priority={form.priority} showLabel={false} />
@@ -412,7 +417,7 @@ function TaskEditor({
               </select>
               {readOnly ? null : <SelectChevron />}
             </PropertyRow>
-          </div>
+          </PanelSection>
 
           <PanelSection title="Assignees">
             <ul className="space-y-1.5">
@@ -473,18 +478,25 @@ function TaskEditor({
             onChange={onActivity}
           />
 
-          <TaskTime taskId={task.id} status={task.status} />
-
-          <dl className="space-y-2 border-t border-line pt-4 text-label">
-            <DetailRow label="Reporter">
-              {task.reporter ? `@${task.reporter.username}` : '—'}
-            </DetailRow>
-            <DetailRow label="Created">{formatDate(task.createdAt)}</DetailRow>
-            <DetailRow label="Updated">{formatDate(task.updatedAt)}</DetailRow>
-            {task.completedAt ? (
-              <DetailRow label="Completed">{formatDate(task.completedAt)}</DetailRow>
-            ) : null}
-          </dl>
+          <details className="group border-t border-line pt-3">
+            <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-2 rounded-control py-2 text-label font-semibold text-fg [&::-webkit-details-marker]:hidden">
+              Task history details
+              <ChevronDownIcon size={14} className="text-fg-muted group-open:rotate-180" />
+            </summary>
+            <div className="space-y-4 pt-2">
+              <TaskTime taskId={task.id} status={task.status} />
+              <dl className="space-y-2 text-label">
+                <DetailRow label="Reporter">
+                  {task.reporter ? `@${task.reporter.username}` : '—'}
+                </DetailRow>
+                <DetailRow label="Created">{formatDate(task.createdAt)}</DetailRow>
+                <DetailRow label="Updated">{formatDate(task.updatedAt)}</DetailRow>
+                {task.completedAt ? (
+                  <DetailRow label="Completed">{formatDate(task.completedAt)}</DetailRow>
+                ) : null}
+              </dl>
+            </div>
+          </details>
 
           {canDelete ? (
             confirmDelete ? (
@@ -527,7 +539,7 @@ function TaskEditor({
           ) : null}
         </aside>
 
-        <div className="space-y-8 px-4 pb-8 sm:px-7 lg:col-start-1 lg:row-start-2 lg:px-12">
+        <div className="min-w-0 px-4 pt-4 pb-8 sm:px-7 lg:col-start-1 lg:row-start-2 lg:px-10 lg:pt-0">
           <div className="space-y-8 border-t border-line pt-6">
             <TaskTimeline task={task} refreshKey={historyKey} onActivity={onActivity} />
           </div>
@@ -535,7 +547,7 @@ function TaskEditor({
       </div>
 
       {readOnly || !(dirty || saving) ? null : (
-        <div className="sticky bottom-0 z-10 flex items-center justify-between gap-3 border-t border-line bg-surface px-4 py-3 sm:px-7 lg:px-12">
+        <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-line bg-surface px-4 py-3 sm:px-7 lg:px-10">
           <p className="text-label text-fg-muted">Unsaved changes</p>
           <div className="flex items-center gap-2">
             <Button variant="ghost" onClick={discard} disabled={saving}>

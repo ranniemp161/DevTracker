@@ -155,6 +155,8 @@ export class TasksService {
     const conditions: SQL[] = [eq(tasks.projectId, projectId), isNull(tasks.deletedAt)];
     if (query.status) conditions.push(eq(tasks.status, query.status));
     if (query.priority) conditions.push(eq(tasks.priority, query.priority));
+    if (query.dueBefore)
+      conditions.push(ne(tasks.status, 'DONE'), lt(tasks.dueDate, query.dueBefore));
     if (query.assigneeId) {
       if (query.assigneeId === 'unassigned') {
         conditions.push(

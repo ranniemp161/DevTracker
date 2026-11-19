@@ -34,3 +34,34 @@ body {
 @utility grid-cols-cards {
   grid-template-columns: repeat(auto-fill, minmax(var(--dt-card-min-width), 1fr));
 }
+
+@media print {
+  /* Keep only the report and its ancestors, then release the app's scroll containers. */
+  body:has(.timesheet-report)
+    *:not(:has(.timesheet-report), .timesheet-report, .timesheet-report *) {
+    display: none !important;
+  }
+
+  body:has(.timesheet-report),
+  body:has(.timesheet-report) :has(.timesheet-report) {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: white !important;
+  }
+
+  .timesheet-report,
+  .timesheet-report * {
+    background: white !important;
+    color: black !important;
+  }
+
+  .timesheet-report tr,
+  .timesheet-report dl > div {
+    break-inside: avoid;
+  }
+}

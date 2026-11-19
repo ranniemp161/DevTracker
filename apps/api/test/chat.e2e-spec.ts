@@ -242,6 +242,32 @@ describe('project chat', () => {
     await listMsgs(dev, project, 'around=a0000000-0000-4000-8000-000000000099').expect(404);
   });
 
+  it('opens around the first unread message and skips the viewer’s own and deleted messages', async () => {
+    const { dev, admin, project } = await projectFixture(t);
+    const read = await sendMsg(dev, project, 'Already read').expect(201);
+    await markRead(admin, project, read.body.data.message.sequence).expect(200);
+    await sendMsg(admin, project, 'My own message').expect(201);
+    const deleted = (await sendMsg(dev, project, 'Deleted message').expect(201)).body.data.message;
+    await dev.browser.delete(`/api/v1/messages/${deleted.id}`).expect(204);
+    const firstUnread = (await sendMsg(dev, project, 'First unread').expect(201)).body.data.message;
+    const newest = (await sendMsg(dev, project, 'Most recent').expect(201)).body.data.message;
+    const page = (await listMsgs(admin, project, 'unread=1&limit=2').expect(200)).body.data;
+    expect(page.unreadMessageId).toBe(firstUnread.id);
+    expect(page.messages.map((message: { id: string }) => message.id)).toEqual([
+      deleted.id,
+      firstUnread.id,
+    ]);
+    expect(page.hasMoreAfter).toBe(true);
+    await markRead(admin, project, newest.sequence).expect(200);
+    const caughtUp = (await listMsgs(admin, project, 'unread=1&limit=2').expect(200)).body.data;
+    expect(caughtUp.unreadMessageId).toBeUndefined();
+    expect(caughtUp.messages.map((message: { id: string }) => message.id)).toEqual([
+      firstUnread.id,
+      newest.id,
+    ]);
+    expect(caughtUp.hasMoreAfter).toBe(false);
+  });
+
   it('author can edit; non-author forbidden; notifies newly added mentions only', async () => {
     const { dev, admin, owner, project } = await projectFixture(t);
 
