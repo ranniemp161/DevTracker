@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import type { ReactNode } from 'react';
 import { THEME_INIT_SCRIPT } from '@/lib/theme';
@@ -10,6 +10,8 @@ const geistMono = Geist_Mono({
   variable: '--font-geist-mono',
   display: 'swap',
 });
+
+export const viewport: Viewport = { viewportFit: 'cover' };
 
 export const metadata: Metadata = {
   title: { default: 'DevTrack', template: '%s · DevTrack' },

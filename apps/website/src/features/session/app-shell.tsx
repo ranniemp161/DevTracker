@@ -4,7 +4,17 @@ import type { Project, ProjectChatUnreadSummary, PublicUser } from '@devtrack/ty
 import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { DevtrackMark, MenuIcon } from '@/components/icons';
+import {
+  BoardIcon,
+  CalendarIcon,
+  ChatIcon,
+  DevtrackMark,
+  FolderIcon,
+  ListIcon,
+  MoreIcon,
+  MyTasksIcon,
+  XIcon,
+} from '@/components/icons';
 import { ToastProvider } from '@/components/toaster';
 import { Alert, Avatar, Button, IconButton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
@@ -104,7 +114,7 @@ function isProjectEvent(e: RealtimeEvent): boolean {
   return e.type === 'activity.created' && action.startsWith('project.');
 }
 
-/** Sidebar + inset main panel (desktop), or a top bar with a drawer (below 1024px). */
+/** Sidebar and inset panel on desktop, bottom navigation and a menu on smaller screens. */
 function VerifiedFrame({ session, children }: { session: Session; children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -114,7 +124,8 @@ function VerifiedFrame({ session, children }: { session: Session; children: Reac
   const { user, workspaces } = session;
 
   const isProjectRoute = pathname.startsWith('/projects/') && Boolean(params.id);
-  const projectQuery = useApiQuery<{ project: { workspaceId: string } }>(
+  const isMobileChat = !isDesktop && isProjectRoute && pathname.endsWith('/chat');
+  const projectQuery = useApiQuery<{ project: Pick<Project, 'name' | 'workspaceId'> }>(
     isProjectRoute ? `/projects/${params.id}` : null,
   );
   const activeWorkspaceId = useMemo(() => {
@@ -158,8 +169,12 @@ function VerifiedFrame({ session, children }: { session: Session; children: Reac
   );
 
   const content = (
-    <div className="px-4 py-6 sm:px-7">
-      <div className="space-y-6">
+    <div
+      className={
+        isMobileChat ? 'flex min-h-0 flex-1 flex-col px-2 py-2' : 'px-4 py-6 sm:px-7 lg:py-8'
+      }
+    >
+      <div className={isMobileChat ? 'flex min-h-0 flex-1 flex-col gap-2' : 'space-y-6'}>
         <PendingInvitationBanner />
         {children}
       </div>
@@ -174,7 +189,7 @@ function VerifiedFrame({ session, children }: { session: Session; children: Reac
       >
         Skip to content
       </a>
-      {pathname === '/' ? (
+      {pathname === '/' && isDesktop ? (
         <div className="min-h-dvh bg-bg">
           <header className="border-b border-line bg-surface">
             <div className="mx-auto flex min-h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-7">
@@ -229,28 +244,37 @@ function VerifiedFrame({ session, children }: { session: Session; children: Reac
         </div>
       ) : (
         <div className="flex h-dvh flex-col bg-surface">
-          <header className="flex h-13 shrink-0 items-center gap-2 border-b border-line px-3">
-            <IconButton
-              aria-label="Open navigation"
-              aria-expanded={drawerOpen}
-              onClick={() => setDrawerPath(pathname)}
-            >
-              <MenuIcon size={18} />
-            </IconButton>
-            <DevtrackMark size={24} />
-            <span className="min-w-0 flex-1 truncate text-sm font-semibold">
-              {activeWorkspace?.name ?? 'DevTrack'}
-            </span>
-            <NotificationBell />
+          <header className="shrink-0 border-b border-line pt-[env(safe-area-inset-top)]">
+            <div className="flex h-14 items-center gap-3 px-4">
+              <Link
+                href="/"
+                aria-label="DevTrack home"
+                className="grid size-11 place-items-center rounded-control"
+              >
+                <DevtrackMark size={26} />
+              </Link>
+              <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                {projectQuery.data?.project.name ?? activeWorkspace?.name ?? 'DevTrack'}
+              </span>
+              <NotificationBell />
+            </div>
           </header>
           <ActiveTimerBar />
           <main
             id="main-content"
             tabIndex={-1}
-            className="min-h-0 flex-1 overflow-y-auto focus-visible:shadow-none"
+            className={`min-h-0 flex-1 overflow-y-auto focus-visible:shadow-none ${isMobileChat ? 'flex flex-col' : ''}`}
           >
             {content}
           </main>
+          <MobileNavigation
+            pathname={pathname}
+            projectId={isProjectRoute ? params.id : undefined}
+            workspaceId={activeWorkspaceId}
+            unread={chatUnread.data?.find((item) => item.projectId === params.id)?.unreadCount ?? 0}
+            menuOpen={drawerOpen}
+            onOpenMenu={() => setDrawerPath(pathname)}
+          />
           {drawerOpen ? <Drawer onClose={closeDrawer}>{sidebar(false)}</Drawer> : null}
         </div>
       )}
@@ -258,7 +282,119 @@ function VerifiedFrame({ session, children }: { session: Session; children: Reac
   );
 }
 
-/** Left sheet with a scrim. Closes on Escape or a scrim click and traps focus while open. */
+function MobileNavigation({
+  pathname,
+  projectId,
+  workspaceId,
+  unread,
+  menuOpen,
+  onOpenMenu,
+}: {
+  pathname: string;
+  projectId?: string;
+  workspaceId: string;
+  unread: number;
+  menuOpen: boolean;
+  onOpenMenu: () => void;
+}) {
+  const base = `/projects/${projectId}`;
+  const workspace = `/workspaces/${workspaceId}`;
+  const tabs: {
+    href: string;
+    label: string;
+    icon: typeof BoardIcon;
+    active: boolean;
+    unread?: number;
+  }[] = projectId
+    ? [
+        {
+          href: base,
+          label: 'Board',
+          icon: BoardIcon,
+          active: pathname === base || pathname.startsWith(`${base}/tasks/`),
+        },
+        {
+          href: `${base}/list`,
+          label: 'List',
+          icon: ListIcon,
+          active: pathname === `${base}/list`,
+        },
+        {
+          href: `${base}/chat`,
+          label: 'Chat',
+          icon: ChatIcon,
+          active: pathname === `${base}/chat`,
+          unread,
+        },
+        {
+          href: `${base}/timesheet`,
+          label: 'Timesheet',
+          icon: CalendarIcon,
+          active: pathname === `${base}/timesheet`,
+        },
+      ]
+    : [
+        {
+          href: workspaceId ? workspace : '/',
+          label: 'Projects',
+          icon: FolderIcon,
+          active:
+            pathname === '/' || pathname === workspace || pathname === `${workspace}/projects`,
+        },
+        ...(workspaceId
+          ? [
+              {
+                href: `${workspace}/my-tasks`,
+                label: 'My tasks',
+                icon: MyTasksIcon,
+                active: pathname === `${workspace}/my-tasks`,
+              },
+            ]
+          : []),
+      ];
+  const itemClass = (active: boolean) =>
+    `relative flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-control text-xs font-medium transition-colors ${active ? 'bg-primary-soft text-primary-soft-fg' : 'text-fg-secondary hover:bg-surface-muted'}`;
+  return (
+    <nav
+      aria-label="Quick navigation"
+      className="flex shrink-0 gap-1 border-t border-line bg-surface px-2 pt-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))]"
+    >
+      {tabs.map(({ href, label, icon: Icon, active, unread: count }) => (
+        <Link
+          key={href}
+          href={href}
+          aria-current={active ? 'page' : undefined}
+          className={itemClass(active)}
+        >
+          <span className="relative">
+            <Icon size={18} />
+            {count ? (
+              <span
+                aria-label={`${count} unread messages`}
+                className="absolute -top-1 -right-2.5 rounded-full bg-primary px-1 text-xs leading-tight text-fg-on-inverse"
+              >
+                {count > 9 ? '9+' : count}
+              </span>
+            ) : null}
+          </span>
+          {label}
+        </Link>
+      ))}
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        aria-expanded={menuOpen}
+        onClick={onOpenMenu}
+        className={itemClass(menuOpen)}
+      >
+        <MoreIcon size={18} />
+        More
+      </button>
+    </nav>
+  );
+}
+
+/** Bottom sheet with a scrim, keyboard focus management, and an explicit close action. */
 function Drawer({ onClose, children }: { onClose: () => void; children: ReactNode }) {
   const panel = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -311,9 +447,15 @@ function Drawer({ onClose, children }: { onClose: () => void; children: ReactNod
         role="dialog"
         aria-modal="true"
         aria-label="Navigation"
-        className="absolute inset-y-0 left-0 w-72 max-w-drawer bg-bg shadow-overlay"
+        className="absolute inset-x-0 bottom-0 mx-auto flex h-[min(80dvh,44rem)] max-w-md flex-col overflow-hidden rounded-t-panel bg-bg shadow-overlay pb-[env(safe-area-inset-bottom)]"
       >
-        {children}
+        <div className="flex shrink-0 items-center justify-between border-b border-line px-4 py-1">
+          <h2 className="text-sm font-semibold">Navigation</h2>
+          <IconButton className="size-11" aria-label="Close navigation" onClick={onClose}>
+            <XIcon size={18} />
+          </IconButton>
+        </div>
+        <div className="min-h-0 flex-1">{children}</div>
       </div>
     </div>
   );
