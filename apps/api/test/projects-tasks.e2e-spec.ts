@@ -224,6 +224,29 @@ describe('project members', () => {
 });
 
 describe('tasks', () => {
+  it('filters overdue open tasks before pagination using the supplied calendar date', async () => {
+    const { dev, project } = await setup();
+    await createTask(dev, project, { title: 'Older overdue', dueDate: '2026-11-16' }).expect(201);
+    await createTask(dev, project, { title: 'Newer overdue', dueDate: '2026-11-18' }).expect(201);
+    await createTask(dev, project, { title: 'Due today', dueDate: '2026-11-19' }).expect(201);
+    await createTask(dev, project, { title: 'No due date' }).expect(201);
+    await createTask(dev, project, {
+      title: 'Completed',
+      dueDate: '2026-11-17',
+      status: 'DONE',
+    }).expect(201);
+    const path = `/api/v1/projects/${project}/tasks?dueBefore=2026-11-19&limit=1`;
+    const first = await dev.browser.get(path).expect(200);
+    expect(first.body.data.map((task: { title: string }) => task.title)).toEqual(['Newer overdue']);
+    expect(first.body.meta.nextCursor).toBeTruthy();
+    const second = await dev.browser
+      .get(`${path}&cursor=${encodeURIComponent(first.body.meta.nextCursor)}`)
+      .expect(200);
+    expect(second.body.data.map((task: { title: string }) => task.title)).toEqual([
+      'Older overdue',
+    ]);
+    expect(second.body.meta.nextCursor).toBeNull();
+  });
   it('creates tasks with sequential human-readable keys', async () => {
     const { dev, project } = await setup();
     const first = await createTask(dev, project, {

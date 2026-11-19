@@ -196,18 +196,42 @@ export class ChatService {
   ): Promise<ProjectMessagePage> {
     await this.projectAccess.require(userId, projectId);
 
-    if (query.around) {
-      const [target] = isUuid(query.around)
+    const [target] = query.around
+      ? await this.db
+          .select({ id: projectMessages.id, sequence: projectMessages.sequence })
+          .from(projectMessages)
+          .where(
+            and(eq(projectMessages.id, query.around), eq(projectMessages.projectId, projectId)),
+          )
+          .limit(1)
+      : query.unread
         ? await this.db
-            .select()
+            .select({ id: projectMessages.id, sequence: projectMessages.sequence })
             .from(projectMessages)
-            .where(
-              and(eq(projectMessages.id, query.around), eq(projectMessages.projectId, projectId)),
+            .leftJoin(
+              projectChatReads,
+              and(
+                eq(projectChatReads.projectId, projectMessages.projectId),
+                eq(projectChatReads.userId, userId),
+              ),
             )
+            .where(
+              and(
+                eq(projectMessages.projectId, projectId),
+                isNull(projectMessages.deletedAt),
+                sql`${projectMessages.authorId} is distinct from ${userId}::uuid`,
+                gt(
+                  projectMessages.sequence,
+                  sql<number>`coalesce(${projectChatReads.lastReadSequence}, 0)`,
+                ),
+              ),
+            )
+            .orderBy(asc(projectMessages.sequence))
             .limit(1)
         : [];
-      if (!target) throw messageNotFound();
+    if (query.around && !target) throw messageNotFound();
 
+    if (target) {
       const half = Math.floor(query.limit / 2);
       const earlierRows = await this.db
         .select({ id: projectMessages.id, sequence: projectMessages.sequence })
@@ -250,6 +274,7 @@ export class ChatService {
         messages,
         hasMoreBefore,
         hasMoreAfter,
+        ...(!query.around && { unreadMessageId: target.id }),
       };
     }
 

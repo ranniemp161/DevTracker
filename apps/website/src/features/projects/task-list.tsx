@@ -3,7 +3,9 @@
 import type { Task } from '@devtrack/types';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { CalendarIcon, ChevronRightIcon, MyTasksIcon } from '@/components/icons';
+import { useSession } from '../session/session-context';
 import { BulkActionBar } from './bulk-action-bar';
 import {
   Alert,
@@ -29,6 +31,7 @@ import {
   updatingLabel,
 } from './task-list-status';
 import { selectionState, toggleAll, toggleOne } from './task-selection';
+import { localWorkDate } from './task-timer';
 
 /** Row checkbox props; omitted when the viewer can't edit (read-only project). */
 interface RowSelect {
@@ -38,6 +41,21 @@ interface RowSelect {
 
 /** Fast responses shouldn't flash an "updating" state. */
 const UPDATING_DELAY_MS = 150;
+const MOBILE_LIST = '(width < 768px)';
+
+function subscribeToMobileList(notify: () => void) {
+  const media = window.matchMedia(MOBILE_LIST);
+  media.addEventListener('change', notify);
+  return () => media.removeEventListener('change', notify);
+}
+
+function isMobileList() {
+  return window.matchMedia(MOBILE_LIST).matches;
+}
+
+function isOverdue(task: Task, today: string) {
+  return Boolean(task.dueDate && task.dueDate < today && task.status !== 'DONE');
+}
 
 /**
  * True once `key` has stayed the same for `delayMs`. Keyed by the pending query, so each
@@ -56,14 +74,28 @@ function useDelayedKey(key: string | null, delayMs: number): boolean {
 /** List view: newest first, filterable, cursor-paginated (M3 rule 9). */
 export function TaskList() {
   const { project, members, readOnly } = useProject();
-  const { filters } = useTaskFilters();
+  const { filters, setFilter } = useTaskFilters();
+  const { user } = useSession();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const grouping = parseListGrouping(searchParams.get('group'));
+  const mobile = useSyncExternalStore(subscribeToMobileList, isMobileList, () => false);
+  const grouping = parseListGrouping(searchParams.get('group') ?? (mobile ? 'status' : null));
+  const onlyOverdue = searchParams.get('overdue') === '1';
+  const onlyMine = filters.assigneeId.toLowerCase() === user.id;
+  const today = localWorkDate();
+
+  function toggleOverdue() {
+    const params = new URLSearchParams(searchParams.toString());
+    if (onlyOverdue) params.delete('overdue');
+    else params.set('overdue', '1');
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname);
+  }
   function setGrouping(next: string) {
     const params = new URLSearchParams(searchParams.toString());
     if (next === 'status') params.set('group', 'status');
+    else if (mobile) params.set('group', 'none');
     else params.delete('group');
     const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname);
@@ -84,6 +116,7 @@ export function TaskList() {
     Object.entries(filters).filter(([, v]) => v !== '') as [string, string][],
   );
   if (grouping === 'status') query.set('sort', 'status');
+  if (onlyOverdue) query.set('dueBefore', today);
   query.set('limit', '50');
   const base = `/projects/${project.id}/tasks?${query.toString()}`;
   const latestBase = useRef(base);
@@ -149,6 +182,32 @@ export function TaskList() {
 
   return (
     <div className="space-y-4">
+      <div
+        className={`flex flex-wrap gap-2 ${onlyOverdue ? '' : 'md:hidden'}`}
+        aria-label="Quick filters"
+        role="group"
+      >
+        <Button
+          size="md"
+          variant={onlyMine ? 'primary' : 'secondary'}
+          className="min-h-11 md:hidden"
+          aria-pressed={onlyMine}
+          icon={<MyTasksIcon size={16} />}
+          onClick={() => setFilter('assigneeId', onlyMine ? '' : user.id)}
+        >
+          My tasks
+        </Button>
+        <Button
+          size="md"
+          variant={onlyOverdue ? 'primary' : 'secondary'}
+          className="min-h-11"
+          aria-pressed={onlyOverdue}
+          icon={<CalendarIcon size={16} />}
+          onClick={toggleOverdue}
+        >
+          Overdue
+        </Button>
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
         <TaskFilterBar workspaceId={project.workspaceId} projectId={project.id} members={members} />
         <FilterSelect
@@ -253,13 +312,21 @@ export function TaskList() {
                       key={t.id}
                       task={t}
                       projectId={project.id}
+                      grouped
+                      overdue={isOverdue(t, today)}
                       select={rowSelect(t.id)}
                     />
                   ))}
                 </Fragment>
               ))
             : rows?.map((t) => (
-                <StackedRow key={t.id} task={t} projectId={project.id} select={rowSelect(t.id)} />
+                <StackedRow
+                  key={t.id}
+                  task={t}
+                  projectId={project.id}
+                  overdue={isOverdue(t, today)}
+                  select={rowSelect(t.id)}
+                />
               ))}
         </ul>
         {rows && rows.length === 0 ? (
@@ -389,16 +456,20 @@ function TaskRow({
 function StackedRow({
   task: t,
   projectId,
+  grouped = false,
+  overdue,
   select,
 }: {
   task: Task;
   projectId: string;
+  grouped?: boolean;
+  overdue: boolean;
   select?: RowSelect;
 }) {
   return (
-    <li className={`flex gap-3 px-4 py-3 ${select?.checked ? 'bg-primary-soft' : ''}`}>
+    <li className={`flex items-stretch px-3 ${select?.checked ? 'bg-primary-soft' : ''}`}>
       {select ? (
-        <span className="pt-0.5">
+        <span className="flex w-11 shrink-0 items-start justify-center pt-2 [&_input]:size-5">
           <SelectBox
             label={`Select ${t.key}`}
             state={select.checked ? 'all' : 'none'}
@@ -406,42 +477,59 @@ function StackedRow({
           />
         </span>
       ) : null}
-      <div className="min-w-0 flex-1 space-y-1.5">
-        <Link
-          href={`/projects/${projectId}/tasks/${t.id}`}
-          className="block font-medium break-words text-fg hover:underline"
-        >
-          {t.title}
-        </Link>
-        {t.labels.length > 0 ? (
-          <div className="flex flex-wrap gap-1">
-            {t.labels.map((l) => (
-              <LabelChip key={l.id} label={l} />
-            ))}
-          </div>
-        ) : null}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted">
-          <span className="font-mono">{t.key}</span>
-          <span className="inline-flex items-center gap-1.5">
-            <StatusDot status={t.status} />
-            {TASK_STATUS_LABEL[t.status]}
-          </span>
-          <PriorityIcon priority={t.priority} />
-          {t.dueDate ? <span>Due {formatDate(t.dueDate)}</span> : null}
-          <span className="flex -space-x-1.5">
-            {t.assignees.length === 0 ? <UnassignedAvatar /> : null}
-            {t.assignees.map((a) => (
-              <span
-                key={a.id}
-                title={`@${a.username}`}
-                className="rounded-full ring-2 ring-surface"
-              >
-                <Avatar name={a.username} url={a.avatarUrl} seed={a.id} size="xs" />
+      <Link
+        href={`/projects/${projectId}/tasks/${t.id}`}
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-control px-1 py-3 hover:bg-surface-sunken"
+      >
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <span className="block text-sm font-semibold break-words text-fg">{t.title}</span>
+          {t.labels.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {t.labels.map((l) => (
+                <LabelChip key={l.id} label={l} />
+              ))}
+            </div>
+          ) : null}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted">
+            <span className="font-mono">{t.key}</span>
+            {!grouped ? (
+              <span className="inline-flex items-center gap-1.5">
+                <StatusDot status={t.status} />
+                {TASK_STATUS_LABEL[t.status]}
               </span>
-            ))}
-          </span>
+            ) : null}
+            <PriorityIcon priority={t.priority} />
+            {t.dueDate ? (
+              <span className={overdue ? 'font-medium text-danger' : undefined}>
+                {overdue ? 'Overdue' : 'Due'} {formatDate(t.dueDate)}
+              </span>
+            ) : null}
+            <span className="flex -space-x-1.5">
+              {t.assignees.length === 0 ? <UnassignedAvatar /> : null}
+              {t.assignees.map((a) => (
+                <span
+                  key={a.id}
+                  title={`@${a.username}`}
+                  className="rounded-full ring-2 ring-surface"
+                >
+                  <Avatar name={a.username} url={a.avatarUrl} seed={a.id} size="xs" />
+                </span>
+              ))}
+            </span>
+            {t.assignees.length > 0 ? (
+              <span className="min-w-0 truncate">
+                @{t.assignees[0]!.username}
+                {t.assignees.length > 1 ? ` +${t.assignees.length - 1}` : ''}
+              </span>
+            ) : (
+              <span>Unassigned</span>
+            )}
+          </div>
         </div>
-      </div>
+        <span className="shrink-0 text-fg-muted">
+          <ChevronRightIcon size={16} />
+        </span>
+      </Link>
     </li>
   );
 }

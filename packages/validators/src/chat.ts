@@ -39,5 +39,6 @@ export const listChatMessagesQuerySchema = z.object({
   before: z.coerce.number().int().positive().optional(),
   after: z.coerce.number().int().min(0).optional(),
   around: uuid.optional(),
+  unread: z.literal('1').optional(),
 });
 export type ListChatMessagesQuery = z.infer<typeof listChatMessagesQuerySchema>;

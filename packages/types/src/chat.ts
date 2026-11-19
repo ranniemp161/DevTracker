@@ -28,6 +28,8 @@ export interface ProjectMessagePage {
   messages: ProjectMessage[];
   hasMoreBefore: boolean;
   hasMoreAfter: boolean;
+  /** First unread message when opening a conversation in catch-up mode. */
+  unreadMessageId?: string;
 }
 
 export interface ProjectChatReadState {

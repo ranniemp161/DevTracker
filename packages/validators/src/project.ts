@@ -239,6 +239,8 @@ export function taskMatchesSearch(
 export const listTasksQuerySchema = z.object({
   status: taskStatusSchema.optional(),
   priority: taskPrioritySchema.optional(),
+  /** Open tasks with a due date strictly before this calendar date. */
+  dueBefore: z.iso.date().optional(),
   assigneeId: z.union([uuid, z.literal('unassigned')]).optional(),
   labelId: uuid.optional(),
   /** A milestone id, or `none` for tasks without a milestone. */
