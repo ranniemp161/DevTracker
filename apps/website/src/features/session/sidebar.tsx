@@ -12,6 +12,7 @@ import { Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIcon,
   BoardIcon,
+  CalendarIcon,
   ChatIcon,
   CheckIcon,
   ChevronDownIcon,
@@ -243,6 +244,7 @@ function ProjectSubNav({
     { href: `${base}/list`, label: 'List', icon: <ListIcon size={16} />, filtered: true },
     { href: `${base}/chat`, label: 'Chat', icon: <ChatIcon size={16} />, count: unread },
     { href: `${base}/milestones`, label: 'Milestones', icon: <FlagIcon size={16} /> },
+    { href: `${base}/timesheet`, label: 'Timesheet', icon: <CalendarIcon size={16} /> },
     { href: `${base}/activity`, label: 'Activity', icon: <ActivityIcon size={16} /> },
     // Members stay reachable for everyone; admins get the full settings page.
     ...(project.viewerCanManage

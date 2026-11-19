@@ -8,13 +8,16 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import type { TimeEntry } from '@devtrack/types';
 import {
   createTimeEntrySchema,
+  projectTimesheetQuerySchema,
   startTaskTimerSchema,
   updateTimeEntrySchema,
   type CreateTimeEntryInput,
+  type ProjectTimesheetQuery,
   type StartTaskTimerInput,
   type UpdateTimeEntryInput,
 } from '@devtrack/validators';
@@ -28,6 +31,15 @@ import { TimeEntriesService } from './time-entries.service';
 @Controller()
 export class TimeEntriesController {
   constructor(private readonly entries: TimeEntriesService) {}
+
+  @Get('projects/:id/timesheet')
+  async timesheet(
+    @CurrentUser() user: User,
+    @Param('id', UuidParamPipe) projectId: string,
+    @Query(new ZodValidationPipe(projectTimesheetQuerySchema)) range: ProjectTimesheetQuery,
+  ) {
+    return { rows: await this.entries.timesheet(user.id, projectId, range) };
+  }
 
   @Get('time-tracker/active')
   async activeTimer(@CurrentUser() user: User) {

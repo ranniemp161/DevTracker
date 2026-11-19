@@ -4,15 +4,26 @@ import {
   and,
   desc,
   eq,
+  gte,
   inArray,
+  isNull,
+  lte,
+  sql,
+  tasks,
   timeEntries,
   users,
   type Database,
 } from '@devtrack/database';
-import { ErrorCode, type ActiveTaskTimer, type TimeEntry } from '@devtrack/types';
+import {
+  ErrorCode,
+  type ActiveTaskTimer,
+  type ProjectTimesheetRow,
+  type TimeEntry,
+} from '@devtrack/types';
 import {
   MAX_ENTRY_MINUTES,
   type CreateTimeEntryInput,
+  type ProjectTimesheetQuery,
   type StartTaskTimerInput,
   type UpdateTimeEntryInput,
 } from '@devtrack/validators';
@@ -20,7 +31,7 @@ import { AppException } from '../common/errors/app.exception';
 import { isUuid } from '../common/pipes/uuid-param.pipe';
 import { DATABASE } from '../database/database.module';
 import { EventRecorder, type Actor } from '../events/event-recorder.service';
-import type { ProjectAccess } from '../projects/project-access.service';
+import { ProjectAccessService, type ProjectAccess } from '../projects/project-access.service';
 import { TaskAccessService, type TaskRow } from '../tasks/task-access.service';
 
 const userRef = { id: users.id, username: users.username, avatarUrl: users.avatarUrl };
@@ -46,7 +57,37 @@ export class TimeEntriesService {
     @Inject(DATABASE) private readonly db: Database,
     private readonly taskAccess: TaskAccessService,
     private readonly events: EventRecorder,
+    private readonly projectAccess: ProjectAccessService,
   ) {}
+
+  async timesheet(
+    userId: string,
+    projectId: string,
+    { from, to }: ProjectTimesheetQuery,
+  ): Promise<ProjectTimesheetRow[]> {
+    await this.projectAccess.require(userId, projectId);
+    return this.db
+      .select({
+        taskId: tasks.id,
+        taskNumber: tasks.taskNumber,
+        taskTitle: tasks.title,
+        user: userRef,
+        minutes: sql<number>`sum(${timeEntries.minutes})`.mapWith(Number),
+      })
+      .from(tasks)
+      .innerJoin(timeEntries, eq(timeEntries.taskId, tasks.id))
+      .leftJoin(users, eq(users.id, timeEntries.userId))
+      .where(
+        and(
+          eq(tasks.projectId, projectId),
+          isNull(tasks.deletedAt),
+          gte(timeEntries.spentOn, from),
+          lte(timeEntries.spentOn, to),
+        ),
+      )
+      .groupBy(tasks.id, users.id)
+      .orderBy(tasks.taskNumber, users.username);
+  }
 
   /** Most recent work day first. */
   async list(userId: string, taskId: string): Promise<TimeEntry[]> {
