@@ -2,7 +2,7 @@
 
 import { TASK_STATUSES, type Task, type TaskStatus } from '@devtrack/types';
 import Link from 'next/link';
-import { useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type DragEvent, type FormEvent, type RefObject } from 'react';
 import { CalendarIcon, PlusIcon } from '@/components/icons';
 import { HeaderActions } from '@/components/page-header';
 import { useToast } from '@/components/toaster';
@@ -42,6 +42,23 @@ export function Board() {
   const [dropError, setDropError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<TaskStatus | null>(null);
   const [addingIn, setAddingIn] = useState<TaskStatus | null>(null);
+  const columnRefs = useRef(new Map<TaskStatus, HTMLElement>());
+  const visibleColumn = useVisibleColumn(columnRefs, tasks !== null);
+
+  /** Brings a column into view in the horizontally scrolling lanes (phones and tablets). */
+  function showColumn(status: TaskStatus) {
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    columnRefs.current.get(status)?.scrollIntoView({
+      behavior: reduceMotion ? 'auto' : 'smooth',
+      block: 'nearest',
+      inline: 'start',
+    });
+  }
+
+  function startAdding(status: TaskStatus) {
+    setAddingIn(status);
+    showColumn(status);
+  }
 
   const toast = useToast();
   // Undo runs after later renders; it must see the board as it is then, not as it was.
@@ -108,7 +125,7 @@ export function Board() {
           <Button
             variant="primary"
             icon={<PlusIcon size={15} />}
-            onClick={() => setAddingIn('TODO')}
+            onClick={() => startAdding('TODO')}
           >
             New task
           </Button>
@@ -121,6 +138,35 @@ export function Board() {
         </Button>
       </div>
       {dropError ? <Alert>{dropError}</Alert> : null}
+      {/* Under 1024px only one or two lanes fit, so offer a jump list with counts. */}
+      <nav aria-label="Board columns" className="lg:hidden">
+        <ul className="flex flex-wrap gap-1.5">
+          {TASK_STATUSES.map((status) => {
+            const count = tasks.filter(
+              (t) => t.status === status && filterTask(t, filters, project.key),
+            ).length;
+            const current = visibleColumn === status;
+            return (
+              <li key={status}>
+                <button
+                  type="button"
+                  aria-current={current ? 'true' : undefined}
+                  onClick={() => showColumn(status)}
+                  className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-label font-medium transition-colors pointer-coarse:h-11 ${
+                    current
+                      ? 'border-fg bg-fg text-fg-on-inverse'
+                      : 'border-line bg-surface text-fg-secondary hover:bg-surface-muted'
+                  }`}
+                >
+                  <StatusDot status={status} />
+                  {TASK_STATUS_LABEL[status]}
+                  <span className={current ? 'text-fg-on-inverse' : 'text-fg-muted'}>{count}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
       <div className="-mx-4 snap-x snap-proximity scroll-px-4 overflow-x-auto px-4 pb-2 sm:-mx-7 sm:scroll-px-7 sm:px-7 lg:snap-none">
         <div className="flex w-max gap-3.5">
           {TASK_STATUSES.map((status) => {
@@ -130,6 +176,11 @@ export function Board() {
             return (
               <section
                 key={status}
+                ref={(el) => {
+                  if (el) columnRefs.current.set(status, el);
+                  else columnRefs.current.delete(status);
+                }}
+                data-status={status}
                 aria-label={TASK_STATUS_LABEL[status]}
                 onDragOver={(e) => {
                   if (readOnly) return;
@@ -152,7 +203,7 @@ export function Board() {
                     <IconButton
                       size="sm"
                       aria-label={`Add task to ${TASK_STATUS_LABEL[status]}`}
-                      onClick={() => setAddingIn(status)}
+                      onClick={() => startAdding(status)}
                       className="ml-auto"
                     >
                       <PlusIcon size={14} />
@@ -194,6 +245,41 @@ export function Board() {
       </div>
     </div>
   );
+}
+
+/**
+ * The lane most visible in the board's scroll area, for the column jump list.
+ * Starts as the first column.
+ */
+function useVisibleColumn(
+  columnRefs: RefObject<Map<TaskStatus, HTMLElement>>,
+  ready: boolean,
+): TaskStatus {
+  const [visible, setVisible] = useState<TaskStatus>(TASK_STATUSES[0]);
+  useEffect(() => {
+    if (!ready) return;
+    const ratios = new Map<TaskStatus, number>();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          ratios.set(
+            entry.target.getAttribute('data-status') as TaskStatus,
+            entry.intersectionRatio,
+          );
+        }
+        let best: TaskStatus | null = null;
+        for (const status of TASK_STATUSES) {
+          const ratio = ratios.get(status) ?? 0;
+          if (ratio > 0 && ratio > (best ? (ratios.get(best) ?? 0) : 0)) best = status;
+        }
+        if (best) setVisible(best);
+      },
+      { threshold: [0, 0.25, 0.5, 0.75, 1] },
+    );
+    for (const el of columnRefs.current.values()) observer.observe(el);
+    return () => observer.disconnect();
+  }, [columnRefs, ready]);
+  return visible;
 }
 
 /** "N of M done" with a small bar, computed from the loaded tasks (SPEC R3). */
@@ -341,7 +427,8 @@ function ColumnQuickAdd({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => input.current?.focus(), []);
+  // The board scrolls the column into view itself; a focus scroll would cut that short.
+  useEffect(() => input.current?.focus({ preventScroll: true }), []);
 
   function handleTitleChange(val: string) {
     setTitle(val);
