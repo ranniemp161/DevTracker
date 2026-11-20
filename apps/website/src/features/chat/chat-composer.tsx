@@ -1,8 +1,9 @@
 'use client';
 
 import type { ProjectMember, Task } from '@devtrack/types';
+import { MAX_CHAT_ATTACHMENT_BYTES } from '@devtrack/validators';
 import { useSearchParams } from 'next/navigation';
-import { useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
+import { useId, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
 import { Button } from '@/components/ui';
 import { useApiQuery } from '@/lib/use-api-query';
 import { getChatDraft, setChatDraft } from './chat-drafts';
@@ -11,7 +12,7 @@ interface ChatComposerProps {
   projectId: string;
   members: ProjectMember[];
   readOnly: boolean;
-  onSend: (body: string, taskId?: string) => Promise<void>;
+  onSend: (body: string, taskId?: string, file?: File) => Promise<void>;
   sending: boolean;
 }
 
@@ -24,6 +25,10 @@ export function ChatComposer({ projectId, members, readOnly, onSend, sending }: 
     () => getChatDraft(projectId)?.taskId ?? preselectedTaskId,
   );
   const [showTaskPicker, setShowTaskPicker] = useState(false);
+  const [file, setFile] = useState<File>();
+  const [fileError, setFileError] = useState<string>();
+  const fileInputId = useId();
+  const fileInput = useRef<HTMLInputElement>(null);
 
   // Mention autocomplete state
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -145,18 +150,37 @@ export function ChatComposer({ projectId, members, readOnly, onSend, sending }: 
 
   const handleSubmit = async () => {
     const trimmed = body.trim();
-    if (!trimmed || sending || readOnly) return;
+    if ((!trimmed && !file) || sending || readOnly) return;
 
     try {
-      await onSend(trimmed, selectedTaskId);
+      await onSend(trimmed, selectedTaskId, file);
       setBody('');
       setSelectedTaskId(undefined);
+      clearFile();
       setChatDraft(projectId, { body: '' });
       setMentionQuery(null);
     } catch {
-      // Body is preserved on error
+      setFileError('Could not read the file. Choose it again and retry.');
     }
   };
+
+  function clearFile() {
+    setFile(undefined);
+    setFileError(undefined);
+    if (fileInput.current) fileInput.current.value = '';
+  }
+
+  function selectFile(event: ChangeEvent<HTMLInputElement>) {
+    const choice = event.currentTarget.files?.[0];
+    if (!choice) return;
+    if (!/\.md$/i.test(choice.name) || choice.size < 1 || choice.size > MAX_CHAT_ATTACHMENT_BYTES) {
+      clearFile();
+      setFileError('Choose a non-empty Markdown (.md) file up to 32 KiB.');
+      return;
+    }
+    setFileError(undefined);
+    setFile(choice);
+  }
 
   const selectedTask = projectTasks.find((t) => t.id === selectedTaskId);
 
@@ -222,6 +246,38 @@ export function ChatComposer({ projectId, members, readOnly, onSend, sending }: 
         className="w-full resize-none border-0 bg-transparent p-0 text-sm outline-none placeholder:text-fg-subtle focus:ring-0"
       />
 
+      <div className="mt-2 space-y-1">
+        <label htmlFor={fileInputId} className="block text-xs font-medium text-fg-muted">
+          Attach Markdown (.md, up to 32 KiB)
+        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            id={fileInputId}
+            ref={fileInput}
+            type="file"
+            accept=".md"
+            onChange={selectFile}
+            disabled={sending}
+            className="max-w-full text-xs"
+          />
+          {file ? (
+            <button
+              type="button"
+              onClick={clearFile}
+              disabled={sending}
+              className="text-xs underline"
+            >
+              Remove file
+            </button>
+          ) : null}
+        </div>
+        {fileError ? (
+          <p role="alert" className="text-xs text-danger">
+            {fileError}
+          </p>
+        ) : null}
+      </div>
+
       <div className="mt-2 flex items-center justify-between gap-2 pt-1 border-t border-line-subtle">
         <div className="flex items-center gap-2">
           {showTaskPicker ? (
@@ -255,7 +311,7 @@ export function ChatComposer({ projectId, members, readOnly, onSend, sending }: 
         <Button
           variant="primary"
           size="sm"
-          disabled={!body.trim() || sending}
+          disabled={(!body.trim() && !file) || sending}
           onClick={handleSubmit}
         >
           {sending ? 'Sending…' : 'Send'}

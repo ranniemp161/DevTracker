@@ -13,6 +13,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1172.0",
+    "@aws-sdk/s3-request-presigner": "^3.1172.0",
     "@devtrack/database": "workspace:*",
     "@devtrack/server-core": "workspace:*",
     "@devtrack/types": "workspace:*",

@@ -5,11 +5,14 @@ import Link from 'next/link';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChevronRightIcon } from '@/components/icons';
 import { Avatar, Button, StatusDot } from '@/components/ui';
+import { api } from '@/lib/api';
+import type { CreateChatMessageInput } from '@devtrack/validators';
 import { TASK_STATUS_LABEL } from '../projects/labels';
 
 export interface OptimisticChatMessage extends ProjectMessage {
   status?: 'sending' | 'failed' | 'sent';
   errorMessage?: string;
+  pendingInput?: CreateChatMessageInput;
 }
 
 interface ChatMessageItemProps {
@@ -35,6 +38,21 @@ export function ChatMessageItem({
 }: ChatMessageItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editBody, setEditBody] = useState(message.body ?? '');
+  const [downloadError, setDownloadError] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  async function downloadAttachment() {
+    setDownloadError(false);
+    setDownloading(true);
+    try {
+      const { url } = await api<{ url: string }>(`/messages/${message.id}/attachment`);
+      window.location.assign(url);
+    } catch {
+      setDownloadError(true);
+    } finally {
+      setDownloading(false);
+    }
+  }
   const [editError, setEditError] = useState<string | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
 
@@ -57,7 +75,8 @@ export function ChatMessageItem({
   }, [isTarget]);
 
   const isAuthor = currentUser.id === message.author?.id;
-  const canDelete = !readOnly && !message.deleted && (isAuthor || canManage);
+  const canDelete =
+    !readOnly && !message.deleted && !message.pendingInput && (isAuthor || canManage);
   const canEdit =
     !readOnly &&
     !message.deleted &&
@@ -131,7 +150,7 @@ export function ChatMessageItem({
 
           {message.status === 'failed' ? (
             <span className="flex items-center gap-1 text-xs font-medium text-danger">
-              Failed
+              {message.errorMessage ?? 'Failed'}
               {onRetry ? (
                 <button
                   type="button"
@@ -203,6 +222,28 @@ export function ChatMessageItem({
             {renderMessageWithMentions(message.body ?? '')}
           </div>
         )}
+
+        {!message.deleted && message.attachment ? (
+          <div className="mt-2">
+            {message.pendingInput ? (
+              <span className="break-all text-sm text-fg-muted">{message.attachment.name}</span>
+            ) : (
+              <button
+                type="button"
+                onClick={downloadAttachment}
+                disabled={downloading}
+                className="break-all text-left text-sm text-primary underline"
+              >
+                {downloading ? 'Preparing download…' : `Download ${message.attachment.name}`}
+              </button>
+            )}
+            {downloadError ? (
+              <p role="alert" className="text-xs text-danger">
+                Could not download the file. Try again.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
         {/* Linked task badge */}
         {!message.deleted && message.task ? (

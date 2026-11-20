@@ -92,6 +92,20 @@
       "when": 1795064388626,
       "tag": "0012_chat_phone_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1795155630483,
+      "tag": "0013_task_attachments",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1795158255468,
+      "tag": "0014_chat_markdown_attachments",
+      "breakpoints": true
     }
   ]
 }
