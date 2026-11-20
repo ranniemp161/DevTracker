@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useParams, usePathname } from 'next/navigation';
 import { createContext, useContext, type ReactNode } from 'react';
 import { PageHeader } from '@/components/page-header';
-import { Badge, ErrorState } from '@/components/ui';
+import { Badge, ErrorState, Skeleton } from '@/components/ui';
 import { useApiQuery } from '@/lib/use-api-query';
 import { ROLE_LABEL } from './permissions';
 
@@ -55,7 +55,18 @@ export function WorkspaceLayout({ children }: { children: ReactNode }) {
       </div>
     );
   }
-  if (!query.data) return <p className="text-sm text-fg-subtle">Loading workspace…</p>;
+  if (!query.data) {
+    return (
+      <div
+        role="status"
+        aria-label="Loading workspace"
+        className="space-y-3 border-b border-line pb-4"
+      >
+        <Skeleton className="h-4 w-40" />
+        <Skeleton className="h-7 w-56" />
+      </div>
+    );
+  }
 
   const { workspace } = query.data;
   const subPath = pathname.slice(`/workspaces/${workspace.id}`.length);
