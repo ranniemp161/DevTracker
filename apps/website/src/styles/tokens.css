@@ -200,6 +200,7 @@
   --dt-chat-height: calc(100dvh - 14rem); /* project chat panel: viewport minus shell chrome */
   --dt-chat-min-height: 500px;
   --dt-drawer-max-width: 85vw; /* mobile navigation drawer */
+  --dt-dialog-max-width: min(26rem, 100vw - 2rem); /* confirmation dialogs */
   --dt-date-field-width: 160px; /* due-date field in inline forms */
 
   /* ---------- Radius ---------- */
