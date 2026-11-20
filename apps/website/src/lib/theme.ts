@@ -2,6 +2,7 @@
 export type ThemeChoice = 'light' | 'dark' | 'system';
 
 export const THEME_STORAGE_KEY = 'devtrack-theme';
+const COLOR_SCHEME_SELECTOR = 'meta[name="color-scheme"]';
 export const THEME_CHOICES: { value: ThemeChoice; label: string }[] = [
   { value: 'system', label: 'System' },
   { value: 'light', label: 'Light' },
@@ -16,7 +17,7 @@ export function parseThemeChoice(value: string | null | undefined): ThemeChoice 
  * Runs in <head> before first paint, so the page never flashes the wrong theme. An explicit
  * choice sets `data-theme`; `system` leaves it unset and tokens.css follows the OS.
  */
-export const THEME_INIT_SCRIPT = `try{var t=localStorage.getItem('${THEME_STORAGE_KEY}');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}`;
+export const THEME_INIT_SCRIPT = `try{var t=localStorage.getItem('${THEME_STORAGE_KEY}');if(t==='light'||t==='dark'){document.documentElement.dataset.theme=t;document.querySelector('${COLOR_SCHEME_SELECTOR}')?.setAttribute('content',t);}}catch(e){}`;
 
 export function readThemeChoice(): ThemeChoice {
   try {
@@ -30,6 +31,9 @@ export function applyThemeChoice(choice: ThemeChoice): void {
   const root = document.documentElement;
   if (choice === 'system') delete root.dataset.theme;
   else root.dataset.theme = choice;
+  document
+    .querySelector(COLOR_SCHEME_SELECTOR)
+    ?.setAttribute('content', choice === 'system' ? 'light dark' : choice);
   try {
     if (choice === 'system') localStorage.removeItem(THEME_STORAGE_KEY);
     else localStorage.setItem(THEME_STORAGE_KEY, choice);

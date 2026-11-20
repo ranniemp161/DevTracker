@@ -2,6 +2,10 @@
 @import '../styles/tokens.css';
 
 :root {
+  color-scheme: light dark;
+}
+
+:root[data-theme='light'] {
   color-scheme: light;
 }
 
