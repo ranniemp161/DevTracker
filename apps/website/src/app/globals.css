@@ -54,6 +54,61 @@ dialog::backdrop {
   grid-template-columns: repeat(auto-fill, minmax(min(var(--dt-card-min-width), 100%), 1fr));
 }
 
+/* Menus and panels anchored to a trigger (components/menu.tsx): below the trigger, flipping near the viewport edges.
+   Without anchor positioning, the menu places itself from script (left/top). */
+.anchored-popover {
+  max-width: calc(100vw - 1rem);
+  max-height: min(26rem, calc(100dvh - 1rem));
+  overflow-y: auto;
+}
+
+@supports (position-area: block-end) {
+  .anchored-popover {
+    inset: auto;
+    margin: var(--dt-space-1) 0;
+    position-area: block-end span-inline-end;
+    position-try-fallbacks:
+      flip-block,
+      flip-inline,
+      flip-block flip-inline;
+  }
+
+  .anchored-popover-end {
+    position-area: block-end span-inline-start;
+  }
+}
+
+@supports not (position-area: block-end) {
+  .anchored-popover {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .anchored-popover {
+    opacity: 0;
+    translate: 0 -0.25rem;
+    transition:
+      opacity var(--dt-duration-fast),
+      translate var(--dt-duration-fast),
+      display var(--dt-duration-fast),
+      overlay var(--dt-duration-fast);
+    transition-behavior: allow-discrete;
+  }
+
+  .anchored-popover:popover-open {
+    opacity: 1;
+    translate: 0 0;
+
+    @starting-style {
+      opacity: 0;
+      translate: 0 -0.25rem;
+    }
+  }
+}
+
 /* Small controls keep their look but get a 44px hit area on touch screens.
    The invisible ::after extends past the control, centered on it. */
 @utility touch-target {
