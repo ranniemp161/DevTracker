@@ -40,6 +40,8 @@ export interface Project {
   targetDate: string | null;
   createdBy: UserRef | null;
   memberCount: number;
+  /** Real counts of the project's non-deleted tasks; never an estimate. */
+  taskCounts: { total: number; done: number };
   /** True for workspace Owners/Admins: may edit, archive and manage members. */
   viewerCanManage: boolean;
   createdAt: string;
