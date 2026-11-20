@@ -35,6 +35,7 @@ import { useProject } from './project-context';
 import { TaskLabels } from './task-labels';
 import { TaskTime } from './task-time';
 import { TaskTimeEntries } from './task-time-entries';
+import { TaskAttachments } from './task-attachments';
 import { useTaskTimer } from './task-timer';
 
 export function TaskDetail() {
@@ -541,6 +542,7 @@ function TaskEditor({
 
         <div className="min-w-0 px-4 pt-4 pb-8 sm:px-7 lg:col-start-1 lg:row-start-2 lg:px-10 lg:pt-0">
           <div className="space-y-8 border-t border-line pt-6">
+            <TaskAttachments key={task.id} taskId={task.id} />
             <TaskTimeline task={task} refreshKey={historyKey} onActivity={onActivity} />
           </div>
         </div>

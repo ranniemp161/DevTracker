@@ -77,6 +77,8 @@ export const projectMessages = pgTable(
     authorId: uuid('author_id').references(() => users.id, { onDelete: 'set null' }),
     /** Plain text; never rendered as HTML. */
     body: text('body').notNull(),
+    attachmentName: text('attachment_name'),
+    attachmentHash: text('attachment_hash'),
     /** Monotonically increasing per-project sequence. */
     sequence: integer('sequence').notNull(),
     /** Client request ID for idempotent retries. */

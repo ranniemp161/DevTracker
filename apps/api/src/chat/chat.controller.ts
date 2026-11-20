@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Param,
@@ -74,6 +75,12 @@ export class ChatController {
   ): Promise<{ message: ProjectMessage }> {
     await this.rateLimit.consume(RATE_LIMITS.commentCreatePerUser, user.id);
     return { message: await this.chat.update(user, id, body) };
+  }
+
+  @Get('messages/:id/attachment')
+  @Header('Cache-Control', 'private, no-store')
+  getAttachment(@CurrentUser() user: User, @Param('id', UuidParamPipe) id: string) {
+    return this.chat.attachmentDownload(user.id, id);
   }
 
   @Delete('messages/:id')

@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto';
+import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import {
   and,
@@ -30,6 +33,7 @@ import {
 } from '@devtrack/types';
 import {
   parseMentions,
+  MAX_CHAT_ATTACHMENT_BYTES,
   type CreateChatMessageInput,
   type ListChatMessagesQuery,
   type UpdateChatMessageInput,
@@ -39,14 +43,18 @@ import { isUuid } from '../common/pipes/uuid-param.pipe';
 import { DATABASE } from '../database/database.module';
 import { EventRecorder, type Actor } from '../events/event-recorder.service';
 import { ProjectAccessService, type ProjectAccess } from '../projects/project-access.service';
+import { r2StorageConfig } from '../storage/r2';
 import { ChatPushService } from './chat-push.service';
 
 type MessageRow = typeof projectMessages.$inferSelect;
 const userRef = { id: users.id, username: users.username, avatarUrl: users.avatarUrl };
 const messageNotFound = () => AppException.notFound('Message not found.');
+const attachmentKey = (messageId: string) => `chat-media/${messageId}`;
 
 @Injectable()
 export class ChatService {
+  private readonly storage = r2StorageConfig();
+
   constructor(
     @Inject(DATABASE) private readonly db: Database,
     private readonly projectAccess: ProjectAccessService,
@@ -60,6 +68,14 @@ export class ChatService {
     input: CreateChatMessageInput,
   ): Promise<ProjectMessage> {
     const access = await this.projectAccess.require(actor.id, projectId, { write: true });
+    const file = input.attachment ? Buffer.from(input.attachment.base64, 'base64') : null;
+    if (file && (file.length === 0 || file.length > MAX_CHAT_ATTACHMENT_BYTES)) {
+      throw AppException.validation([
+        { path: 'attachment', message: 'Choose a Markdown file up to 32 KiB.' },
+      ]);
+    }
+    const attachmentName = input.attachment?.name ?? null;
+    const attachmentHash = file ? createHash('sha256').update(file).digest('hex') : null;
 
     if (input.taskId) {
       const [task] = await this.db
@@ -81,6 +97,13 @@ export class ChatService {
     });
 
     const messageId = await this.db.transaction(async (tx) => {
+      if (file) {
+        await tx
+          .select({ id: projects.id })
+          .from(projects)
+          .where(eq(projects.id, projectId))
+          .for('update');
+      }
       // Check for idempotent retry with unique (projectId, authorId, clientRequestId)
       const [existing] = await tx
         .select()
@@ -97,6 +120,8 @@ export class ChatService {
       if (existing) {
         if (
           existing.body === input.body &&
+          existing.attachmentName === attachmentName &&
+          existing.attachmentHash === attachmentHash &&
           (existing.taskId ?? undefined) === (input.taskId ?? undefined)
         ) {
           return existing.id;
@@ -124,6 +149,8 @@ export class ChatService {
           projectId,
           authorId: actor.id,
           body: input.body,
+          attachmentName,
+          attachmentHash,
           sequence,
           clientRequestId: input.clientRequestId,
           taskId: input.taskId ?? null,
@@ -182,11 +209,49 @@ export class ChatService {
         actor.id,
         others.map((user) => user.id),
       );
+      if (file && attachmentName) {
+        const storage = this.requireAttachmentStorage();
+        await storage.client.send(
+          new PutObjectCommand({
+            Bucket: storage.bucket,
+            Key: attachmentKey(message!.id),
+            Body: file,
+            ContentType: 'application/octet-stream',
+            ContentDisposition: `attachment; filename*=UTF-8''${encodeURIComponent(attachmentName).replace(/['()*]/g, (char) => '%' + char.charCodeAt(0).toString(16).toUpperCase())}`,
+            CacheControl: 'private, no-store',
+          }),
+          { abortSignal: AbortSignal.timeout(5000) },
+        );
+      }
       return message!.id;
     });
 
     const [loaded] = await this.load([messageId]);
     return loaded!;
+  }
+
+  async attachmentDownload(userId: string, messageId: string) {
+    const { message } = await this.requireMessage(userId, messageId);
+    if (!message.attachmentName) throw AppException.notFound('Attachment not found.');
+    const storage = this.requireAttachmentStorage();
+    return {
+      url: await getSignedUrl(
+        storage.client,
+        new GetObjectCommand({ Bucket: storage.bucket, Key: attachmentKey(messageId) }),
+        { expiresIn: 60 },
+      ),
+    };
+  }
+
+  private requireAttachmentStorage() {
+    if (!this.storage) {
+      throw new AppException(
+        HttpStatus.SERVICE_UNAVAILABLE,
+        ErrorCode.SERVICE_UNAVAILABLE,
+        'Chat file storage is unavailable.',
+      );
+    }
+    return this.storage;
   }
 
   async list(
@@ -698,6 +763,7 @@ export class ChatService {
           clientRequestId: m.clientRequestId,
           author: authorRef,
           body: isDeleted ? null : m.body,
+          ...(!isDeleted && m.attachmentName ? { attachment: { name: m.attachmentName } } : {}),
           deleted: isDeleted,
           edited: Boolean(m.editedAt),
           task: isDeleted ? null : liveTask,

@@ -15,6 +15,7 @@ export interface ProjectMessage {
   author: UserRef | null;
   /** Plain text body. `null` once deleted: placeholder. */
   body: string | null;
+  attachment?: { name: string };
   deleted: boolean;
   edited: boolean;
   task: ProjectMessageTaskRef | null;

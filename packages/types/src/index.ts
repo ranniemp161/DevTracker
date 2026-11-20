@@ -3,5 +3,6 @@ export * from './chat.js';
 export * from './collaboration.js';
 export * from './github.js';
 export * from './project.js';
+export * from './task-attachment.js';
 export * from './user.js';
 export * from './workspace.js';

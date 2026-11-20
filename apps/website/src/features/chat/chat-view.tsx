@@ -1,6 +1,7 @@
 'use client';
 
 import type { ProjectMessage, ProjectMessagePage } from '@devtrack/types';
+import type { CreateChatMessageInput } from '@devtrack/validators';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -250,8 +251,22 @@ function ChatThread({ targetMessageId }: { targetMessageId?: string }) {
   }, [isConnected, reconcileMessages]);
 
   // Send message with optimistic update
-  const handleSend = async (body: string, taskId?: string) => {
+  const handleSend = async (body: string, taskId?: string, file?: File) => {
+    setSending(true);
     const clientRequestId = crypto.randomUUID();
+    const input: CreateChatMessageInput = { body, clientRequestId, taskId };
+    if (file) {
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        input.attachment = {
+          name: file.name,
+          base64: btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join('')),
+        };
+      } catch (error) {
+        setSending(false);
+        throw error;
+      }
+    }
     const highestSeq = messages.length > 0 ? Math.max(...messages.map((m) => m.sequence)) : 0;
 
     const optimistic: OptimisticChatMessage = {
@@ -265,6 +280,8 @@ function ChatThread({ targetMessageId }: { targetMessageId?: string }) {
         avatarUrl: user.avatarUrl,
       },
       body,
+      attachment: file ? { name: file.name } : undefined,
+      pendingInput: input,
       deleted: false,
       edited: false,
       task: null,
@@ -276,24 +293,30 @@ function ChatThread({ targetMessageId }: { targetMessageId?: string }) {
     };
 
     setMessages((prev) => [...prev, optimistic]);
-    setSending(true);
     if (!hasMoreAfter) scrollIntent.current = 'latest';
 
     try {
       const res = await api<{ message: ProjectMessage }>(`/projects/${project.id}/messages`, {
         method: 'POST',
-        body: { body, clientRequestId, taskId },
+        body: input,
       });
 
       setMessages((prev) => mergeMessages(prev, [res.message], user.id));
 
       if (hasMoreAfter) void loadNewer(true);
       else void acknowledgeRead(res.message.sequence);
-    } catch {
+    } catch (error) {
       setMessages((prev) =>
         prev.map((m) =>
           m.id === optimistic.id
-            ? { ...m, status: 'failed', errorMessage: 'Could not send message.' }
+            ? {
+                ...m,
+                status: 'failed',
+                errorMessage:
+                  error instanceof ApiError
+                    ? (error.details[0]?.message ?? error.message)
+                    : 'Could not send message.',
+              }
             : m,
         ),
       );
@@ -304,7 +327,7 @@ function ChatThread({ targetMessageId }: { targetMessageId?: string }) {
 
   // Retry failed optimistic message
   const handleRetry = async (failedMsg: OptimisticChatMessage) => {
-    if (!failedMsg.body) return;
+    if (!failedMsg.pendingInput) return;
     setMessages((prev) =>
       prev.map((m) => (m.id === failedMsg.id ? { ...m, status: 'sending' } : m)),
     );
@@ -312,11 +335,7 @@ function ChatThread({ targetMessageId }: { targetMessageId?: string }) {
     try {
       const res = await api<{ message: ProjectMessage }>(`/projects/${project.id}/messages`, {
         method: 'POST',
-        body: {
-          body: failedMsg.body,
-          clientRequestId: failedMsg.clientRequestId,
-          taskId: failedMsg.task?.id,
-        },
+        body: failedMsg.pendingInput,
       });
 
       setMessages((prev) => mergeMessages(prev, [res.message], user.id));
