@@ -65,6 +65,16 @@ export const projects = pgTable(
      * in the message-creation transaction; sequences are strictly linear and monotonic.
      */
     nextMessageSequence: integer('next_message_sequence').notNull().default(1),
+    /**
+     * 0014: GitHub events posted to the project's chat. Keys are validated by the API
+     * (CHAT_GITHUB_EVENTS in @devtrack/types).
+     */
+    chatGithubEvents: text('chat_github_events')
+      .array()
+      .notNull()
+      .default(
+        sql`ARRAY['pull_request.opened','pull_request.merged','review.changes_requested','release.published','checks.failed']::text[]`,
+      ),
 
     createdAt: timestamptz('created_at').notNull().defaultNow(),
     updatedAt: timestamptz('updated_at')

@@ -3,7 +3,7 @@
 import type { ProjectMessage, PublicUser } from '@devtrack/types';
 import Link from 'next/link';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ChevronRightIcon } from '@/components/icons';
+import { AlertIcon, ChevronRightIcon, PullRequestIcon, TagIcon } from '@/components/icons';
 import { Avatar, Button, StatusDot } from '@/components/ui';
 import { api } from '@/lib/api';
 import type { CreateChatMessageInput } from '@devtrack/validators';
@@ -116,6 +116,91 @@ export function ChatMessageItem({
     hour: 'numeric',
     minute: '2-digit',
   });
+
+  // GitHub updates (decision record 0014): a compact event row, no author or edit.
+  if (message.kind === 'github' && message.github && !message.deleted) {
+    const g = message.github;
+    const link = g.pullRequest
+      ? { url: g.pullRequest.url, text: `#${g.pullRequest.number} ${g.pullRequest.title}` }
+      : g.release
+        ? { url: g.release.url, text: g.release.name ?? g.release.tag }
+        : null;
+    const Icon = g.release ? TagIcon : g.event === 'checks.failed' ? AlertIcon : PullRequestIcon;
+    return (
+      <div
+        ref={itemRef}
+        id={`message-${message.id}`}
+        className={`group flex items-start gap-3 rounded-card px-2.5 py-1.5 text-sm transition-colors ${
+          highlighted ? 'bg-status-todo-bg ring-2 ring-status-todo' : 'hover:bg-surface-sunken'
+        }`}
+      >
+        <span
+          aria-hidden="true"
+          className={`mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full ${
+            g.event === 'checks.failed' || g.event === 'review.changes_requested'
+              ? 'bg-danger-soft text-danger'
+              : g.event === 'pull_request.merged'
+                ? 'bg-status-review-bg text-pr-merged'
+                : 'bg-surface-muted text-fg-secondary'
+          }`}
+        >
+          <Icon size={16} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-fg-secondary">
+            <span className="font-medium text-fg">{GITHUB_EVENT_TEXT[g.event]}</span>
+            {link ? (
+              <>
+                {' '}
+                <a
+                  href={link.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium text-primary hover:underline"
+                >
+                  {link.text}
+                </a>
+              </>
+            ) : null}
+          </p>
+          <p className="mt-0.5 text-xs text-fg-muted">
+            <span className="font-mono">{g.repository}</span>
+            {g.sender ? ` · ${g.sender}` : ''} · {formattedTime}
+          </p>
+          {confirmDelete ? (
+            <div className="mt-2 flex items-center gap-2 rounded-chip bg-status-blocked-bg p-2 text-xs text-danger">
+              <span>Delete this update?</span>
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={handleDelete}
+                className="font-bold underline"
+              >
+                {deleting ? 'Deleting…' : 'Confirm'}
+              </button>
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={() => setConfirmDelete(false)}
+                className="text-fg-muted hover:text-fg"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : null}
+        </div>
+        {canDelete && !confirmDelete ? (
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(true)}
+            className="rounded-chip px-1.5 py-0.5 text-xs text-danger opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 hover:bg-status-blocked-bg pointer-coarse:min-h-11 pointer-coarse:px-3 pointer-coarse:opacity-100"
+          >
+            Delete
+          </button>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -293,6 +378,16 @@ export function ChatMessageItem({
     </div>
   );
 }
+
+const GITHUB_EVENT_TEXT: Record<NonNullable<ProjectMessage['github']>['event'], string> = {
+  'pull_request.opened': 'Pull request opened',
+  'pull_request.merged': 'Pull request merged',
+  'pull_request.closed': 'Pull request closed',
+  'review.changes_requested': 'Changes requested on',
+  'review.approved': 'Approved',
+  'release.published': 'Release published',
+  'checks.failed': 'Checks failed on',
+};
 
 function renderMessageWithMentions(text: string): ReactNode[] {
   const parts: ReactNode[] = [];

@@ -274,6 +274,8 @@ function ChatThread({ targetMessageId }: { targetMessageId?: string }) {
       projectId: project.id,
       sequence: highestSeq + 1,
       clientRequestId,
+      kind: 'user',
+      github: null,
       author: {
         id: user.id,
         username: user.username,

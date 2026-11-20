@@ -52,6 +52,17 @@ export const createProjectSchema = z
   .refine(datesOrdered, datesMessage);
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
 
+/** Matches CHAT_GITHUB_EVENTS in @devtrack/types (decision record 0014). */
+export const chatGithubEventSchema = z.enum([
+  'pull_request.opened',
+  'pull_request.merged',
+  'pull_request.closed',
+  'review.changes_requested',
+  'review.approved',
+  'release.published',
+  'checks.failed',
+]);
+
 export const updateProjectSchema = z
   .object({
     name: projectName.optional(),
@@ -59,6 +70,12 @@ export const updateProjectSchema = z
     status: editableProjectStatusSchema.optional(),
     startDate: optionalDate,
     targetDate: optionalDate,
+    /** 0014: which GitHub events post to the project's chat. */
+    chatGithubEvents: z
+      .array(chatGithubEventSchema)
+      .max(chatGithubEventSchema.options.length)
+      .refine((list) => new Set(list).size === list.length, { error: 'Duplicate event.' })
+      .optional(),
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), { error: 'Nothing to update.' })
   .refine(datesOrdered, datesMessage);

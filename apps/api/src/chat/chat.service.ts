@@ -28,6 +28,7 @@ import {
   type ProjectChatReadState,
   type ProjectChatUnreadSummary,
   type ProjectMessage,
+  type ProjectMessageGithub,
   type ProjectMessagePage,
   type UserRef,
 } from '@devtrack/types';
@@ -761,7 +762,12 @@ export class ChatService {
           projectId: m.projectId,
           sequence: m.sequence,
           clientRequestId: m.clientRequestId,
+          kind: m.kind === 'github' ? 'github' : 'user',
           author: authorRef,
+          github:
+            m.kind === 'github' && !isDeleted && m.metadata
+              ? (m.metadata as unknown as ProjectMessageGithub)
+              : null,
           body: isDeleted ? null : m.body,
           ...(!isDeleted && m.attachmentName ? { attachment: { name: m.attachmentName } } : {}),
           deleted: isDeleted,
