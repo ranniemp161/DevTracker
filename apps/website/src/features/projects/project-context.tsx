@@ -4,11 +4,13 @@ import type { Project, ProjectMember } from '@devtrack/types';
 import Link from 'next/link';
 import { useParams, usePathname } from 'next/navigation';
 import { createContext, useContext, type ReactNode } from 'react';
-import { Alert, Badge, KeyBadge } from '@/components/ui';
+import { PageHeader } from '@/components/page-header';
+import { Alert, Badge, KeyBadge, Skeleton } from '@/components/ui';
 import { useRealtimeRefresh, useRealtimeRoom, type RealtimeEvent } from '@/lib/realtime';
 import { useApiQuery } from '@/lib/use-api-query';
+import { useSession } from '../session/session-context';
 import { useShellData } from '../session/shell-data';
-import { PROJECT_STATUS_LABEL } from './labels';
+import { PROJECT_STATUS_LABEL, projectStatusTone } from './labels';
 
 interface ProjectContextValue {
   project: Project;
@@ -19,6 +21,18 @@ interface ProjectContextValue {
   reloadMembers: () => void;
   reloadChatUnread: () => void;
 }
+
+/** View names by the path after `/projects/[id]`, shown as the title on small screens. */
+const VIEW_LABEL: Record<string, string> = {
+  '': 'Board',
+  '/list': 'List',
+  '/chat': 'Chat',
+  '/milestones': 'Milestones',
+  '/timesheet': 'Timesheet',
+  '/activity': 'Activity',
+  '/settings': 'Settings',
+  '/members': 'Members',
+};
 
 const ProjectContext = createContext<ProjectContextValue | null>(null);
 
@@ -34,6 +48,7 @@ export function ProjectLayout({ children }: { children: ReactNode }) {
   const project = useApiQuery<{ project: Project }>(`/projects/${id}`);
   const members = useApiQuery<ProjectMember[]>(`/projects/${id}/members`);
   const { reloadChatUnread } = useShellData();
+  const { workspaces } = useSession();
 
   // Every page of a project follows the project room (M7); individual views react to events.
   useRealtimeRoom(`project:${id}`);
@@ -59,14 +74,27 @@ export function ProjectLayout({ children }: { children: ReactNode }) {
       </div>
     );
   }
-  if (!project.data || !members.data)
-    return <p className="text-sm text-fg-subtle">Loading project…</p>;
+  if (!project.data || !members.data) {
+    return (
+      <div
+        role="status"
+        aria-label="Loading project"
+        className="space-y-3 border-b border-line pb-4"
+      >
+        <Skeleton className="h-4 w-40" />
+        <Skeleton className="h-7 w-64" />
+      </div>
+    );
+  }
 
   const p = project.data.project;
   const readOnly = p.status === 'ARCHIVED';
   // The task page has its own header bar and runs edge to edge.
   const isTaskPage = pathname.includes('/tasks/');
   const isChatPage = pathname.endsWith('/chat');
+  const view = VIEW_LABEL[pathname.slice(`/projects/${p.id}`.length)] ?? p.name;
+  const workspace = workspaces.find((w) => w.id === p.workspaceId);
+  const workspaceHref = `/workspaces/${p.workspaceId}`;
 
   return (
     <ProjectContext.Provider
@@ -82,37 +110,37 @@ export function ProjectLayout({ children }: { children: ReactNode }) {
       <div
         className={isChatPage ? 'flex min-h-0 flex-1 flex-col lg:block lg:space-y-6' : 'space-y-6'}
       >
-        {isTaskPage ? null : (
-          <div className={isChatPage ? 'hidden lg:block' : undefined}>
-            <Link
-              href={`/workspaces/${p.workspaceId}/projects`}
-              className="text-label text-fg-muted hover:underline"
-            >
-              ← Projects
-            </Link>
-            <div className="mt-1 flex flex-wrap items-center gap-3">
-              <KeyBadge>{p.key}</KeyBadge>
-              <h1 className="text-2xl font-semibold tracking-tight">{p.name}</h1>
-              <Badge
-                tone={
-                  p.status === 'ACTIVE' || p.status === 'PLANNING'
-                    ? 'blue'
-                    : p.status === 'COMPLETED'
-                      ? 'green'
-                      : 'neutral'
-                }
-              >
-                {PROJECT_STATUS_LABEL[p.status]}
-              </Badge>
-            </div>
-            {readOnly ? (
-              <div className="mt-3">
-                <Alert tone="info">This project is archived and read-only.</Alert>
-              </div>
-            ) : null}
-          </div>
+        {isTaskPage ? (
+          children
+        ) : (
+          <PageHeader
+            // The mobile chat fills the screen; the top bar names the project.
+            className={isChatPage ? 'max-lg:hidden' : ''}
+            breadcrumb={[
+              ...(workspace
+                ? [{ label: workspace.name, href: workspaceHref, className: 'max-lg:hidden' }]
+                : []),
+              { label: 'Projects', href: workspaceHref, separatorClassName: 'max-lg:hidden' },
+              { label: p.name, className: 'lg:hidden' },
+            ]}
+            // Phones already show the project name in the top bar, so the title names the view.
+            title={
+              <>
+                <span className="lg:hidden">{view}</span>
+                <span className="max-lg:hidden">{p.name}</span>
+              </>
+            }
+            meta={
+              <>
+                <KeyBadge>{p.key}</KeyBadge>
+                <Badge tone={projectStatusTone(p.status)}>{PROJECT_STATUS_LABEL[p.status]}</Badge>
+              </>
+            }
+          >
+            {readOnly ? <Alert tone="info">This project is archived and read-only.</Alert> : null}
+            {children}
+          </PageHeader>
         )}
-        {children}
       </div>
     </ProjectContext.Provider>
   );

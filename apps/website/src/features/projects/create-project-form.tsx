@@ -2,7 +2,6 @@
 
 import type { Project } from '@devtrack/types';
 import { createProjectSchema } from '@devtrack/validators';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Alert, Field, SubmitButton } from '@/components/ui';
 import { api } from '@/lib/api';
@@ -27,14 +26,7 @@ export function CreateProjectForm() {
 
   return (
     <div className="max-w-lg">
-      <Link
-        href={`/workspaces/${workspace.id}/projects`}
-        className="text-sm text-fg-muted hover:underline"
-      >
-        ← Projects
-      </Link>
-      <h2 className="mt-2 text-xl font-semibold">New project</h2>
-      <form onSubmit={form.onSubmit} noValidate className="mt-6 space-y-4">
+      <form onSubmit={form.onSubmit} noValidate className="space-y-4">
         {form.formError ? <Alert>{form.formError}</Alert> : null}
         <Field
           label="Name"

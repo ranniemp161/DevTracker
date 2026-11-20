@@ -39,6 +39,12 @@ export const PROJECT_STATUS_LABEL: Record<ProjectStatus, string> = {
   ARCHIVED: 'Archived',
 };
 
+/** Badge tone for a project status (SPEC §2: blue for planning/active, green when completed). */
+export function projectStatusTone(status: ProjectStatus): 'blue' | 'green' | 'neutral' {
+  if (status === 'ACTIVE' || status === 'PLANNING') return 'blue';
+  return status === 'COMPLETED' ? 'green' : 'neutral';
+}
+
 /** Elapsed time in its two largest units: `45m`, `3h 20m`, `2d 4h`. */
 export function formatDuration(seconds: number): string {
   const minutes = Math.floor(seconds / 60);

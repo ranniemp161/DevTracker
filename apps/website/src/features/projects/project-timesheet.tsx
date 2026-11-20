@@ -68,7 +68,7 @@ export function ProjectTimesheet() {
   return (
     <section aria-labelledby="timesheet-heading" className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h2 id="timesheet-heading" className="text-xl font-semibold tracking-tight">
+        <h2 id="timesheet-heading" className="text-xl font-semibold tracking-tight max-lg:sr-only">
           Timesheet
         </h2>
         <div className="flex flex-wrap gap-2">
