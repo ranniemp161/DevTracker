@@ -3,6 +3,8 @@
 import type { Project, ProjectChatUnreadSummary } from '@devtrack/types';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { PlusIcon } from '@/components/icons';
+import { HeaderActions } from '@/components/page-header';
 import { Badge, ErrorState } from '@/components/ui';
 import { useApiQuery } from '@/lib/use-api-query';
 import { isAdmin } from '../workspaces/permissions';
@@ -34,8 +36,8 @@ export function ProjectList() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-4">
-        <label className="flex items-center gap-2 text-sm text-fg-muted">
+      <HeaderActions>
+        <label className="flex min-h-9 items-center gap-2 text-sm text-fg-secondary pointer-coarse:min-h-11">
           <input
             type="checkbox"
             checked={showArchived}
@@ -46,12 +48,13 @@ export function ProjectList() {
         {isAdmin(workspace.role) ? (
           <Link
             href={`/workspaces/${workspace.id}/projects/new`}
-            className="inline-flex h-9 items-center rounded-control bg-primary px-3.5 text-sm font-medium text-fg-on-inverse transition-colors hover:bg-primary-hover"
+            className="inline-flex h-9 items-center gap-1.5 rounded-control bg-primary px-3.5 text-sm font-medium text-fg-on-inverse transition-colors hover:bg-primary-hover pointer-coarse:h-11"
           >
+            <PlusIcon size={15} />
             New project
           </Link>
         ) : null}
-      </div>
+      </HeaderActions>
 
       {projects.error ? (
         <ErrorState message={projects.error.message} onRetry={projects.reload} />

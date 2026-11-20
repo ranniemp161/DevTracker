@@ -4,6 +4,7 @@ import { TASK_STATUSES, type Task, type TaskStatus } from '@devtrack/types';
 import Link from 'next/link';
 import { useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react';
 import { CalendarIcon, PlusIcon } from '@/components/icons';
+import { HeaderActions } from '@/components/page-header';
 import { useToast } from '@/components/toaster';
 import {
   Alert,
@@ -101,26 +102,23 @@ export function Board() {
 
   return (
     <div className="space-y-4">
+      <HeaderActions>
+        <BoardProgress done={doneCount} total={tasks.length} />
+        {readOnly ? null : (
+          <Button
+            variant="primary"
+            icon={<PlusIcon size={15} />}
+            onClick={() => setAddingIn('TODO')}
+          >
+            New task
+          </Button>
+        )}
+      </HeaderActions>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
         <TaskFilterBar workspaceId={project.workspaceId} projectId={project.id} members={members} />
-        <div className="flex items-center gap-3">
-          <p className="text-label text-fg-muted">
-            {doneCount} of {tasks.length} done
-          </p>
-          <Button variant="ghost" size="sm" onClick={reload}>
-            Refresh
-          </Button>
-          {readOnly ? null : (
-            <Button
-              variant="primary"
-              size="sm"
-              icon={<PlusIcon size={14} />}
-              onClick={() => setAddingIn('TODO')}
-            >
-              New task
-            </Button>
-          )}
-        </div>
+        <Button variant="ghost" size="sm" onClick={reload}>
+          Refresh
+        </Button>
       </div>
       {dropError ? <Alert>{dropError}</Alert> : null}
       <div className="-mx-4 snap-x snap-proximity scroll-px-4 overflow-x-auto px-4 pb-2 sm:-mx-7 sm:scroll-px-7 sm:px-7 lg:snap-none">
@@ -194,6 +192,22 @@ export function Board() {
           })}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** "N of M done" with a small bar, computed from the loaded tasks (SPEC R3). */
+function BoardProgress({ done, total }: { done: number; total: number }) {
+  const percent = total === 0 ? 0 : Math.round((done / total) * 100);
+  return (
+    <div className="flex items-center gap-2.5 text-label text-fg-muted">
+      <span aria-hidden="true" className="h-1.5 w-20 overflow-hidden rounded-full bg-surface-muted">
+        <span
+          className="block h-full rounded-full bg-status-done"
+          style={{ width: `${percent}%` }}
+        />
+      </span>
+      {done} of {total} done
     </div>
   );
 }

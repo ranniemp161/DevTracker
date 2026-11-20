@@ -2,8 +2,9 @@
 
 import type { WorkspaceDetails } from '@devtrack/types';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, usePathname } from 'next/navigation';
 import { createContext, useContext, type ReactNode } from 'react';
+import { PageHeader } from '@/components/page-header';
 import { Badge, ErrorState } from '@/components/ui';
 import { useApiQuery } from '@/lib/use-api-query';
 import { ROLE_LABEL } from './permissions';
@@ -21,9 +22,20 @@ export function useWorkspace(): WorkspaceContextValue {
   return value;
 }
 
-/** Loads the workspace from the URL and renders its header and tabs. */
+/** Page titles for the workspace routes, by the path after `/workspaces/[id]`. */
+const PAGE_TITLE: Record<string, string> = {
+  '': 'All projects',
+  '/projects': 'All projects',
+  '/projects/new': 'New project',
+  '/members': 'Members',
+  '/my-tasks': 'My tasks',
+  '/settings': 'Workspace settings',
+};
+
+/** Loads the workspace from the URL and renders the page header. */
 export function WorkspaceLayout({ children }: { children: ReactNode }) {
   const { id } = useParams<{ id: string }>();
+  const pathname = usePathname();
   const query = useApiQuery<{ workspace: WorkspaceDetails }>(`/workspaces/${id}`);
 
   if (query.error) {
@@ -46,19 +58,31 @@ export function WorkspaceLayout({ children }: { children: ReactNode }) {
   if (!query.data) return <p className="text-sm text-fg-subtle">Loading workspace…</p>;
 
   const { workspace } = query.data;
+  const subPath = pathname.slice(`/workspaces/${workspace.id}`.length);
 
   return (
     <WorkspaceContext.Provider value={{ workspace, reload: query.reload }}>
       <div className="space-y-6">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight">{workspace.name}</h1>
-            <Badge tone={workspace.role === 'OWNER' ? 'blue' : 'neutral'}>
-              {ROLE_LABEL[workspace.role]}
-            </Badge>
-          </div>
-        </div>
-        {children}
+        <PageHeader
+          breadcrumb={[
+            {
+              label: (
+                <span className="flex items-center gap-2">
+                  {workspace.name}
+                  <Badge tone={workspace.role === 'OWNER' ? 'green' : 'neutral'}>
+                    {ROLE_LABEL[workspace.role]}
+                  </Badge>
+                </span>
+              ),
+            },
+            ...(subPath === '/projects/new'
+              ? [{ label: 'All projects', href: `/workspaces/${workspace.id}` }]
+              : []),
+          ]}
+          title={PAGE_TITLE[subPath] ?? workspace.name}
+        >
+          {children}
+        </PageHeader>
       </div>
     </WorkspaceContext.Provider>
   );

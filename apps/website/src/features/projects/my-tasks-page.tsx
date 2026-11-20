@@ -3,6 +3,7 @@
 import type { MyTask, MyTasksResponse, TaskStatus } from '@devtrack/types';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
+import { HeaderActions } from '@/components/page-header';
 import { useToast } from '@/components/toaster';
 import { Alert, EmptyState, ErrorState, PriorityIcon, Skeleton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
@@ -84,12 +85,11 @@ export function MyTasksPage() {
       {projectIds.map((id) => (
         <ProjectRoom key={id} projectId={id} />
       ))}
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-lg font-semibold tracking-tight text-fg">My tasks</h2>
+      <HeaderActions>
         <p className="text-label text-fg-muted">
           {hasMore ? `${tasks.length}+ open` : `${tasks.length} open`}
         </p>
-      </div>
+      </HeaderActions>
       {error ? <Alert>{error}</Alert> : null}
       {tasks.length === 0 ? (
         <EmptyState>Nothing assigned to you is open in this workspace.</EmptyState>
