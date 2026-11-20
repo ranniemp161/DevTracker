@@ -1,17 +1,11 @@
 'use client';
 
-import {
-  TASK_PRIORITIES,
-  TASK_STATUSES,
-  type Milestone,
-  type Task,
-  type TaskPriority,
-  type TaskStatus,
-} from '@devtrack/types';
+import { TASK_PRIORITIES, TASK_STATUSES, type Milestone, type Task } from '@devtrack/types';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { CheckIcon, ChevronDownIcon } from '@/components/icons';
+import { CheckIcon, ChevronDownIcon, PlusIcon } from '@/components/icons';
+import { Menu, MenuItem } from '@/components/menu';
 import { useToast } from '@/components/toaster';
 import {
   Alert,
@@ -118,9 +112,13 @@ function PropertyRow({
 }) {
   return (
     <div className="flex items-center gap-2">
-      <label htmlFor={htmlFor} className="w-24 shrink-0 text-label text-fg-muted">
-        {label}
-      </label>
+      {htmlFor ? (
+        <label htmlFor={htmlFor} className="w-24 shrink-0 text-label text-fg-muted">
+          {label}
+        </label>
+      ) : (
+        <span className="w-24 shrink-0 text-label text-fg-muted">{label}</span>
+      )}
       <div className="relative min-w-0 flex-1">{children}</div>
     </div>
   );
@@ -178,6 +176,7 @@ function TaskEditor({
     form.milestoneId !== (task.milestoneId ?? '');
   const milestonesQuery = useApiQuery<Milestone[]>(`/projects/${project.id}/milestones`);
   const milestones = milestonesQuery.data ?? [];
+  const milestoneName = milestones.find((m) => m.id === form.milestoneId)?.name;
 
   async function call(fn: () => Promise<unknown>, after: () => void = onSaved) {
     setSaving(true);
@@ -321,28 +320,31 @@ function TaskEditor({
               onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
               className="block w-full rounded-control border border-transparent bg-transparent px-2 py-1 -mx-2 text-title font-semibold tracking-tight text-fg placeholder:text-fg-subtle hover:border-line focus-visible:border-primary"
             />
-            <div className="relative inline-flex rounded-control border border-line-control bg-surface-sunken">
-              <label htmlFor="task-status" className="sr-only">
-                Status
-              </label>
-              <span className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2">
-                <StatusDot status={form.status} />
-              </span>
-              <select
-                id="task-status"
-                value={form.status}
-                disabled={readOnly}
-                onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as TaskStatus }))}
-                className={`${valueControl} min-h-11 pl-7 lg:min-h-0`}
-              >
-                {TASK_STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {TASK_STATUS_LABEL[s]}
-                  </option>
-                ))}
-              </select>
-              {readOnly ? null : <SelectChevron />}
-            </div>
+            <Menu
+              label="Status"
+              disabled={readOnly}
+              triggerProps={{ 'aria-label': `Status: ${TASK_STATUS_LABEL[form.status]}` }}
+              triggerClassName="inline-flex min-h-11 items-center gap-2 rounded-control border border-line-control bg-surface-sunken px-2.5 text-sm font-medium text-fg transition-colors hover:bg-surface-muted aria-expanded:bg-surface-muted disabled:cursor-default disabled:hover:bg-surface-sunken lg:min-h-9"
+              menuClassName="w-48"
+              trigger={
+                <>
+                  <StatusDot status={form.status} />
+                  {TASK_STATUS_LABEL[form.status]}
+                  {readOnly ? null : <ChevronDownIcon size={14} className="text-fg-subtle" />}
+                </>
+              }
+            >
+              {TASK_STATUSES.map((st) => (
+                <MenuItem
+                  key={st}
+                  checked={form.status === st}
+                  icon={<StatusDot status={st} />}
+                  onSelect={() => setForm((f) => ({ ...f, status: st }))}
+                >
+                  {TASK_STATUS_LABEL[st]}
+                </MenuItem>
+              ))}
+            </Menu>
           </div>
           <div className="space-y-2">
             <label htmlFor="task-description" className="block text-label font-semibold text-fg">
@@ -369,26 +371,29 @@ function TaskEditor({
           </div>
 
           <PanelSection title="Properties">
-            <PropertyRow label="Priority" htmlFor="task-priority">
-              <span className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2">
-                <PriorityIcon priority={form.priority} showLabel={false} />
-              </span>
-              <select
-                id="task-priority"
-                value={form.priority}
+            <PropertyRow label="Priority">
+              <Menu
+                label="Priority"
                 disabled={readOnly}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, priority: e.target.value as TaskPriority }))
+                triggerProps={{ 'aria-label': `Priority: ${PRIORITY_LABEL[form.priority]}` }}
+                triggerClassName={pickerTrigger}
+                menuClassName="w-44"
+                trigger={
+                  <PickerValue readOnly={readOnly}>
+                    <PriorityIcon priority={form.priority} />
+                  </PickerValue>
                 }
-                className={`${valueControl} pl-8`}
               >
-                {TASK_PRIORITIES.map((p) => (
-                  <option key={p} value={p}>
-                    {PRIORITY_LABEL[p]}
-                  </option>
+                {TASK_PRIORITIES.map((pr) => (
+                  <MenuItem
+                    key={pr}
+                    checked={form.priority === pr}
+                    onSelect={() => setForm((f) => ({ ...f, priority: pr }))}
+                  >
+                    <PriorityIcon priority={pr} />
+                  </MenuItem>
                 ))}
-              </select>
-              {readOnly ? null : <SelectChevron />}
+              </Menu>
             </PropertyRow>
             <PropertyRow label="Due date" htmlFor="task-due">
               <input
@@ -400,23 +405,38 @@ function TaskEditor({
                 className={`${valueControl} px-2 ${form.dueDate ? '' : 'text-fg-subtle'}`}
               />
             </PropertyRow>
-            <PropertyRow label="Milestone" htmlFor="task-milestone">
-              <select
-                id="task-milestone"
-                value={form.milestoneId}
+            <PropertyRow label="Milestone">
+              <Menu
+                label="Milestone"
                 disabled={readOnly}
-                onChange={(e) => setForm((f) => ({ ...f, milestoneId: e.target.value }))}
-                className={`${valueControl} px-2 ${form.milestoneId ? '' : 'text-fg-subtle'}`}
+                triggerProps={{ 'aria-label': `Milestone: ${milestoneName ?? 'none'}` }}
+                triggerClassName={pickerTrigger}
+                menuClassName="w-60"
+                trigger={
+                  <PickerValue readOnly={readOnly} muted={!milestoneName}>
+                    {milestoneName ?? 'None'}
+                  </PickerValue>
+                }
               >
-                <option value="">None</option>
+                <MenuItem
+                  checked={form.milestoneId === ''}
+                  onSelect={() => setForm((f) => ({ ...f, milestoneId: '' }))}
+                >
+                  None
+                </MenuItem>
                 {milestones.map((m) => (
-                  <option key={m.id} value={m.id}>
+                  <MenuItem
+                    key={m.id}
+                    checked={form.milestoneId === m.id}
+                    onSelect={() => setForm((f) => ({ ...f, milestoneId: m.id }))}
+                  >
                     {m.name}
-                    {m.status === 'COMPLETED' ? ' (completed)' : ''}
-                  </option>
+                    {m.status === 'COMPLETED' ? (
+                      <span className="text-fg-subtle"> · completed</span>
+                    ) : null}
+                  </MenuItem>
                 ))}
-              </select>
-              {readOnly ? null : <SelectChevron />}
+              </Menu>
             </PropertyRow>
           </PanelSection>
 
@@ -446,28 +466,41 @@ function TaskEditor({
               ) : null}
             </ul>
             {!readOnly && unassigned.length > 0 ? (
-              <label className="relative block">
-                <span className="sr-only">Assign someone</span>
-                <select
-                  value=""
+              <div className="mt-2">
+                <Menu
+                  label="Assign someone"
                   disabled={saving}
-                  onChange={(e) =>
-                    e.target.value &&
-                    call(() =>
-                      api(`/tasks/${task.id}/assignees`, { body: { userIds: [e.target.value] } }),
-                    )
+                  triggerClassName="inline-flex h-8 w-full items-center gap-1.5 rounded-control border border-dashed border-line-control px-2.5 text-label text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg aria-expanded:bg-surface-muted pointer-coarse:h-11"
+                  menuClassName="w-60"
+                  trigger={
+                    <>
+                      <PlusIcon size={14} />
+                      Assign someone
+                    </>
                   }
-                  className="h-8 w-full cursor-pointer appearance-none pointer-coarse:h-11 rounded-control border border-dashed border-line-control bg-transparent px-2.5 pr-7 text-label text-fg-muted hover:bg-surface-muted"
                 >
-                  <option value="">Assign someone…</option>
                   {unassigned.map((m) => (
-                    <option key={m.user.id} value={m.user.id}>
+                    <MenuItem
+                      key={m.user.id}
+                      icon={
+                        <Avatar
+                          name={m.user.username}
+                          url={m.user.avatarUrl}
+                          seed={m.user.id}
+                          size="xs"
+                        />
+                      }
+                      onSelect={() =>
+                        call(() =>
+                          api(`/tasks/${task.id}/assignees`, { body: { userIds: [m.user.id] } }),
+                        )
+                      }
+                    >
                       @{m.user.username}
-                    </option>
+                    </MenuItem>
                   ))}
-                </select>
-                <SelectChevron />
-              </label>
+                </Menu>
+              </div>
             ) : null}
           </PanelSection>
 
@@ -572,12 +605,24 @@ function TaskEditor({
   );
 }
 
-function SelectChevron() {
+/** Ghost button showing a property's value and a chevron (SPEC §5 properties panel). */
+const pickerTrigger =
+  'flex h-8 w-full min-w-0 items-center gap-2 rounded-control px-2 text-left text-sm text-fg transition-colors hover:bg-surface-muted aria-expanded:bg-surface-muted disabled:cursor-default disabled:hover:bg-transparent pointer-coarse:min-h-11';
+
+function PickerValue({
+  readOnly,
+  muted = false,
+  children,
+}: {
+  readOnly: boolean;
+  muted?: boolean;
+  children: ReactNode;
+}) {
   return (
-    <ChevronDownIcon
-      size={14}
-      className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-fg-subtle"
-    />
+    <>
+      <span className={`min-w-0 flex-1 truncate ${muted ? 'text-fg-subtle' : ''}`}>{children}</span>
+      {readOnly ? null : <ChevronDownIcon size={14} className="shrink-0 text-fg-subtle" />}
+    </>
   );
 }
 
