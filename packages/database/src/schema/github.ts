@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import {
   bigint,
   boolean,
+  check,
   integer,
   jsonb,
   index,
@@ -257,6 +258,10 @@ export const githubPullRequests = pgTable(
     /** GitHub's `open` / `closed`; merged PRs are `closed` with `merged_at`. */
     state: text('state').notNull(),
     isDraft: boolean('is_draft').notNull().default(false),
+    /** 0015: current head commit; null for rows stored before CI status existed. */
+    headSha: text('head_sha'),
+    /** 0015: checks on the head commit; null until a suite for it completes. */
+    checksState: text('checks_state'),
     mergedAt: timestamptz('merged_at'),
     closedAt: timestamptz('closed_at'),
     /** GitHub's created/updated times. `github_updated_at` orders out-of-order deliveries. */
@@ -270,7 +275,32 @@ export const githubPullRequests = pgTable(
   },
   (t) => [
     unique('github_pull_requests_repo_pr_unique').on(t.repositoryId, t.githubPrId),
+    check(
+      'github_pull_requests_checks_state_check',
+      sql`${t.checksState} IN ('passing', 'failing')`,
+    ),
     index('github_pull_requests_repo_opened_idx').on(t.repositoryId, t.openedAt, t.id),
+  ],
+);
+
+/** 0015: completed check suites (one per CI app per commit), for pull request CI status. */
+export const githubCheckSuites = pgTable(
+  'github_check_suites',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    repositoryId: uuid('repository_id')
+      .notNull()
+      .references(() => githubRepositories.id, { onDelete: 'cascade' }),
+    githubSuiteId: githubId('github_suite_id').notNull(),
+    headSha: text('head_sha').notNull(),
+    appSlug: text('app_slug'),
+    conclusion: text('conclusion'),
+    completedAt: timestamptz('completed_at').notNull(),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    unique('github_check_suites_repo_suite_unique').on(t.repositoryId, t.githubSuiteId),
+    index('github_check_suites_repo_sha_idx').on(t.repositoryId, t.headSha),
   ],
 );
 

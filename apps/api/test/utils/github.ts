@@ -143,3 +143,24 @@ export const releaseEvent = () => ({
     prerelease: false,
   },
 });
+
+export const SHA_A = 'a'.repeat(40);
+export const SHA_B = 'b'.repeat(40);
+
+/** A completed check suite (0015). `prIds` are GitHub PR ids; [] mimics a fork. */
+export const checkSuiteEvent = (
+  conclusion: string,
+  options: { suiteId?: number; sha?: string; prIds?: number[]; app?: string; action?: string } = {},
+) => ({
+  ...repoRef,
+  action: options.action ?? 'completed',
+  check_suite: {
+    id: options.suiteId ?? 9001,
+    head_sha: options.sha ?? SHA_A,
+    status: 'completed',
+    conclusion,
+    updated_at: '2026-11-06T12:00:00Z',
+    app: { slug: options.app ?? 'github-actions' },
+    pull_requests: (options.prIds ?? [7001]).map((id) => ({ id, number: 12 })),
+  },
+});
