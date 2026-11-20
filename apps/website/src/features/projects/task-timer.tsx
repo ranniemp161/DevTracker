@@ -3,6 +3,7 @@
 import type { ActiveTaskTimer } from '@devtrack/types';
 import Link from 'next/link';
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { useToast } from '@/components/toaster';
 import { Button } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
@@ -68,7 +69,6 @@ function useTimerState() {
 
   function finish(discard: boolean) {
     if (!timer) return;
-    if (discard && !window.confirm('Discard this timer without logging any time?')) return;
     void change(
       async () => {
         const path = `/time-tracker/${timer.id}`;
@@ -108,6 +108,7 @@ function RunningTimer({
   finish: (discard: boolean) => void;
 }) {
   const [now, setNow] = useState(Date.now);
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
@@ -151,10 +152,27 @@ function RunningTimer({
         >
           Stop
         </Button>
-        <Button variant="ghost" size="sm" disabled={busy} onClick={() => finish(true)}>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={busy}
+          onClick={() => setConfirmingDiscard(true)}
+        >
           Discard
         </Button>
       </div>
+      <ConfirmDialog
+        open={confirmingDiscard}
+        title="Discard this timer?"
+        confirmLabel="Discard timer"
+        onConfirm={() => {
+          setConfirmingDiscard(false);
+          finish(true);
+        }}
+        onCancel={() => setConfirmingDiscard(false)}
+      >
+        The {elapsed} you tracked won&apos;t be logged.
+      </ConfirmDialog>
       {timer.projectId && !timer.canStop ? (
         <p className="mt-1 text-label text-fg-secondary">
           This project is archived. You can discard the timer.

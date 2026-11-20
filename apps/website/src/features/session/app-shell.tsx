@@ -3,7 +3,15 @@
 import type { Project, ProjectChatUnreadSummary, PublicUser } from '@devtrack/types';
 import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
 import {
   BoardIcon,
   CalendarIcon,
@@ -394,70 +402,43 @@ function MobileNavigation({
   );
 }
 
-/** Bottom sheet with a scrim, keyboard focus management, and an explicit close action. */
+/**
+ * Bottom sheet on a native modal <dialog>: the browser makes the page inert, traps focus,
+ * and closes it on Escape or the back gesture. Tapping the dimmed backdrop closes it too.
+ */
 function Drawer({ onClose, children }: { onClose: () => void; children: ReactNode }) {
-  const panel = useRef<HTMLDivElement>(null);
-  const onCloseRef = useRef(onClose);
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  });
+  const ref = useRef<HTMLDialogElement>(null);
 
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    const focusables = () =>
-      Array.from(
-        panel.current?.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), select, input, [tabindex]:not([tabindex="-1"])',
-        ) ?? [],
-      );
-    focusables()[0]?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') return onCloseRef.current();
-      if (e.key !== 'Tab') return;
-      const items = focusables();
-      if (items.length === 0) return;
-      const first = items[0]!;
-      const last = items[items.length - 1]!;
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener('keydown', onKey);
+  // Layout effect: the cleanup must close the dialog before React removes it,
+  // so the browser returns focus to the "More" button.
+  useLayoutEffect(() => {
+    const dialog = ref.current;
+    if (!dialog) return;
+    dialog.showModal();
     return () => {
-      document.removeEventListener('keydown', onKey);
-      previous?.focus();
+      if (dialog.open) dialog.close();
     };
   }, []);
 
   return (
-    <div className="fixed inset-0 z-40">
-      <button
-        type="button"
-        aria-label="Close navigation"
-        tabIndex={-1}
-        onClick={onClose}
-        className="absolute inset-0 cursor-default bg-fg/40"
-      />
-      <div
-        ref={panel}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Navigation"
-        className="absolute inset-x-0 bottom-0 mx-auto flex h-[min(80dvh,44rem)] max-w-md flex-col overflow-hidden rounded-t-panel bg-bg shadow-overlay pb-[env(safe-area-inset-bottom)]"
-      >
-        <div className="flex shrink-0 items-center justify-between border-b border-line px-4 py-1">
-          <h2 className="text-sm font-semibold">Navigation</h2>
-          <IconButton className="size-11" aria-label="Close navigation" onClick={onClose}>
-            <XIcon size={18} />
-          </IconButton>
-        </div>
-        <div className="min-h-0 flex-1">{children}</div>
+    <dialog
+      ref={ref}
+      aria-label="Navigation"
+      onClose={onClose}
+      // Clicks on the ::backdrop target the dialog itself; the sheet's content fills it.
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="mx-auto mt-auto mb-0 h-[min(80dvh,44rem)] w-full max-w-md overflow-hidden rounded-t-panel bg-bg text-fg shadow-overlay backdrop:bg-fg/40 open:flex open:flex-col"
+    >
+      <div className="flex shrink-0 items-center justify-between border-b border-line px-4 py-1">
+        <h2 className="text-sm font-semibold">Navigation</h2>
+        <IconButton className="size-11" aria-label="Close navigation" onClick={onClose}>
+          <XIcon size={18} />
+        </IconButton>
       </div>
-    </div>
+      <div className="min-h-0 flex-1 pb-[env(safe-area-inset-bottom)]">{children}</div>
+    </dialog>
   );
 }
 
