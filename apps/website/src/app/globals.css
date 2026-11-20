@@ -49,9 +49,9 @@ dialog::backdrop {
   overscroll-behavior: contain;
 }
 
-/* All projects: responsive card grid, 320px minimum per card. */
+/* All projects: responsive card grid, 320px minimum per card, or the full width when narrower. */
 @utility grid-cols-cards {
-  grid-template-columns: repeat(auto-fill, minmax(var(--dt-card-min-width), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--dt-card-min-width), 100%), 1fr));
 }
 
 /* Small controls keep their look but get a 44px hit area on touch screens.

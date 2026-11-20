@@ -505,7 +505,11 @@ function Drawer({ onClose, children }: { onClose: () => void; children: ReactNod
     <dialog
       ref={ref}
       aria-label="Navigation"
-      onClose={onClose}
+      // A close queued by an unmount (or StrictMode's re-run) may land after the
+      // dialog has reopened; only a dialog that is still closed should close the menu.
+      onClose={(e) => {
+        if (!e.currentTarget.open) onClose();
+      }}
       // Clicks on the ::backdrop target the dialog itself; the sheet's content fills it.
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
