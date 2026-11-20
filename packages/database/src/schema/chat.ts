@@ -1,6 +1,9 @@
+import { sql } from 'drizzle-orm';
 import {
+  check,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -75,8 +78,12 @@ export const projectMessages = pgTable(
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
     authorId: uuid('author_id').references(() => users.id, { onDelete: 'set null' }),
-    /** Plain text; never rendered as HTML. */
+    /** Plain text; never rendered as HTML. For GitHub messages, a plain-text summary. */
     body: text('body').notNull(),
+    /** 0014: 'user' for people, 'github' for posted GitHub events (author is NULL). */
+    kind: text('kind').notNull().default('user'),
+    /** 0014: display details of a GitHub event (repository, PR, release, sender login). */
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
     attachmentName: text('attachment_name'),
     attachmentHash: text('attachment_hash'),
     /** Monotonically increasing per-project sequence. */
@@ -100,6 +107,7 @@ export const projectMessages = pgTable(
     index('project_messages_project_seq_idx').on(t.projectId, t.sequence),
     index('project_messages_project_created_idx').on(t.projectId, t.createdAt, t.id),
     index('project_messages_task_id_idx').on(t.taskId),
+    check('project_messages_kind_check', sql`${t.kind} IN ('user', 'github')`),
   ],
 );
 

@@ -124,9 +124,13 @@ export class ProjectsService {
     }
 
     // Only field names (and status values) go into the feed, not description text.
-    const changed = (['name', 'description', 'status', 'startDate', 'targetDate'] as const).filter(
-      (f) => input[f] !== undefined && input[f] !== project[f],
-    );
+    const changed: string[] = (
+      ['name', 'description', 'status', 'startDate', 'targetDate'] as const
+    ).filter((f) => input[f] !== undefined && input[f] !== project[f]);
+    const events = input.chatGithubEvents;
+    if (events && [...events].sort().join() !== [...project.chatGithubEvents].sort().join()) {
+      changed.push('chatGithubEvents');
+    }
     if (changed.length > 0) {
       await this.db.transaction(async (tx) => {
         await tx
@@ -137,6 +141,7 @@ export class ProjectsService {
             status: input.status,
             startDate: input.startDate,
             targetDate: input.targetDate,
+            chatGithubEvents: input.chatGithubEvents,
           })
           .where(eq(projects.id, projectId));
         await this.events.activity(tx, {
@@ -298,6 +303,7 @@ function toProject(
     targetDate: p.targetDate,
     createdBy: creator,
     memberCount,
+    chatGithubEvents: p.chatGithubEvents as Project['chatGithubEvents'],
     viewerCanManage: canManage,
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),

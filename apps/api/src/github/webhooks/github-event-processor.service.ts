@@ -28,6 +28,7 @@ import { extractTaskKeys } from '@devtrack/validators';
 import type { z } from 'zod';
 import { EventRecorder, type Actor } from '../../events/event-recorder.service';
 import { ProjectAccessService } from '../../projects/project-access.service';
+import { GithubChatFeed } from './github-chat-feed.service';
 import {
   installationEventSchema,
   installationRepositoriesEventSchema,
@@ -51,6 +52,8 @@ interface TargetProject {
   id: string;
   workspaceId: string;
   key: string;
+  /** GitHub events this project posts to its chat (0014). */
+  chatGithubEvents: string[];
 }
 /** A connected repository and the (non-archived) projects that receive its activity. */
 interface Target {
@@ -82,6 +85,7 @@ export class GithubEventProcessor {
   constructor(
     private readonly events: EventRecorder,
     private readonly projectAccess: ProjectAccessService,
+    private readonly chat: GithubChatFeed,
   ) {}
 
   /**
@@ -253,6 +257,10 @@ export class GithubEventProcessor {
           metadata: { ...prMetadata(pr, target.repo), github: githubUser(p.sender) },
           event,
         });
+        await this.chat.post(tx, project, actor, {
+          event: action === 'reopened' ? 'pull_request.opened' : `pull_request.${action}`,
+          ...chatPr(pr, target.repo, p.sender),
+        });
       } else {
         await this.events.event(tx, event.type, scope, event.payload);
       }
@@ -312,6 +320,12 @@ export class GithubEventProcessor {
           payload: { pullRequestId: pr.id, reviewId: review.id, state },
         },
       });
+      if (state === 'approved' || state === 'changes_requested') {
+        await this.chat.post(tx, project, actor, {
+          event: state === 'approved' ? 'review.approved' : 'review.changes_requested',
+          ...chatPr(pr, target.repo, p.sender),
+        });
+      }
     }
     const verb =
       state === 'approved'
@@ -333,10 +347,11 @@ export class GithubEventProcessor {
     const target = await this.target(tx, p.installation.id, p.repository.id);
     if (!target) return ignored('repository not connected');
     for (const project of target.projects) {
+      const actor = await this.actor(tx, p.sender, project.workspaceId);
       await this.events.activity(tx, {
         workspaceId: project.workspaceId,
         projectId: project.id,
-        actor: await this.actor(tx, p.sender, project.workspaceId),
+        actor,
         entity: { type: 'repository', id: target.repo.id },
         action: 'repository.release_published',
         metadata: {
@@ -349,6 +364,12 @@ export class GithubEventProcessor {
           },
           github: githubUser(p.sender),
         },
+      });
+      await this.chat.post(tx, project, actor, {
+        event: 'release.published',
+        repository: target.repo.fullName,
+        sender: p.sender?.login ?? null,
+        release: { tag: p.release.tag_name, name: p.release.name ?? null, url: p.release.html_url },
       });
     }
     return PROCESSED;
@@ -499,7 +520,12 @@ export class GithubEventProcessor {
       );
     if (!row) return null;
     const connected = await tx
-      .select({ id: projects.id, workspaceId: projects.workspaceId, key: projects.key })
+      .select({
+        id: projects.id,
+        workspaceId: projects.workspaceId,
+        key: projects.key,
+        chatGithubEvents: projects.chatGithubEvents,
+      })
       .from(projectRepositories)
       .innerJoin(projects, eq(projects.id, projectRepositories.projectId))
       .innerJoin(
@@ -709,6 +735,15 @@ function prMetadata(pr: PrRow, repo: RepoRow) {
   return {
     repository: repo.fullName,
     pullRequest: { id: pr.id, number: pr.number, title: pr.title, url: pr.url },
+  };
+}
+
+/** Chat details for a pull request event (0014). */
+function chatPr(pr: PrRow, repo: RepoRow, sender: z.infer<typeof senderSchema>) {
+  return {
+    repository: repo.fullName,
+    sender: sender?.login ?? null,
+    pullRequest: { number: pr.number, title: pr.title, url: pr.url },
   };
 }
 

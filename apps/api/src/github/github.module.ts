@@ -10,6 +10,7 @@ import { PullRequestsController } from './pull-requests/pull-requests.controller
 import { PullRequestsService } from './pull-requests/pull-requests.service';
 import { ProjectRepositoriesController } from './repositories/project-repositories.controller';
 import { ProjectRepositoriesService } from './repositories/project-repositories.service';
+import { GithubChatFeed } from './webhooks/github-chat-feed.service';
 import { GithubEventProcessor } from './webhooks/github-event-processor.service';
 import { WebhookDeliveriesService } from './webhooks/webhook-deliveries.service';
 import { WebhooksController } from './webhooks/webhooks.controller';
@@ -33,6 +34,7 @@ import { WebhooksController } from './webhooks/webhooks.controller';
     ProjectRepositoriesService,
     PullRequestsService,
     GithubEventProcessor,
+    GithubChatFeed,
     WebhookDeliveriesService,
   ],
 })
