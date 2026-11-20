@@ -27,6 +27,7 @@ function linkFor(n: NotificationRow): string | null {
   if (!n.projectId) return null;
   if (n.resourceType === 'task') return `/projects/${n.projectId}/tasks/${n.resourceId}`;
   if (n.resourceType === 'milestone') return `/projects/${n.projectId}/milestones`;
+  if (n.resourceType === 'task_request') return `/projects/${n.projectId}/triage`;
   if (n.resourceType === 'chat_message')
     return `/projects/${n.projectId}/chat?message=${n.resourceId}`;
   return `/projects/${n.projectId}`;

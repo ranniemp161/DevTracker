@@ -20,6 +20,7 @@ import {
   type Database,
 } from '@devtrack/database';
 import { DATABASE } from '../database/database.module';
+import { RequestsService } from '../requests/requests.service';
 import { MAX_DELIVERY_ATTEMPTS } from '../github/webhooks/webhook-deliveries.service';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -43,6 +44,8 @@ export interface PruneResult {
   oauthStates: number;
   githubInstallStates: number;
   rateLimitBuckets: number;
+  /** Request-form reporters whose name and email were deleted (0016 §5). */
+  requestContacts: number;
 }
 
 /** Operational status for monitoring (§15: delivery status, outbox backlog and retries). */
@@ -63,7 +66,10 @@ export interface OpsStatus {
  */
 @Injectable()
 export class MaintenanceService {
-  constructor(@Inject(DATABASE) private readonly db: Database) {}
+  constructor(
+    @Inject(DATABASE) private readonly db: Database,
+    private readonly requests: RequestsService,
+  ) {}
 
   async prune(now = new Date()): Promise<PruneResult> {
     const before = (days: number) => new Date(now.getTime() - days * DAY);
@@ -132,6 +138,7 @@ export class MaintenanceService {
           .where(lt(rateLimitBuckets.windowStartedAt, before(RETENTION.rateLimitBucketsDays)))
           .returning({ key: rateLimitBuckets.key }),
       ),
+      requestContacts: await this.requests.deleteOldContacts(now),
     };
   }
 
