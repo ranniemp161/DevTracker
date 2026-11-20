@@ -1,13 +1,41 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useEffect, useSyncExternalStore } from 'react';
 import { ChevronRightIcon, PlusIcon } from '@/components/icons';
 import { Badge } from '@/components/ui';
+import { CHOOSE_WORKSPACE_PARAM, pickHomeWorkspace, readLastWorkspace } from '@/lib/last-workspace';
 import { useSession } from '../session/session-context';
 import { ROLE_LABEL } from './permissions';
 
+const noopSubscribe = () => () => {};
+
 export function WorkspacesHome() {
   const { workspaces } = useSession();
+  const router = useRouter();
+  // localStorage and the query string exist only in the browser.
+  const isClient = useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false,
+  );
+
+  // `/` opens the user's only workspace, or the one they used last, unless they asked
+  // for the picker (the switcher's "All workspaces" adds ?choose).
+  const target =
+    isClient && !new URLSearchParams(window.location.search).has(CHOOSE_WORKSPACE_PARAM)
+      ? pickHomeWorkspace(
+          workspaces.map((w) => w.id),
+          readLastWorkspace(),
+        )
+      : null;
+
+  useEffect(() => {
+    if (target) router.replace(`/workspaces/${target}`);
+  }, [target, router]);
+
+  if (!isClient || target) return null;
 
   return (
     <div className="space-y-6">

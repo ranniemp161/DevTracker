@@ -10,7 +10,7 @@ import { useRealtimeRefresh, useRealtimeRoom, type RealtimeEvent } from '@/lib/r
 import { useApiQuery } from '@/lib/use-api-query';
 import { useSession } from '../session/session-context';
 import { useShellData } from '../session/shell-data';
-import { PROJECT_STATUS_LABEL } from './labels';
+import { PROJECT_STATUS_LABEL, projectStatusTone } from './labels';
 
 interface ProjectContextValue {
   project: Project;
@@ -133,17 +133,7 @@ export function ProjectLayout({ children }: { children: ReactNode }) {
             meta={
               <>
                 <KeyBadge>{p.key}</KeyBadge>
-                <Badge
-                  tone={
-                    p.status === 'ACTIVE' || p.status === 'PLANNING'
-                      ? 'blue'
-                      : p.status === 'COMPLETED'
-                        ? 'green'
-                        : 'neutral'
-                  }
-                >
-                  {PROJECT_STATUS_LABEL[p.status]}
-                </Badge>
+                <Badge tone={projectStatusTone(p.status)}>{PROJECT_STATUS_LABEL[p.status]}</Badge>
               </>
             }
           >
