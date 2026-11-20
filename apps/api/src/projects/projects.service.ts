@@ -26,6 +26,9 @@ import { hasAtLeastRole } from '../workspaces/workspace-policy';
 import { ProjectAccessService, type ProjectRow } from './project-access.service';
 
 const memberCount = sql<number>`(select count(*)::int from ${projectMembers} where ${projectMembers.projectId} = ${projects.id})`;
+/** Real counts of the project's live (non-deleted) tasks; shown as progress (SPEC R3). */
+const taskTotal = sql<number>`(select count(*)::int from ${tasks} where ${tasks.projectId} = ${projects.id} and ${tasks.deletedAt} is null)`;
+const taskDone = sql<number>`(select count(*)::int from ${tasks} where ${tasks.projectId} = ${projects.id} and ${tasks.deletedAt} is null and ${tasks.status} = 'DONE')`;
 const creatorColumns = { id: users.id, username: users.username, avatarUrl: users.avatarUrl };
 
 @Injectable()
@@ -98,12 +101,17 @@ export class ProjectsService {
       );
     }
     const rows = await this.db
-      .select({ project: projects, creator: creatorColumns, memberCount })
+      .select({ project: projects, creator: creatorColumns, memberCount, taskTotal, taskDone })
       .from(projects)
       .leftJoin(users, eq(users.id, projects.createdBy))
       .where(and(...conditions))
       .orderBy(asc(projects.name));
-    return rows.map((r) => toProject(r.project, r.creator, r.memberCount, canManage));
+    return rows.map((r) =>
+      toProject(r.project, r.creator, r.memberCount, canManage, {
+        total: r.taskTotal,
+        done: r.taskDone,
+      }),
+    );
   }
 
   async get(userId: string, projectId: string): Promise<Project> {
@@ -278,11 +286,14 @@ export class ProjectsService {
 
   private async load(projectId: string, canManage: boolean): Promise<Project> {
     const [row] = await this.db
-      .select({ project: projects, creator: creatorColumns, memberCount })
+      .select({ project: projects, creator: creatorColumns, memberCount, taskTotal, taskDone })
       .from(projects)
       .leftJoin(users, eq(users.id, projects.createdBy))
       .where(eq(projects.id, projectId));
-    return toProject(row!.project, row!.creator, row!.memberCount, canManage);
+    return toProject(row!.project, row!.creator, row!.memberCount, canManage, {
+      total: row!.taskTotal,
+      done: row!.taskDone,
+    });
   }
 }
 
@@ -291,6 +302,7 @@ function toProject(
   creator: Project['createdBy'],
   memberCount: number,
   canManage: boolean,
+  taskCounts: Project['taskCounts'],
 ): Project {
   return {
     id: p.id,
@@ -304,6 +316,7 @@ function toProject(
     createdBy: creator,
     memberCount,
     chatGithubEvents: p.chatGithubEvents as Project['chatGithubEvents'],
+    taskCounts,
     viewerCanManage: canManage,
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),

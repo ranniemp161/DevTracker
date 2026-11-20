@@ -117,6 +117,29 @@ export function ProjectList() {
   );
 }
 
+/** Real progress from the project's live tasks (SPEC R3, lifted once the API had counts). */
+function ProjectProgress({ done, total }: { done: number; total: number }) {
+  const percent = total === 0 ? 0 : Math.round((done / total) * 100);
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-xs text-fg-muted">
+        <span>{total === 0 ? 'No tasks yet' : `${done} of ${total} tasks done`}</span>
+        <span className="tabular-nums">{percent}%</span>
+      </div>
+      <div
+        role="progressbar"
+        aria-label="Tasks done"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent}
+        className="h-1.5 overflow-hidden rounded-full bg-surface-muted"
+      >
+        <div className="h-full rounded-full bg-status-done" style={{ width: `${percent}%` }} />
+      </div>
+    </div>
+  );
+}
+
 function ProjectCard({ project: p, unread }: { project: Project; unread: number }) {
   return (
     <Link
@@ -139,6 +162,10 @@ function ProjectCard({ project: p, unread }: { project: Project; unread: number 
         <Badge tone={projectStatusTone(p.status)}>{PROJECT_STATUS_LABEL[p.status]}</Badge>
       </div>
       {p.description ? <p className="line-clamp-2 text-sm text-fg-muted">{p.description}</p> : null}
+      {/* Absent only while an older API is still deployed. */}
+      {p.taskCounts ? (
+        <ProjectProgress done={p.taskCounts.done} total={p.taskCounts.total} />
+      ) : null}
       <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line-subtle pt-3 text-label text-fg-muted">
         <span className="inline-flex items-center gap-1.5">
           <UsersIcon size={14} />
