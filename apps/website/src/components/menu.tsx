@@ -61,8 +61,11 @@ export function Menu({
   triggerProps,
   align = 'start',
   menuClassName = '',
+  disabled = false,
   children,
 }: {
+  /** Shows the trigger but blocks opening, e.g. while a save is in flight. */
+  disabled?: boolean;
   /** Accessible name of the menu (and of the trigger when it shows only an icon). */
   label: string;
   trigger: ReactNode;
@@ -78,6 +81,7 @@ export function Menu({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const enterOnOpen = useRef(false);
+  const typeahead = useRef({ text: '', at: 0 });
   const [open, setOpen] = useState(false);
 
   const items = () => [...(menuRef.current?.querySelectorAll<HTMLElement>(itemSelector) ?? [])];
@@ -149,6 +153,25 @@ export function Menu({
     else if (e.key === 'Home') next = 0;
     else if (e.key === 'End') next = list.length - 1;
     else if (e.key === 'Tab') menuRef.current?.hidePopover();
+    else if (e.key.length === 1 && e.key !== ' ' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      // Typeahead: jump to the next item whose label starts with what was typed.
+      const now = Date.now();
+      const typed = (now - typeahead.current.at < 600 ? typeahead.current.text : '') + e.key;
+      typeahead.current = { text: typed.toLowerCase(), at: now };
+      const query = typeahead.current.text;
+      const label = (el: HTMLElement) =>
+        (el.querySelector('[data-menu-label]')?.textContent ?? el.textContent ?? '')
+          .trim()
+          .replace(/^@/, '')
+          .toLowerCase();
+      const order = list.map((_, i) => list[(current + 1 + i) % list.length]!);
+      const match = order.find((el) => label(el).startsWith(query));
+      if (match) {
+        e.preventDefault();
+        match.focus();
+      }
+      return;
+    }
     if (next === null || list.length === 0) return;
     e.preventDefault();
     list[(next + list.length) % list.length]?.focus();
@@ -171,6 +194,7 @@ export function Menu({
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
+        disabled={disabled}
         {...invoker}
         {...triggerProps}
         onClick={onTriggerClick}
@@ -233,8 +257,15 @@ export function MenuItem({
       onClick={(e) => menu.activate(onSelect, e.detail !== 0)}
       className={`${itemClass} ${className}`}
     >
-      {icon}
-      <span className="min-w-0 flex-1">{children}</span>
+      {/* The label names the item; icons are decoration. */}
+      {icon ? (
+        <span aria-hidden="true" className="inline-flex shrink-0">
+          {icon}
+        </span>
+      ) : null}
+      <span data-menu-label="" className="min-w-0 flex-1">
+        {children}
+      </span>
       {checked ? <CheckIcon size={14} className="shrink-0 text-primary" /> : null}
     </button>
   );
@@ -270,8 +301,15 @@ export function MenuLink({
       onClick={(e) => menu.activate(onNavigate, e.detail !== 0)}
       className={`${itemClass} ${className}`}
     >
-      {icon}
-      <span className="min-w-0 flex-1">{children}</span>
+      {/* The label names the item; icons are decoration. */}
+      {icon ? (
+        <span aria-hidden="true" className="inline-flex shrink-0">
+          {icon}
+        </span>
+      ) : null}
+      <span data-menu-label="" className="min-w-0 flex-1">
+        {children}
+      </span>
       {current ? <CheckIcon size={14} className="shrink-0 text-primary" /> : null}
     </Link>
   );
