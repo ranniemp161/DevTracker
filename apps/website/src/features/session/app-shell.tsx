@@ -13,19 +13,28 @@ import {
   type ReactNode,
 } from 'react';
 import {
+  ActivityIcon,
   BoardIcon,
   CalendarIcon,
   ChatIcon,
   DevtrackMark,
+  FlagIcon,
   FolderIcon,
   ListIcon,
   MoreIcon,
   MyTasksIcon,
+  SettingsIcon,
+  UsersIcon,
   XIcon,
 } from '@/components/icons';
 import { ToastProvider } from '@/components/toaster';
 import { Alert, Avatar, Button, IconButton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
+import {
+  CHOOSE_WORKSPACE_PARAM,
+  forgetLastWorkspace,
+  rememberLastWorkspace,
+} from '@/lib/last-workspace';
 import { RealtimeProvider, useRealtimeRefresh, type RealtimeEvent } from '@/lib/realtime';
 import { useApiQuery } from '@/lib/use-api-query';
 import { NotificationBell } from '../collaboration/notification-bell';
@@ -98,6 +107,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 async function signOut(router: ReturnType<typeof useRouter>) {
   clearChatDrafts();
+  forgetLastWorkspace();
   await api('/auth/logout', { method: 'POST' }).catch(() => undefined);
   router.replace('/login');
   router.refresh();
@@ -144,6 +154,9 @@ function VerifiedFrame({ session, children }: { session: Session; children: Reac
     return '';
   }, [pathname, params.id, isProjectRoute, projectQuery.data]);
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);
+  useEffect(() => {
+    if (activeWorkspace) rememberLastWorkspace(activeWorkspace.id);
+  }, [activeWorkspace]);
 
   const projects = useApiQuery<Project[]>(
     activeWorkspace ? `/workspaces/${activeWorkspace.id}/projects` : null,
@@ -151,6 +164,9 @@ function VerifiedFrame({ session, children }: { session: Session; children: Reac
   const chatUnread = useApiQuery<ProjectChatUnreadSummary[]>(
     activeWorkspace ? `/workspaces/${activeWorkspace.id}/chat/unread` : null,
   );
+  const currentProject = isProjectRoute
+    ? projects.data?.find((p) => p.id === params.id)
+    : undefined;
   const reloadProjects = projects.reload;
   const reloadChatUnread = chatUnread.reload;
   useRealtimeRefresh(isProjectEvent, reloadProjects);
@@ -169,7 +185,9 @@ function VerifiedFrame({ session, children }: { session: Session; children: Reac
       projects={projects.data ?? []}
       chatUnread={chatUnread.data ?? []}
       currentProjectId={isProjectRoute ? (params.id ?? null) : null}
-      onWorkspaceChange={(id) => router.push(id ? `/workspaces/${id}` : '/')}
+      onWorkspaceChange={(id) =>
+        router.push(id ? `/workspaces/${id}` : `/?${CHOOSE_WORKSPACE_PARAM}`)
+      }
       onLogout={() => signOut(router)}
       onNavigate={closeDrawer}
       showBell={showBell}
@@ -283,7 +301,20 @@ function VerifiedFrame({ session, children }: { session: Session; children: Reac
             menuOpen={drawerOpen}
             onOpenMenu={() => setDrawerPath(pathname)}
           />
-          {drawerOpen ? <Drawer onClose={closeDrawer}>{sidebar(false)}</Drawer> : null}
+          {drawerOpen ? (
+            <Drawer onClose={closeDrawer}>
+              <div className="flex h-full flex-col">
+                {currentProject ? (
+                  <ProjectMoreLinks
+                    project={currentProject}
+                    pathname={pathname}
+                    onNavigate={closeDrawer}
+                  />
+                ) : null}
+                <div className="min-h-0 flex-1">{sidebar(false)}</div>
+              </div>
+            </Drawer>
+          ) : null}
         </div>
       )}
     </ShellDataContext.Provider>
@@ -403,6 +434,56 @@ function MobileNavigation({
 }
 
 /**
+ * The project views that don't fit in the bottom bar, shown first in "More"
+ * so they aren't buried in the full sidebar.
+ */
+function ProjectMoreLinks({
+  project,
+  pathname,
+  onNavigate,
+}: {
+  project: Project;
+  pathname: string;
+  onNavigate: () => void;
+}) {
+  const base = `/projects/${project.id}`;
+  const links = [
+    { href: `${base}/milestones`, label: 'Milestones', icon: FlagIcon },
+    { href: `${base}/activity`, label: 'Activity', icon: ActivityIcon },
+    project.viewerCanManage
+      ? { href: `${base}/settings`, label: 'Settings', icon: SettingsIcon }
+      : { href: `${base}/members`, label: 'Members', icon: UsersIcon },
+  ];
+  return (
+    <section aria-label={`More in ${project.name}`} className="shrink-0 border-b border-line p-3">
+      <h3 className="truncate px-1 pb-2 text-xs font-medium text-fg-muted">{project.name}</h3>
+      <ul className="grid grid-cols-3 gap-2">
+        {links.map(({ href, label, icon: Icon }) => {
+          const active = pathname.startsWith(href);
+          return (
+            <li key={href}>
+              <Link
+                href={href}
+                onClick={onNavigate}
+                aria-current={active ? 'page' : undefined}
+                className={`flex min-h-16 flex-col items-center justify-center gap-1.5 rounded-card border text-label font-medium transition-colors ${
+                  active
+                    ? 'border-primary bg-primary-soft text-primary-soft-fg'
+                    : 'border-line bg-surface text-fg-secondary hover:bg-surface-muted'
+                }`}
+              >
+                <Icon size={18} />
+                {label}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+/**
  * Bottom sheet on a native modal <dialog>: the browser makes the page inert, traps focus,
  * and closes it on Escape or the back gesture. Tapping the dimmed backdrop closes it too.
  */
@@ -424,7 +505,11 @@ function Drawer({ onClose, children }: { onClose: () => void; children: ReactNod
     <dialog
       ref={ref}
       aria-label="Navigation"
-      onClose={onClose}
+      // A close queued by an unmount (or StrictMode's re-run) may land after the
+      // dialog has reopened; only a dialog that is still closed should close the menu.
+      onClose={(e) => {
+        if (!e.currentTarget.open) onClose();
+      }}
       // Clicks on the ::backdrop target the dialog itself; the sheet's content fills it.
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();

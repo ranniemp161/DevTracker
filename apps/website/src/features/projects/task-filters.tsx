@@ -9,7 +9,7 @@ import {
 } from '@devtrack/types';
 import { TASK_SEARCH_MAX_LENGTH } from '@devtrack/validators';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from 'react';
 import { ChevronDownIcon, SearchIcon } from '@/components/icons';
 import { useApiQuery } from '@/lib/use-api-query';
 import { PRIORITY_LABEL, TASK_STATUS_LABEL } from './labels';
@@ -88,7 +88,7 @@ function SearchField({ value, onChange }: { value: string; onChange: (value: str
   }, [draft, value, onChange]);
 
   return (
-    <label className="relative inline-flex">
+    <label className="relative inline-flex min-w-0 max-lg:flex-1">
       <span className="sr-only">Search tasks</span>
       <SearchIcon
         size={14}
@@ -107,7 +107,7 @@ function SearchField({ value, onChange }: { value: string; onChange: (value: str
             onChange('');
           }
         }}
-        className={`h-7.5 w-56 rounded-control border bg-surface pr-2.5 pl-8 text-label text-fg transition-colors placeholder:text-fg-subtle ${
+        className={`h-7.5 w-full rounded-control border bg-surface pr-2.5 pl-8 text-label pointer-coarse:h-11 lg:w-56 text-fg transition-colors placeholder:text-fg-subtle ${
           value ? 'border-fg' : 'border-line-control'
         }`}
       />
@@ -133,7 +133,7 @@ export function FilterSelect({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={`h-7.5 cursor-pointer appearance-none rounded-control border bg-surface pr-7 pl-2.5 text-label font-medium transition-colors hover:bg-surface-sunken ${
+        className={`h-7.5 cursor-pointer appearance-none rounded-control border bg-surface pr-7 pl-2.5 pointer-coarse:h-11 text-label font-medium transition-colors hover:bg-surface-sunken ${
           value ? 'border-fg text-fg' : 'border-line-control text-fg-secondary'
         }`}
       >
@@ -161,87 +161,121 @@ export function TaskFilterBar({
   const labels = labelsQuery.data ?? [];
   const milestonesQuery = useApiQuery<Milestone[]>(`/projects/${projectId}/milestones`);
   const milestones = milestonesQuery.data ?? [];
+  // Phones show search plus a Filters toggle; the selects take four rows otherwise.
+  const [expanded, setExpanded] = useState(false);
+  const panelId = useId();
+  const activeCount = [
+    filters.status,
+    filters.priority,
+    filters.assigneeId,
+    filters.labelId,
+    filters.milestoneId,
+  ].filter(Boolean).length;
 
   return (
-    <div role="group" aria-label="Filters" className="flex flex-wrap items-center gap-2">
+    <div
+      role="group"
+      aria-label="Filters"
+      className="flex flex-wrap items-center gap-2 max-lg:min-w-0 max-lg:flex-1"
+    >
       <SearchField value={filters.q} onChange={(v) => setFilter('q', v)} />
-
-      <FilterSelect label="Status" value={filters.status} onChange={(v) => setFilter('status', v)}>
-        <option value="">Status: all</option>
-        {TASK_STATUSES.map((s) => (
-          <option key={s} value={s}>
-            {TASK_STATUS_LABEL[s]}
-          </option>
-        ))}
-      </FilterSelect>
-
-      <FilterSelect
-        label="Priority"
-        value={filters.priority}
-        onChange={(v) => setFilter('priority', v)}
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-controls={panelId}
+        onClick={() => setExpanded((open) => !open)}
+        className={`inline-flex h-7.5 items-center gap-1.5 rounded-control border border-dashed px-2.5 text-label font-medium transition-colors hover:bg-surface-sunken pointer-coarse:h-11 lg:hidden ${
+          activeCount ? 'border-fg text-fg' : 'border-line-control text-fg-secondary'
+        }`}
       >
-        <option value="">Priority: all</option>
-        {TASK_PRIORITIES.map((p) => (
-          <option key={p} value={p}>
-            {PRIORITY_LABEL[p]}
-          </option>
-        ))}
-      </FilterSelect>
-
-      <FilterSelect
-        label="Assignee"
-        value={filters.assigneeId}
-        onChange={(v) => setFilter('assigneeId', v)}
+        Filters{activeCount ? ` · ${activeCount}` : ''}
+        <ChevronDownIcon size={14} className={expanded ? 'rotate-180' : ''} />
+      </button>
+      <div
+        id={panelId}
+        className={`contents ${expanded ? 'max-lg:flex max-lg:w-full max-lg:flex-wrap max-lg:gap-2' : 'max-lg:hidden'}`}
       >
-        <option value="">Assignee: all</option>
-        <option value="unassigned">Unassigned</option>
-        {members.map((m) => (
-          <option key={m.user.id} value={m.user.id}>
-            @{m.user.username}
-          </option>
-        ))}
-      </FilterSelect>
-
-      {labels.length > 0 ? (
         <FilterSelect
-          label="Label"
-          value={filters.labelId}
-          onChange={(v) => setFilter('labelId', v)}
+          label="Status"
+          value={filters.status}
+          onChange={(v) => setFilter('status', v)}
         >
-          <option value="">Label: all</option>
-          {labels.map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.name}
+          <option value="">Status: all</option>
+          {TASK_STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {TASK_STATUS_LABEL[s]}
             </option>
           ))}
         </FilterSelect>
-      ) : null}
 
-      {milestones.length > 0 || filters.milestoneId ? (
         <FilterSelect
-          label="Milestone"
-          value={filters.milestoneId}
-          onChange={(v) => setFilter('milestoneId', v)}
+          label="Priority"
+          value={filters.priority}
+          onChange={(v) => setFilter('priority', v)}
         >
-          <option value="">Milestone: all</option>
-          <option value="none">No milestone</option>
-          {milestones.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.name}
+          <option value="">Priority: all</option>
+          {TASK_PRIORITIES.map((p) => (
+            <option key={p} value={p}>
+              {PRIORITY_LABEL[p]}
             </option>
           ))}
         </FilterSelect>
-      ) : null}
 
-      {hasActiveFilters ? (
-        <button
-          type="button"
-          onClick={clearFilters}
-          className="h-7.5 rounded-control px-2.5 text-label font-medium text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
+        <FilterSelect
+          label="Assignee"
+          value={filters.assigneeId}
+          onChange={(v) => setFilter('assigneeId', v)}
         >
-          Clear filters
-        </button>
-      ) : null}
+          <option value="">Assignee: all</option>
+          <option value="unassigned">Unassigned</option>
+          {members.map((m) => (
+            <option key={m.user.id} value={m.user.id}>
+              @{m.user.username}
+            </option>
+          ))}
+        </FilterSelect>
+
+        {labels.length > 0 ? (
+          <FilterSelect
+            label="Label"
+            value={filters.labelId}
+            onChange={(v) => setFilter('labelId', v)}
+          >
+            <option value="">Label: all</option>
+            {labels.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
+          </FilterSelect>
+        ) : null}
+
+        {milestones.length > 0 || filters.milestoneId ? (
+          <FilterSelect
+            label="Milestone"
+            value={filters.milestoneId}
+            onChange={(v) => setFilter('milestoneId', v)}
+          >
+            <option value="">Milestone: all</option>
+            <option value="none">No milestone</option>
+            {milestones.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </FilterSelect>
+        ) : null}
+
+        {hasActiveFilters ? (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="h-7.5 rounded-control px-2.5 text-label font-medium text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg pointer-coarse:h-11"
+          >
+            Clear filters
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
