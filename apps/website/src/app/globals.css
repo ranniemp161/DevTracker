@@ -34,9 +34,42 @@ body {
   max-width: var(--dt-drawer-max-width);
 }
 
+/* Confirmation dialogs: narrow, with a 16px gutter on phones. */
+@utility max-w-dialog {
+  max-width: var(--dt-dialog-max-width);
+}
+
+/* Keep scroll gestures in a modal and on its backdrop from scrolling the page behind. */
+dialog:modal {
+  overscroll-behavior: contain;
+}
+
+dialog::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
 /* All projects: responsive card grid, 320px minimum per card. */
 @utility grid-cols-cards {
   grid-template-columns: repeat(auto-fill, minmax(var(--dt-card-min-width), 1fr));
+}
+
+/* Small controls keep their look but get a 44px hit area on touch screens.
+   The invisible ::after extends past the control, centered on it. */
+@utility touch-target {
+  position: relative;
+
+  @media (pointer: coarse) {
+    &::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: max(100%, var(--dt-target-touch));
+      height: max(100%, var(--dt-target-touch));
+      translate: -50% -50%;
+    }
+  }
 }
 
 @media print {

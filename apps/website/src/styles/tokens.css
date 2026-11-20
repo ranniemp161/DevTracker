@@ -192,6 +192,7 @@
   --dt-control-md: 36px; /* default buttons */
   --dt-control-lg: 40px; /* inputs */
   --dt-control-xl: 44px; /* auth forms (touch-friendly) */
+  --dt-target-touch: 44px; /* minimum hit area on touch screens (WCAG 2.5.5) */
   --dt-sidebar-width: 248px;
   --dt-board-column-width: 272px;
   --dt-card-min-width: 320px; /* project cards */
@@ -199,6 +200,7 @@
   --dt-chat-height: calc(100dvh - 14rem); /* project chat panel: viewport minus shell chrome */
   --dt-chat-min-height: 500px;
   --dt-drawer-max-width: 85vw; /* mobile navigation drawer */
+  --dt-dialog-max-width: min(26rem, 100vw - 2rem); /* confirmation dialogs */
   --dt-date-field-width: 160px; /* due-date field in inline forms */
 
   /* ---------- Radius ---------- */

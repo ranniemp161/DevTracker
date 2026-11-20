@@ -57,7 +57,7 @@ function NavLink({
       href={href}
       onClick={onNavigate}
       aria-current={active ? 'page' : undefined}
-      className={`${navItemBase} ${compact ? 'h-8' : 'h-8.5'} ${active ? navItemActive : navItemIdle}`}
+      className={`${navItemBase} ${compact ? 'h-8' : 'h-8.5'} pointer-coarse:h-11 ${active ? navItemActive : navItemIdle}`}
     >
       {icon}
       <span className="min-w-0 flex-1 truncate">{children}</span>
@@ -142,7 +142,7 @@ export function Sidebar({
                 href={`${base}/projects/new`}
                 onClick={onNavigate}
                 aria-label="New project"
-                className="inline-flex size-6.5 items-center justify-center rounded-chip text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
+                className="touch-target inline-flex size-6.5 items-center justify-center rounded-chip text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
               >
                 <PlusIcon size={14} />
               </Link>
@@ -337,7 +337,7 @@ function UserRow({ user, onLogout }: { user: PublicUser; onLogout: () => void })
                   applyThemeChoice(c.value);
                   setTheme(c.value);
                 }}
-                className="flex h-8 w-full items-center justify-between rounded-control px-2.5 text-left text-sm text-fg-secondary hover:bg-surface-muted"
+                className="flex h-8 w-full items-center justify-between rounded-control pointer-coarse:h-11 px-2.5 text-left text-sm text-fg-secondary hover:bg-surface-muted"
               >
                 {c.label}
                 {theme === c.value ? <CheckIcon size={14} className="text-primary" /> : null}
@@ -349,7 +349,7 @@ function UserRow({ user, onLogout }: { user: PublicUser; onLogout: () => void })
             type="button"
             role="menuitem"
             onClick={onLogout}
-            className="flex h-8 w-full items-center rounded-control px-2.5 text-left text-sm text-fg-secondary hover:bg-surface-muted"
+            className="flex h-8 w-full items-center rounded-control pointer-coarse:h-11 px-2.5 text-left text-sm text-fg-secondary hover:bg-surface-muted"
           >
             Sign out
           </button>

@@ -163,9 +163,9 @@ export function ChatMessageItem({
             </span>
           ) : null}
 
-          {/* Action buttons on hover */}
+          {/* Shown on hover or keyboard focus with a mouse; always shown on touch screens, which can't hover. */}
           {!isEditing && (canEdit || canDelete) ? (
-            <div className="ml-auto opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
+            <div className="ml-auto flex items-center gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 pointer-coarse:gap-2 pointer-coarse:opacity-100">
               {canEdit ? (
                 <button
                   type="button"
@@ -173,7 +173,7 @@ export function ChatMessageItem({
                     setEditBody(message.body ?? '');
                     setIsEditing(true);
                   }}
-                  className="rounded px-1.5 py-0.5 text-xs text-fg-muted hover:bg-surface-muted"
+                  className="rounded-chip px-1.5 py-0.5 text-xs text-fg-muted hover:bg-surface-muted pointer-coarse:min-h-11 pointer-coarse:px-3"
                 >
                   Edit
                 </button>
@@ -182,7 +182,7 @@ export function ChatMessageItem({
                 <button
                   type="button"
                   onClick={() => setConfirmDelete(true)}
-                  className="rounded px-1.5 py-0.5 text-xs text-danger hover:bg-status-blocked-bg"
+                  className="rounded-chip px-1.5 py-0.5 text-xs text-danger hover:bg-status-blocked-bg pointer-coarse:min-h-11 pointer-coarse:px-3"
                 >
                   Delete
                 </button>

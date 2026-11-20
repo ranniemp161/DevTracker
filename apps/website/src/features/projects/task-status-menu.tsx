@@ -59,7 +59,7 @@ export function TaskStatusMenu({
         aria-expanded={open}
         aria-label={`Status: ${TASK_STATUS_LABEL[status]}. Change status`}
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex size-6.5 items-center justify-center rounded-chip transition-colors hover:bg-surface-muted"
+        className="touch-target inline-flex size-6.5 items-center justify-center rounded-chip transition-colors hover:bg-surface-muted"
       >
         <StatusDot status={status} className="size-2.5" />
       </button>
@@ -83,7 +83,7 @@ export function TaskStatusMenu({
                 if (s !== status) onSelect(s);
                 close();
               }}
-              className="flex h-8 w-full items-center gap-2 rounded-control px-2 text-left text-sm text-fg-secondary hover:bg-surface-muted"
+              className="flex h-8 w-full items-center gap-2 pointer-coarse:h-11 rounded-control px-2 text-left text-sm text-fg-secondary hover:bg-surface-muted"
             >
               <StatusDot status={s} />
               <span className="flex-1">{TASK_STATUS_LABEL[s]}</span>
