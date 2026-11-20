@@ -31,10 +31,9 @@ export function applyThemeChoice(choice: ThemeChoice): void {
   const root = document.documentElement;
   if (choice === 'system') delete root.dataset.theme;
   else root.dataset.theme = choice;
-  document.querySelector(COLOR_SCHEME_SELECTOR)?.setAttribute(
-    'content',
-    choice === 'system' ? 'light dark' : choice,
-  );
+  document
+    .querySelector(COLOR_SCHEME_SELECTOR)
+    ?.setAttribute('content', choice === 'system' ? 'light dark' : choice);
   try {
     if (choice === 'system') localStorage.removeItem(THEME_STORAGE_KEY);
     else localStorage.setItem(THEME_STORAGE_KEY, choice);
