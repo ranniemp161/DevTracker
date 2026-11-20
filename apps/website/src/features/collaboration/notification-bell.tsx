@@ -74,7 +74,7 @@ export function NotificationBell({ align = 'start' }: { align?: 'start' | 'end' 
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-label={count > 0 ? `Notifications, ${count} unread` : 'Notifications'}
-        className="relative inline-flex size-8 items-center justify-center rounded-control text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
+        className="touch-target inline-flex size-8 items-center justify-center rounded-control text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
       >
         <svg
           aria-hidden="true"

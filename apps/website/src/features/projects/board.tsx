@@ -374,7 +374,7 @@ function ColumnQuickAdd({
         onChange={(e) => handleTitleChange(e.target.value)}
         placeholder="Task title"
         maxLength={200}
-        className="h-8 w-full rounded-control border border-line-control bg-surface px-2.5 text-sm placeholder:text-fg-subtle focus-visible:border-primary"
+        className="h-8 w-full rounded-control border pointer-coarse:h-11 border-line-control bg-surface px-2.5 text-sm placeholder:text-fg-subtle focus-visible:border-primary"
       />
       {error ? (
         <p role="alert" className="text-xs text-danger">

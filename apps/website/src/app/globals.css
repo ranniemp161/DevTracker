@@ -39,6 +39,24 @@ body {
   grid-template-columns: repeat(auto-fill, minmax(var(--dt-card-min-width), 1fr));
 }
 
+/* Small controls keep their look but get a 44px hit area on touch screens.
+   The invisible ::after extends past the control, centered on it. */
+@utility touch-target {
+  position: relative;
+
+  @media (pointer: coarse) {
+    &::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: max(100%, var(--dt-target-touch));
+      height: max(100%, var(--dt-target-touch));
+      translate: -50% -50%;
+    }
+  }
+}
+
 @media print {
   /* Keep only the report and its ancestors, then release the app's scroll containers. */
   body:has(.timesheet-report)

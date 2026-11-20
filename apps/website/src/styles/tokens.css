@@ -192,6 +192,7 @@
   --dt-control-md: 36px; /* default buttons */
   --dt-control-lg: 40px; /* inputs */
   --dt-control-xl: 44px; /* auth forms (touch-friendly) */
+  --dt-target-touch: 44px; /* minimum hit area on touch screens (WCAG 2.5.5) */
   --dt-sidebar-width: 248px;
   --dt-board-column-width: 272px;
   --dt-card-min-width: 320px; /* project cards */

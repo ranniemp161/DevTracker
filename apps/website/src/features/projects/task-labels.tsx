@@ -91,7 +91,7 @@ export function TaskLabels({ task, onChanged }: { task: Task; onChanged: () => v
                   e.target.value &&
                   call(() => api(`/tasks/${task.id}/labels`, { body: { labelId: e.target.value } }))
                 }
-                className="h-8 w-full cursor-pointer rounded-control border border-dashed border-line-control bg-transparent px-2 text-label text-fg-muted hover:bg-surface-muted"
+                className="h-8 w-full cursor-pointer rounded-control pointer-coarse:h-11 border border-dashed border-line-control bg-transparent px-2 text-label text-fg-muted hover:bg-surface-muted"
               >
                 <option value="">Add a label…</option>
                 {available.map((l) => (
@@ -110,7 +110,7 @@ export function TaskLabels({ task, onChanged }: { task: Task; onChanged: () => v
                 placeholder="Label name"
                 maxLength={40}
                 aria-label="New label name"
-                className="h-8 w-full rounded-control border border-line-control bg-surface px-2.5 text-sm placeholder:text-fg-subtle focus-visible:border-primary"
+                className="h-8 w-full rounded-control border pointer-coarse:h-11 border-line-control bg-surface px-2.5 text-sm placeholder:text-fg-subtle focus-visible:border-primary"
               />
               <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Label color">
                 {LABEL_COLORS.map((c) => (

@@ -93,7 +93,7 @@ const buttonSizes = {
 };
 
 const buttonBase =
-  'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-control font-medium whitespace-nowrap transition-colors disabled:cursor-not-allowed disabled:border disabled:border-line disabled:bg-surface-muted disabled:text-fg-subtle';
+  'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-control font-medium whitespace-nowrap transition-colors pointer-coarse:min-h-11 disabled:cursor-not-allowed disabled:border disabled:border-line disabled:bg-surface-muted disabled:text-fg-subtle';
 
 export function Button({
   variant = 'secondary',
@@ -147,7 +147,7 @@ export function IconButton({
   return (
     <button
       type="button"
-      className={`inline-flex shrink-0 items-center justify-center rounded-control text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg disabled:cursor-not-allowed disabled:text-fg-subtle ${iconButtonSizes[size]} ${className}`}
+      className={`touch-target inline-flex shrink-0 items-center justify-center rounded-control text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg disabled:cursor-not-allowed disabled:text-fg-subtle ${iconButtonSizes[size]} ${className}`}
       {...props}
     />
   );

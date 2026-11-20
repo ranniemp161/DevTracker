@@ -457,7 +457,7 @@ function TaskEditor({
                       api(`/tasks/${task.id}/assignees`, { body: { userIds: [e.target.value] } }),
                     )
                   }
-                  className="h-8 w-full cursor-pointer appearance-none rounded-control border border-dashed border-line-control bg-transparent px-2.5 pr-7 text-label text-fg-muted hover:bg-surface-muted"
+                  className="h-8 w-full cursor-pointer appearance-none pointer-coarse:h-11 rounded-control border border-dashed border-line-control bg-transparent px-2.5 pr-7 text-label text-fg-muted hover:bg-surface-muted"
                 >
                   <option value="">Assign someone…</option>
                   {unassigned.map((m) => (
