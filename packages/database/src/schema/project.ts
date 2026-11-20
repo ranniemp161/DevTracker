@@ -69,6 +69,16 @@ export const projects = pgTable(
     /** 0016: public request form. The token is NULL until the form is first turned on. */
     intakeEnabled: boolean('intake_enabled').notNull().default(false),
     intakeToken: text('intake_token').unique('projects_intake_token_unique'),
+    /**
+     * 0014: GitHub events posted to the project's chat. Keys are validated by the API
+     * (CHAT_GITHUB_EVENTS in @devtrack/types).
+     */
+    chatGithubEvents: text('chat_github_events')
+      .array()
+      .notNull()
+      .default(
+        sql`ARRAY['pull_request.opened','pull_request.merged','review.changes_requested','release.published','checks.failed']::text[]`,
+      ),
 
     createdAt: timestamptz('created_at').notNull().defaultNow(),
     updatedAt: timestamptz('updated_at')

@@ -1,5 +1,5 @@
 {
-  "id": "cfd6f2d9-314d-4698-96b5-30f88ff6d243",
+  "id": "68095a28-a9e3-48cf-864f-41e3de14cf35",
   "prevId": "d455f7aa-cf05-4b18-ae4e-9ecb98387764",
   "version": "7",
   "dialect": "postgresql",
@@ -463,6 +463,19 @@
           "primaryKey": false,
           "notNull": true
         },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'user'"
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "attachment_name": {
           "name": "attachment_name",
           "type": "text",
@@ -647,7 +660,12 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "project_messages_kind_check": {
+          "name": "project_messages_kind_check",
+          "value": "\"project_messages\".\"kind\" IN ('user', 'github')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.activity_logs": {
@@ -3457,18 +3475,12 @@
           "notNull": true,
           "default": 1
         },
-        "intake_enabled": {
-          "name": "intake_enabled",
-          "type": "boolean",
+        "chat_github_events": {
+          "name": "chat_github_events",
+          "type": "text[]",
           "primaryKey": false,
           "notNull": true,
-          "default": false
-        },
-        "intake_token": {
-          "name": "intake_token",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
+          "default": "ARRAY['pull_request.opened','pull_request.merged','review.changes_requested','release.published','checks.failed']::text[]"
         },
         "created_at": {
           "name": "created_at",
@@ -3532,13 +3544,6 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "projects_intake_token_unique": {
-          "name": "projects_intake_token_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "intake_token"
-          ]
-        },
         "projects_workspace_key_unique": {
           "name": "projects_workspace_key_unique",
           "nullsNotDistinct": false,
@@ -3718,173 +3723,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.task_requests": {
-      "name": "task_requests",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "task_id": {
-          "name": "task_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'new'"
-        },
-        "reporter_name": {
-          "name": "reporter_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "reporter_email": {
-          "name": "reporter_email",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "contact_deleted_at": {
-          "name": "contact_deleted_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "triaged_by": {
-          "name": "triaged_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "triaged_at": {
-          "name": "triaged_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "task_requests_project_status_idx": {
-          "name": "task_requests_project_status_idx",
-          "columns": [
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "task_requests_task_id_tasks_id_fk": {
-          "name": "task_requests_task_id_tasks_id_fk",
-          "tableFrom": "task_requests",
-          "tableTo": "tasks",
-          "columnsFrom": [
-            "task_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "task_requests_project_id_projects_id_fk": {
-          "name": "task_requests_project_id_projects_id_fk",
-          "tableFrom": "task_requests",
-          "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "task_requests_triaged_by_users_id_fk": {
-          "name": "task_requests_triaged_by_users_id_fk",
-          "tableFrom": "task_requests",
-          "tableTo": "users",
-          "columnsFrom": [
-            "triaged_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "task_requests_task_unique": {
-          "name": "task_requests_task_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "task_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "task_requests_kind_check": {
-          "name": "task_requests_kind_check",
-          "value": "\"task_requests\".\"kind\" IN ('bug', 'request')"
-        },
-        "task_requests_status_check": {
-          "name": "task_requests_status_check",
-          "value": "\"task_requests\".\"status\" IN ('new', 'accepted', 'declined')"
-        }
-      },
       "isRLSEnabled": false
     },
     "public.tasks": {
@@ -4724,8 +4562,7 @@
         "PULL_REQUEST_OPENED",
         "PULL_REQUEST_MERGED",
         "PULL_REQUEST_REVIEWED",
-        "MILESTONE_COMPLETED",
-        "REQUEST_SUBMITTED"
+        "MILESTONE_COMPLETED"
       ]
     },
     "public.github_installation_status": {

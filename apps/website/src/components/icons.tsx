@@ -41,6 +41,15 @@ export const ChevronUpDownIcon = (p: IconProps) => (
     <path d="M8 9l4-4 4 4M8 15l4 4 4-4" />
   </Icon>
 );
+/** Pull request (path from design/screens/task-detail.html). */
+export const PullRequestIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="6" cy="6" r="2.5" />
+    <circle cx="6" cy="18" r="2.5" />
+    <circle cx="18" cy="18" r="2.5" />
+    <path d="M6 8.5v7M18 15.5V10a3 3 0 0 0-3-3h-4M13 4.5L10.5 7 13 9.5" />
+  </Icon>
+);
 export const ChevronRightIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="m9 6 6 6-6 6" />

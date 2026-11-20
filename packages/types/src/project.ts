@@ -1,4 +1,5 @@
 import type { ProjectIntake } from './request.js';
+import type { ChatGithubEvent } from './chat.js';
 /** Architecture §7.2 / §7.3 enums. */
 export const ProjectStatus = {
   PLANNING: 'PLANNING',
@@ -41,6 +42,8 @@ export interface Project {
   targetDate: string | null;
   createdBy: UserRef | null;
   memberCount: number;
+  /** GitHub events posted to the project's chat (decision record 0014). */
+  chatGithubEvents: ChatGithubEvent[];
   /** Real counts of the project's non-deleted tasks; never an estimate. */
   taskCounts: { total: number; done: number };
   /** Request form settings (0016); null unless the viewer can manage the project. */

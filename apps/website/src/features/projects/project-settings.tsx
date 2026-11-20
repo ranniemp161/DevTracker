@@ -1,6 +1,6 @@
 'use client';
 
-import type { ProjectIntake } from '@devtrack/types';
+import { CHAT_GITHUB_EVENTS, type ChatGithubEvent, type ProjectIntake } from '@devtrack/types';
 import { updateProjectSchema } from '@devtrack/validators';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -25,8 +25,90 @@ export function ProjectSettings() {
       <ProjectMembers />
       <ProjectRepositories />
       <RequestFormCard />
+      <ChatGithubCard />
       <ArchiveCard />
     </div>
+  );
+}
+
+const CHAT_GITHUB_EVENT_TEXT: Record<ChatGithubEvent, { label: string; hint: string }> = {
+  'pull_request.opened': { label: 'Pull request opened', hint: 'Also when one is reopened.' },
+  'pull_request.merged': { label: 'Pull request merged', hint: '' },
+  'pull_request.closed': { label: 'Pull request closed', hint: 'Closed without merging.' },
+  'review.changes_requested': { label: 'Changes requested', hint: 'A review asks for changes.' },
+  'review.approved': { label: 'Pull request approved', hint: '' },
+  'release.published': { label: 'Release published', hint: '' },
+  'checks.failed': { label: 'Checks failed', hint: 'CI fails on a pull request.' },
+};
+
+/** Which GitHub events post to this project's chat (decision record 0014). */
+function ChatGithubCard() {
+  const { project, reload } = useProject();
+  const [selected, setSelected] = useState<ChatGithubEvent[]>(project.chatGithubEvents ?? []);
+  const [state, setState] = useState<'idle' | 'saving' | 'saved' | { error: string }>('idle');
+  const dirty = [...selected].sort().join() !== [...(project.chatGithubEvents ?? [])].sort().join();
+
+  async function save() {
+    setState('saving');
+    try {
+      await api(`/projects/${project.id}`, {
+        method: 'PATCH',
+        body: { chatGithubEvents: selected },
+      });
+      setState('saved');
+      reload();
+    } catch (err) {
+      setState({ error: err instanceof ApiError ? err.message : 'Could not save.' });
+    }
+  }
+
+  return (
+    <SettingsSection
+      id="github-chat"
+      title="GitHub updates in chat"
+      description="Post these events from connected repositories to the project chat. They count as unread but never send phone notifications."
+    >
+      <fieldset className="max-w-md space-y-3">
+        <legend className="sr-only">Events to post</legend>
+        {CHAT_GITHUB_EVENTS.map((event) => (
+          <label key={event} className="flex items-start gap-2.5 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={selected.includes(event)}
+              onChange={(e) =>
+                setSelected((list) =>
+                  e.target.checked ? [...list, event] : list.filter((x) => x !== event),
+                )
+              }
+            />
+            <span>
+              <span className="block font-medium text-fg">
+                {CHAT_GITHUB_EVENT_TEXT[event].label}
+              </span>
+              {CHAT_GITHUB_EVENT_TEXT[event].hint ? (
+                <span className="block text-label text-fg-muted">
+                  {CHAT_GITHUB_EVENT_TEXT[event].hint}
+                </span>
+              ) : null}
+            </span>
+          </label>
+        ))}
+      </fieldset>
+      {typeof state === 'object' ? (
+        <div className="mt-4">
+          <Alert>{state.error}</Alert>
+        </div>
+      ) : null}
+      <div className="mt-4 flex items-center gap-3">
+        <Button variant="primary" disabled={!dirty} loading={state === 'saving'} onClick={save}>
+          Save
+        </Button>
+        {state === 'saved' && !dirty ? (
+          <span className="text-label text-status-done-fg">Saved.</span>
+        ) : null}
+      </div>
+    </SettingsSection>
   );
 }
 
