@@ -1,5 +1,6 @@
 const mediaPath = /^\/task-media\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const encoder = new TextEncoder();
+const privateHeaders = { 'Cache-Control': 'private, no-store' };
 
 async function authorized(url, secret) {
   const expires = url.searchParams.get('expires') ?? '';
@@ -35,58 +36,56 @@ function readRange(header, size) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    const privateHeaders = { 'Cache-Control': 'private, no-store' };
     if (request.method !== 'GET')
       return new Response(null, { status: 405, headers: privateHeaders });
     if (!mediaPath.test(url.pathname) || !(await authorized(url, env.TASK_MEDIA_CDN_SECRET))) {
       return new Response(null, { status: 404, headers: privateHeaders });
     }
 
-    const key = url.pathname.slice(1);
     const rangeHeader = request.headers.get('Range');
-    const cacheKey = new Request(new URL(url.pathname, url.origin));
-    const cached = rangeHeader ? null : await caches.default.match(cacheKey);
-    if (cached) {
-      const headers = new Headers(cached.headers);
-      headers.set('Cache-Control', privateHeaders['Cache-Control']);
-      return new Response(cached.body, { headers });
-    }
-
-    let range;
-    if (rangeHeader) {
-      const head = await env.TASK_MEDIA.head(key);
-      if (!head) return new Response(null, { status: 404, headers: privateHeaders });
-      range = readRange(rangeHeader, head.size);
-      if (!range)
-        return new Response(null, {
-          status: 416,
-          headers: { ...privateHeaders, 'Content-Range': `bytes */${head.size}` },
-        });
-    }
-    const object = await env.TASK_MEDIA.get(key, range ? { range } : undefined);
-    if (!object) return new Response(null, { status: 404, headers: privateHeaders });
-
-    const headers = new Headers(privateHeaders);
-    headers.set('Content-Type', object.httpMetadata?.contentType ?? 'application/octet-stream');
-    headers.set('X-Content-Type-Options', 'nosniff');
-    headers.set('Referrer-Policy', 'no-referrer');
-    headers.set('Accept-Ranges', 'bytes');
-    headers.set('Content-Length', String(range?.length ?? object.size));
-    if (range) {
-      headers.set(
-        'Content-Range',
-        `bytes ${range.offset}-${range.offset + range.length - 1}/${object.size}`,
-      );
-      return new Response(object.body, { status: 206, headers });
-    }
-
-    const response = new Response(object.body, { headers });
-    if (headers.get('Content-Type').startsWith('image/')) {
-      const edgeHeaders = new Headers(headers);
-      edgeHeaders.set('Cache-Control', 'public, max-age=3600');
-      const edgeResponse = new Response(response.clone().body, { headers: edgeHeaders });
-      ctx.waitUntil(caches.default.put(cacheKey, edgeResponse));
-    }
-    return response;
+    const response = rangeHeader
+      ? await readMedia(url.pathname, env.TASK_MEDIA, rangeHeader)
+      : await ctx.exports.CachedMedia.fetch(new Request(new URL(url.pathname, url.origin)));
+    const headers = new Headers(response.headers);
+    headers.set('Cache-Control', privateHeaders['Cache-Control']);
+    return new Response(response.body, { status: response.status, headers });
   },
 };
+
+export async function readMedia(pathname, bucket, rangeHeader) {
+  if (!mediaPath.test(pathname))
+    return new Response(null, { status: 404, headers: privateHeaders });
+  const key = pathname.slice(1);
+  let range;
+  if (rangeHeader) {
+    const head = await bucket.head(key);
+    if (!head) return new Response(null, { status: 404, headers: privateHeaders });
+    range = readRange(rangeHeader, head.size);
+    if (!range)
+      return new Response(null, {
+        status: 416,
+        headers: { ...privateHeaders, 'Content-Range': `bytes */${head.size}` },
+      });
+  }
+  const object = await bucket.get(key, range ? { range } : undefined);
+  if (!object) return new Response(null, { status: 404, headers: privateHeaders });
+
+  const headers = new Headers(privateHeaders);
+  headers.set('Content-Type', object.httpMetadata?.contentType ?? 'application/octet-stream');
+  headers.set('X-Content-Type-Options', 'nosniff');
+  headers.set('Referrer-Policy', 'no-referrer');
+  headers.set('Accept-Ranges', 'bytes');
+  headers.set('Content-Length', String(range?.length ?? object.size));
+  if (range) {
+    headers.set(
+      'Content-Range',
+      `bytes ${range.offset}-${range.offset + range.length - 1}/${object.size}`,
+    );
+    return new Response(object.body, { status: 206, headers });
+  }
+
+  if (headers.get('Content-Type').startsWith('image/')) {
+    headers.set('Cache-Control', 'public, max-age=3600');
+  }
+  return new Response(object.body, { headers });
+}

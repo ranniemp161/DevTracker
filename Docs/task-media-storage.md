@@ -11,9 +11,9 @@ Task attachments accept PNG, JPEG, GIF, WebP, MP4, WebM, and MOV up to 50 MiB. T
 
 ## Optional Cloudflare CDN delivery
 
-R2 signed GET URLs work with the private bucket. To enable CDN delivery, configure the Worker in [infra/task-media](../infra/task-media). Set its `TASK_MEDIA` R2 binding to the same private bucket, add a dedicated HTTPS custom domain, and provision `TASK_MEDIA_CDN_SECRET` as a Worker secret. Set the identical secret and the Worker origin as `TASK_MEDIA_CDN_ORIGIN` on the API. Use a randomly generated secret with at least 32 bytes of entropy.
+R2 signed GET URLs work with the private bucket. To enable CDN delivery, deploy the Worker in [infra/task-media](../infra/task-media) to its `workers.dev` hostname. Set its `TASK_MEDIA` R2 binding to the same private bucket and provision `TASK_MEDIA_CDN_SECRET` as a Worker secret. Set the identical secret and the deployed Worker origin as `TASK_MEDIA_CDN_ORIGIN` on the API. Use a randomly generated secret with at least 32 bytes of entropy.
 
-The Worker validates every media URL before reading its edge cache. Full image responses can be cached at the edge, while video range reads stream from R2. Browser responses use `private, no-store`. Both delivery modes issue bearer URLs valid for up to 15 minutes. Users can refresh expired links from the task.
+The public Worker entrypoint validates every media URL before calling its internal cached entrypoint. Full image responses can be cached at the edge, while video range reads stream from R2. Browser responses use `private, no-store`. Both delivery modes issue bearer URLs valid for up to 15 minutes. Users can refresh expired links from the task.
 
 ## Project chat Markdown files
 
