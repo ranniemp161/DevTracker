@@ -22,7 +22,7 @@ import { useRealtimeRefresh } from '@/lib/realtime';
 import { LabelChip } from './label-chip';
 import { formatDate, TASK_STATUS_LABEL } from './labels';
 import { useProject } from './project-context';
-import { FilterSelect, TaskFilterBar, useTaskFilters } from './task-filters';
+import { FilterMenu, TaskFilterBar, useTaskFilters } from './task-filters';
 import {
   groupByStatus,
   isListUpdating,
@@ -210,14 +210,13 @@ export function TaskList() {
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
         <TaskFilterBar workspaceId={project.workspaceId} projectId={project.id} members={members} />
-        <FilterSelect
+        <FilterMenu
           label="Group by"
+          emptyLabel="None"
           value={grouping === 'status' ? 'status' : ''}
           onChange={setGrouping}
-        >
-          <option value="">Group by: none</option>
-          <option value="status">Group by: status</option>
-        </FilterSelect>
+          options={[{ value: 'status', label: 'Status' }]}
+        />
         {rows ? (
           <p
             role="status"

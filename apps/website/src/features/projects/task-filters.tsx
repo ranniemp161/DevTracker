@@ -10,7 +10,9 @@ import {
 import { TASK_SEARCH_MAX_LENGTH } from '@devtrack/validators';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from 'react';
-import { ChevronDownIcon, SearchIcon } from '@/components/icons';
+import { ChevronDownIcon, SearchIcon, XIcon } from '@/components/icons';
+import { Menu, MenuItem } from '@/components/menu';
+import { Avatar, PriorityIcon, StatusDot } from '@/components/ui';
 import { useApiQuery } from '@/lib/use-api-query';
 import { PRIORITY_LABEL, TASK_STATUS_LABEL } from './labels';
 import type { TaskFilters } from './task-filter-match';
@@ -147,6 +149,90 @@ export function FilterSelect({
   );
 }
 
+export interface FilterOption {
+  value: string;
+  label: string;
+  icon?: ReactNode;
+}
+
+/**
+ * Toolbar filter (SPEC §4 FilterChip): shows the field name when off, and "Field: value"
+ * with a clear (×) button when on. Opens the shared Menu to pick a value.
+ */
+export function FilterMenu({
+  label,
+  value,
+  options,
+  onChange,
+  emptyLabel = 'Any',
+}: {
+  label: string;
+  value: string;
+  options: FilterOption[];
+  onChange: (value: string) => void;
+  /** Name of the "no filter" choice. */
+  emptyLabel?: string;
+}) {
+  const current = options.find((o) => o.value === value);
+  const active = Boolean(value);
+  return (
+    <div
+      className={`inline-flex items-center rounded-control border transition-colors ${
+        active
+          ? 'border-fg bg-fg text-fg-on-inverse'
+          : 'border-line-control bg-surface text-fg-secondary hover:bg-surface-sunken'
+      }`}
+    >
+      <Menu
+        label={label}
+        triggerProps={{
+          'aria-label': active
+            ? `${label}: ${current?.label ?? value}. Change`
+            : `Filter by ${label.toLowerCase()}`,
+        }}
+        triggerClassName="inline-flex h-7.5 items-center gap-1.5 rounded-control px-2.5 text-label font-medium pointer-coarse:h-11"
+        menuClassName="w-56"
+        trigger={
+          active ? (
+            <>
+              {label}: {current?.label ?? '…'}
+            </>
+          ) : (
+            <>
+              {label}
+              <ChevronDownIcon size={14} className="text-fg-subtle" />
+            </>
+          )
+        }
+      >
+        <MenuItem checked={!active} onSelect={() => onChange('')}>
+          {emptyLabel}
+        </MenuItem>
+        {options.map((o) => (
+          <MenuItem
+            key={o.value}
+            checked={o.value === value}
+            icon={o.icon}
+            onSelect={() => onChange(o.value)}
+          >
+            {o.label}
+          </MenuItem>
+        ))}
+      </Menu>
+      {active ? (
+        <button
+          type="button"
+          aria-label={`Clear ${label.toLowerCase()} filter`}
+          onClick={() => onChange('')}
+          className="touch-target -ml-1 inline-flex h-7.5 items-center rounded-control pr-2 pl-1 opacity-80 hover:opacity-100 pointer-coarse:h-11"
+        >
+          <XIcon size={12} />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 export function TaskFilterBar({
   workspaceId,
   projectId,
@@ -195,75 +281,78 @@ export function TaskFilterBar({
         id={panelId}
         className={`contents ${expanded ? 'max-lg:flex max-lg:w-full max-lg:flex-wrap max-lg:gap-2' : 'max-lg:hidden'}`}
       >
-        <FilterSelect
+        <FilterMenu
           label="Status"
           value={filters.status}
           onChange={(v) => setFilter('status', v)}
-        >
-          <option value="">Status: all</option>
-          {TASK_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {TASK_STATUS_LABEL[s]}
-            </option>
-          ))}
-        </FilterSelect>
-
-        <FilterSelect
+          options={TASK_STATUSES.map((st) => ({
+            value: st,
+            label: TASK_STATUS_LABEL[st],
+            icon: <StatusDot status={st} />,
+          }))}
+        />
+        <FilterMenu
           label="Priority"
           value={filters.priority}
           onChange={(v) => setFilter('priority', v)}
-        >
-          <option value="">Priority: all</option>
-          {TASK_PRIORITIES.map((p) => (
-            <option key={p} value={p}>
-              {PRIORITY_LABEL[p]}
-            </option>
-          ))}
-        </FilterSelect>
-
-        <FilterSelect
+          options={TASK_PRIORITIES.map((pr) => ({
+            value: pr,
+            label: PRIORITY_LABEL[pr],
+            icon: <PriorityIcon priority={pr} showLabel={false} />,
+          }))}
+        />
+        <FilterMenu
           label="Assignee"
           value={filters.assigneeId}
           onChange={(v) => setFilter('assigneeId', v)}
-        >
-          <option value="">Assignee: all</option>
-          <option value="unassigned">Unassigned</option>
-          {members.map((m) => (
-            <option key={m.user.id} value={m.user.id}>
-              @{m.user.username}
-            </option>
-          ))}
-        </FilterSelect>
-
+          options={[
+            {
+              value: 'unassigned',
+              label: 'Unassigned',
+              icon: (
+                <span
+                  aria-hidden="true"
+                  className="size-5 shrink-0 rounded-full border border-dashed border-line-control"
+                />
+              ),
+            },
+            ...members.map((m) => ({
+              value: m.user.id,
+              label: `@${m.user.username}`,
+              icon: (
+                <Avatar name={m.user.username} url={m.user.avatarUrl} seed={m.user.id} size="xs" />
+              ),
+            })),
+          ]}
+        />
         {labels.length > 0 ? (
-          <FilterSelect
+          <FilterMenu
             label="Label"
             value={filters.labelId}
             onChange={(v) => setFilter('labelId', v)}
-          >
-            <option value="">Label: all</option>
-            {labels.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name}
-              </option>
-            ))}
-          </FilterSelect>
+            options={labels.map((l) => ({
+              value: l.id,
+              label: l.name,
+              icon: (
+                <span
+                  aria-hidden="true"
+                  className="size-2 shrink-0 rounded-xs"
+                  style={{ backgroundColor: l.color }}
+                />
+              ),
+            }))}
+          />
         ) : null}
-
         {milestones.length > 0 || filters.milestoneId ? (
-          <FilterSelect
+          <FilterMenu
             label="Milestone"
             value={filters.milestoneId}
             onChange={(v) => setFilter('milestoneId', v)}
-          >
-            <option value="">Milestone: all</option>
-            <option value="none">No milestone</option>
-            {milestones.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </FilterSelect>
+            options={[
+              { value: 'none', label: 'No milestone' },
+              ...milestones.map((m) => ({ value: m.id, label: m.name })),
+            ]}
+          />
         ) : null}
 
         {hasActiveFilters ? (
