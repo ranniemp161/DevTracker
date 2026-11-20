@@ -54,7 +54,7 @@ export function PageHeader({
                     {crumb.href ? (
                       <Link
                         href={crumb.href}
-                        className="rounded-chip hover:text-fg hover:underline"
+                        className="touch-target rounded-chip hover:text-fg hover:underline"
                       >
                         {crumb.label}
                       </Link>

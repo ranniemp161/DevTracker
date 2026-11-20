@@ -131,16 +131,19 @@ export function Board() {
           </Button>
         )}
       </HeaderActions>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
+      <div className="flex flex-wrap items-start justify-between gap-2 border-b border-line pb-3 lg:items-center lg:gap-3">
         <TaskFilterBar workspaceId={project.workspaceId} projectId={project.id} members={members} />
         <Button variant="ghost" size="sm" onClick={reload}>
           Refresh
         </Button>
       </div>
       {dropError ? <Alert>{dropError}</Alert> : null}
-      {/* Under 1024px only one or two lanes fit, so offer a jump list with counts. */}
-      <nav aria-label="Board columns" className="lg:hidden">
-        <ul className="flex flex-wrap gap-1.5">
+      {/* Under 1024px only one or two lanes fit, so offer a jump list with counts (one scrolling row). */}
+      <nav
+        aria-label="Board columns"
+        className="-mx-4 overflow-x-auto px-4 sm:-mx-7 sm:px-7 lg:hidden"
+      >
+        <ul className="flex w-max gap-1.5 pb-1">
           {TASK_STATUSES.map((status) => {
             const count = tasks.filter(
               (t) => t.status === status && filterTask(t, filters, project.key),
