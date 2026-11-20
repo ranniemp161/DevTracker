@@ -1,8 +1,13 @@
 {
   "name": "devtrack-task-media",
-  "main": "worker.mjs",
+  "main": "edge.mjs",
   "compatibility_date": "2026-11-20",
-  "workers_dev": false,
+  "workers_dev": true,
   "preview_urls": false,
-  "r2_buckets": [{ "binding": "TASK_MEDIA", "bucket_name": "devtrack-task-media" }],
+  "r2_buckets": [{ "binding": "TASK_MEDIA", "bucket_name": "devtracker" }],
+  "cache": { "enabled": true },
+  "exports": {
+    "default": { "type": "worker", "cache": { "enabled": false } },
+    "CachedMedia": { "type": "worker", "cache": { "enabled": true } },
+  },
 }
