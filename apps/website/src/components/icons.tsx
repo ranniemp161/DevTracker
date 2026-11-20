@@ -28,6 +28,12 @@ export const ChevronDownIcon = (p: IconProps) => (
     <path d="m6 9 6 6 6-6" />
   </Icon>
 );
+/** Up/down chevrons for switchers (path from design/screens/board.html). */
+export const ChevronUpDownIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M8 9l4-4 4 4M8 15l4 4 4-4" />
+  </Icon>
+);
 export const ChevronRightIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="m9 6 6 6-6 6" />

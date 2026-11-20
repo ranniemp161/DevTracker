@@ -30,11 +30,7 @@ import {
 import { ToastProvider } from '@/components/toaster';
 import { Alert, Avatar, Button, IconButton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
-import {
-  CHOOSE_WORKSPACE_PARAM,
-  forgetLastWorkspace,
-  rememberLastWorkspace,
-} from '@/lib/last-workspace';
+import { forgetLastWorkspace, rememberLastWorkspace } from '@/lib/last-workspace';
 import { RealtimeProvider, useRealtimeRefresh, type RealtimeEvent } from '@/lib/realtime';
 import { useApiQuery } from '@/lib/use-api-query';
 import { NotificationBell } from '../collaboration/notification-bell';
@@ -185,9 +181,6 @@ function VerifiedFrame({ session, children }: { session: Session; children: Reac
       projects={projects.data ?? []}
       chatUnread={chatUnread.data ?? []}
       currentProjectId={isProjectRoute ? (params.id ?? null) : null}
-      onWorkspaceChange={(id) =>
-        router.push(id ? `/workspaces/${id}` : `/?${CHOOSE_WORKSPACE_PARAM}`)
-      }
       onLogout={() => signOut(router)}
       onNavigate={closeDrawer}
       showBell={showBell}

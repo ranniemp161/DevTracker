@@ -8,14 +8,13 @@ import type {
 } from '@devtrack/types';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Suspense, useState, type ReactNode } from 'react';
 import {
   ActivityIcon,
   BoardIcon,
   CalendarIcon,
   ChatIcon,
-  CheckIcon,
-  ChevronDownIcon,
+  ChevronUpDownIcon,
   DevtrackMark,
   FlagIcon,
   FolderIcon,
@@ -26,10 +25,12 @@ import {
   SettingsIcon,
   UsersIcon,
 } from '@/components/icons';
-import { Avatar, avatarTone, IconButton } from '@/components/ui';
+import { Menu, MenuGroup, MenuItem, MenuLink, MenuSeparator } from '@/components/menu';
+import { Avatar, avatarTone } from '@/components/ui';
+import { CHOOSE_WORKSPACE_PARAM } from '@/lib/last-workspace';
 import { applyThemeChoice, readThemeChoice, THEME_CHOICES, type ThemeChoice } from '@/lib/theme';
 import { NotificationBell } from '../collaboration/notification-bell';
-import { isAdmin } from '../workspaces/permissions';
+import { isAdmin, ROLE_LABEL } from '../workspaces/permissions';
 
 const navItemBase = 'flex items-center gap-2.5 rounded-control px-2.5 text-sm transition-colors';
 const navItemIdle = 'text-fg-secondary hover:bg-surface-muted';
@@ -73,7 +74,6 @@ export interface SidebarProps {
   projects: Project[];
   chatUnread: ProjectChatUnreadSummary[];
   currentProjectId: string | null;
-  onWorkspaceChange: (workspaceId: string) => void;
   onLogout: () => void;
   /** Closes the mobile drawer after a navigation. */
   onNavigate?: () => void;
@@ -88,7 +88,6 @@ export function Sidebar({
   projects,
   chatUnread,
   currentProjectId,
-  onWorkspaceChange,
   onLogout,
   onNavigate,
   showBell,
@@ -100,26 +99,7 @@ export function Sidebar({
   return (
     <nav aria-label="Primary" className="flex h-full min-h-0 flex-col gap-4 px-2.5 py-3">
       <div className="flex items-center gap-1">
-        <label className="relative flex h-10 min-w-0 flex-1 items-center gap-2.5 rounded-control px-2 hover:bg-surface-muted focus-within:bg-surface-muted">
-          <DevtrackMark size={24} />
-          <span className="sr-only">Workspace</span>
-          <select
-            value={active ? active.id : ''}
-            onChange={(e) => onWorkspaceChange(e.target.value)}
-            className="min-w-0 flex-1 cursor-pointer appearance-none truncate bg-transparent pr-5 text-sm font-semibold text-fg focus-visible:shadow-none"
-          >
-            <option value="">All workspaces</option>
-            {workspaces.map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.name}
-              </option>
-            ))}
-          </select>
-          <ChevronDownIcon
-            size={14}
-            className="pointer-events-none absolute right-2 text-fg-subtle"
-          />
-        </label>
+        <WorkspaceSwitcher workspaces={workspaces} active={active} onNavigate={onNavigate} />
         {showBell ? <NotificationBell /> : null}
       </div>
 
@@ -226,6 +206,68 @@ export function Sidebar({
   );
 }
 
+/** Workspace switcher (SPEC §5): logo, current workspace and up/down chevrons, opening a menu. */
+function WorkspaceSwitcher({
+  workspaces,
+  active,
+  onNavigate,
+}: {
+  workspaces: WorkspaceSummary[];
+  active: WorkspaceSummary | undefined;
+  onNavigate?: () => void;
+}) {
+  return (
+    <Menu
+      label="Switch workspace"
+      triggerProps={{ title: active?.name }}
+      triggerClassName="flex h-10 min-w-0 flex-1 items-center gap-2.5 rounded-control px-2 text-left transition-colors hover:bg-surface-muted aria-expanded:bg-surface-muted"
+      menuClassName="w-72"
+      trigger={
+        <>
+          <DevtrackMark size={24} />
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-fg">
+            {active?.name ?? 'All workspaces'}
+          </span>
+          <ChevronUpDownIcon size={16} className="shrink-0 text-fg-subtle" />
+        </>
+      }
+    >
+      <MenuGroup label="Workspaces">
+        {workspaces.map((w) => (
+          <MenuLink
+            key={w.id}
+            href={`/workspaces/${w.id}`}
+            current={w.id === active?.id}
+            onNavigate={onNavigate}
+            icon={
+              <span
+                aria-hidden="true"
+                className={`flex size-7 shrink-0 items-center justify-center rounded-control text-xs font-semibold uppercase ${avatarTone(w.id)}`}
+              >
+                {Array.from(w.name.trim())[0] ?? 'W'}
+              </span>
+            }
+          >
+            <span className="block text-sm font-medium text-fg">{w.name}</span>
+            <span className="block text-xs text-fg-muted">{ROLE_LABEL[w.role]}</span>
+          </MenuLink>
+        ))}
+      </MenuGroup>
+      <MenuSeparator />
+      <MenuLink
+        href={`/?${CHOOSE_WORKSPACE_PARAM}`}
+        onNavigate={onNavigate}
+        icon={<FolderIcon size={16} />}
+      >
+        All workspaces
+      </MenuLink>
+      <MenuLink href="/workspaces/new" onNavigate={onNavigate} icon={<PlusIcon size={16} />}>
+        New workspace
+      </MenuLink>
+    </Menu>
+  );
+}
+
 function ProjectSubNav({
   project,
   pathname,
@@ -286,75 +328,38 @@ function ProjectSubNav({
 }
 
 function UserRow({ user, onLogout }: { user: PublicUser; onLogout: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [theme, setTheme] = useState<ThemeChoice>('system');
-  const root = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onClick = (e: MouseEvent) => {
-      if (root.current && !root.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
-    document.addEventListener('mousedown', onClick);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onClick);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
+  // The choice lives in localStorage, which the server can't see: read it on the client.
+  // The sidebar renders only in the browser (after the session loads), so this is safe.
+  const [theme, setTheme] = useState<ThemeChoice>(readThemeChoice);
 
   return (
-    <div ref={root} className="relative flex items-center gap-2.5 border-t border-line px-2 pt-3">
+    <div className="flex items-center gap-2.5 border-t border-line px-2 pt-3">
       <Avatar name={user.username} url={user.avatarUrl} seed={user.id} size="sm" />
       <span className="min-w-0 flex-1 truncate text-sm text-fg-secondary">@{user.username}</span>
-      <IconButton
-        aria-label="Account menu"
-        aria-expanded={open}
-        aria-haspopup="menu"
-        onClick={() => {
-          // Read on open: the choice lives in localStorage, which the server can't see.
-          if (!open) setTheme(readThemeChoice());
-          setOpen((o) => !o);
-        }}
+      <Menu
+        label="Account"
+        align="end"
+        triggerProps={{ 'aria-label': 'Account menu' }}
+        triggerClassName="touch-target inline-flex size-8 shrink-0 items-center justify-center rounded-control text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg aria-expanded:bg-surface-muted"
+        trigger={<MoreIcon size={16} />}
       >
-        <MoreIcon size={16} />
-      </IconButton>
-      {open ? (
-        <div
-          role="menu"
-          className="absolute right-2 bottom-full z-30 mb-1 w-44 rounded-card border border-line bg-surface p-1 shadow-overlay"
-        >
-          <div role="group" aria-label="Theme">
-            <p className="px-2.5 pt-1.5 pb-1 text-xs font-medium text-fg-muted">Theme</p>
-            {THEME_CHOICES.map((c) => (
-              <button
-                key={c.value}
-                type="button"
-                role="menuitemradio"
-                aria-checked={theme === c.value}
-                onClick={() => {
-                  applyThemeChoice(c.value);
-                  setTheme(c.value);
-                }}
-                className="flex h-8 w-full items-center justify-between rounded-control pointer-coarse:h-11 px-2.5 text-left text-sm text-fg-secondary hover:bg-surface-muted"
-              >
-                {c.label}
-                {theme === c.value ? <CheckIcon size={14} className="text-primary" /> : null}
-              </button>
-            ))}
-          </div>
-          <div role="separator" className="my-1 border-t border-line-subtle" />
-          <button
-            type="button"
-            role="menuitem"
-            onClick={onLogout}
-            className="flex h-8 w-full items-center rounded-control pointer-coarse:h-11 px-2.5 text-left text-sm text-fg-secondary hover:bg-surface-muted"
-          >
-            Sign out
-          </button>
-        </div>
-      ) : null}
+        <MenuGroup label="Theme">
+          {THEME_CHOICES.map((c) => (
+            <MenuItem
+              key={c.value}
+              checked={theme === c.value}
+              onSelect={() => {
+                applyThemeChoice(c.value);
+                setTheme(c.value);
+              }}
+            >
+              {c.label}
+            </MenuItem>
+          ))}
+        </MenuGroup>
+        <MenuSeparator />
+        <MenuItem onSelect={onLogout}>Sign out</MenuItem>
+      </Menu>
     </div>
   );
 }
