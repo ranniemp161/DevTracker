@@ -18,6 +18,7 @@ import {
   DevtrackMark,
   FlagIcon,
   FolderIcon,
+  InboxIcon,
   MyTasksIcon,
   ListIcon,
   MoreIcon,
@@ -288,6 +289,17 @@ function ProjectSubNav({
     { href: `${base}/milestones`, label: 'Milestones', icon: <FlagIcon size={16} /> },
     { href: `${base}/timesheet`, label: 'Timesheet', icon: <CalendarIcon size={16} /> },
     { href: `${base}/activity`, label: 'Activity', icon: <ActivityIcon size={16} /> },
+    // Request form triage (0016); hidden on archived projects, which are read-only.
+    ...(project.status === 'ARCHIVED'
+      ? []
+      : [
+          {
+            href: `${base}/triage`,
+            label: 'Triage',
+            icon: <InboxIcon size={16} />,
+            count: project.newRequestCount,
+          },
+        ]),
     // Members stay reachable for everyone; admins get the full settings page.
     ...(project.viewerCanManage
       ? [{ href: `${base}/settings`, label: 'Settings', icon: <SettingsIcon size={16} /> }]

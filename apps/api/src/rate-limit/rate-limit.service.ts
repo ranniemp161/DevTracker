@@ -33,6 +33,9 @@ export const RATE_LIMITS = {
   commentCreatePerUser: { name: 'comment-create:user', limit: 60, windowSeconds: 600 },
   taskCreatePerUser: { name: 'task-create:user', limit: 600, windowSeconds: 3600 },
   invitationAcceptPerUser: { name: 'invite-accept:user', limit: 20, windowSeconds: 900 },
+  // 0016: public request forms.
+  requestSubmitPerIp: { name: 'request-submit:ip', limit: 5, windowSeconds: 3600 },
+  requestSubmitPerForm: { name: 'request-submit:form', limit: 100, windowSeconds: 86400 },
 } as const satisfies Record<string, RateLimitRule>;
 
 /**

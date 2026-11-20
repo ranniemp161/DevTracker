@@ -30,6 +30,7 @@ const VIEW_LABEL: Record<string, string> = {
   '/milestones': 'Milestones',
   '/timesheet': 'Timesheet',
   '/activity': 'Activity',
+  '/triage': 'Triage',
   '/settings': 'Settings',
   '/members': 'Members',
 };

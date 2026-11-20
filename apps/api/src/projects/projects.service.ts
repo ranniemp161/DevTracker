@@ -9,6 +9,7 @@ import {
   projects,
   sql,
   taskAssignees,
+  taskRequests,
   tasks,
   users,
   workspaceMembers,
@@ -29,6 +30,8 @@ const memberCount = sql<number>`(select count(*)::int from ${projectMembers} whe
 /** Real counts of the project's live (non-deleted) tasks; shown as progress (SPEC R3). */
 const taskTotal = sql<number>`(select count(*)::int from ${tasks} where ${tasks.projectId} = ${projects.id} and ${tasks.deletedAt} is null)`;
 const taskDone = sql<number>`(select count(*)::int from ${tasks} where ${tasks.projectId} = ${projects.id} and ${tasks.deletedAt} is null and ${tasks.status} = 'DONE')`;
+/** Untriaged public-form requests (0016). */
+const newRequestCount = sql<number>`(select count(*)::int from ${taskRequests} where ${taskRequests.projectId} = ${projects.id} and ${taskRequests.status} = 'new')`;
 const creatorColumns = { id: users.id, username: users.username, avatarUrl: users.avatarUrl };
 
 @Injectable()
@@ -101,16 +104,27 @@ export class ProjectsService {
       );
     }
     const rows = await this.db
-      .select({ project: projects, creator: creatorColumns, memberCount, taskTotal, taskDone })
+      .select({
+        project: projects,
+        creator: creatorColumns,
+        memberCount,
+        taskTotal,
+        taskDone,
+        newRequestCount,
+      })
       .from(projects)
       .leftJoin(users, eq(users.id, projects.createdBy))
       .where(and(...conditions))
       .orderBy(asc(projects.name));
     return rows.map((r) =>
-      toProject(r.project, r.creator, r.memberCount, canManage, {
-        total: r.taskTotal,
-        done: r.taskDone,
-      }),
+      toProject(
+        r.project,
+        r.creator,
+        r.memberCount,
+        canManage,
+        { total: r.taskTotal, done: r.taskDone },
+        r.newRequestCount,
+      ),
     );
   }
 
@@ -281,14 +295,25 @@ export class ProjectsService {
 
   private async load(projectId: string, canManage: boolean): Promise<Project> {
     const [row] = await this.db
-      .select({ project: projects, creator: creatorColumns, memberCount, taskTotal, taskDone })
+      .select({
+        project: projects,
+        creator: creatorColumns,
+        memberCount,
+        taskTotal,
+        taskDone,
+        newRequestCount,
+      })
       .from(projects)
       .leftJoin(users, eq(users.id, projects.createdBy))
       .where(eq(projects.id, projectId));
-    return toProject(row!.project, row!.creator, row!.memberCount, canManage, {
-      total: row!.taskTotal,
-      done: row!.taskDone,
-    });
+    return toProject(
+      row!.project,
+      row!.creator,
+      row!.memberCount,
+      canManage,
+      { total: row!.taskTotal, done: row!.taskDone },
+      row!.newRequestCount,
+    );
   }
 }
 
@@ -298,6 +323,7 @@ function toProject(
   memberCount: number,
   canManage: boolean,
   taskCounts: Project['taskCounts'],
+  requestCount: number,
 ): Project {
   return {
     id: p.id,
@@ -311,6 +337,10 @@ function toProject(
     createdBy: creator,
     memberCount,
     taskCounts,
+    intake: canManage
+      ? { enabled: p.intakeEnabled, token: p.intakeEnabled ? p.intakeToken : null }
+      : null,
+    newRequestCount: requestCount,
     viewerCanManage: canManage,
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),

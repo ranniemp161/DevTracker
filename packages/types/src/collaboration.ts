@@ -69,6 +69,7 @@ export const NOTIFICATION_TYPES = [
   'PULL_REQUEST_MERGED',
   'PULL_REQUEST_REVIEWED',
   'MILESTONE_COMPLETED',
+  'REQUEST_SUBMITTED',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 

@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  boolean,
   check,
   type AnyPgColumn,
   date,
@@ -65,6 +66,9 @@ export const projects = pgTable(
      * in the message-creation transaction; sequences are strictly linear and monotonic.
      */
     nextMessageSequence: integer('next_message_sequence').notNull().default(1),
+    /** 0016: public request form. The token is NULL until the form is first turned on. */
+    intakeEnabled: boolean('intake_enabled').notNull().default(false),
+    intakeToken: text('intake_token').unique('projects_intake_token_unique'),
 
     createdAt: timestamptz('created_at').notNull().defaultNow(),
     updatedAt: timestamptz('updated_at')
@@ -280,4 +284,35 @@ export const milestoneCriteria = pgTable(
       .$onUpdate(() => new Date()),
   },
   (t) => [index('milestone_criteria_milestone_id_idx').on(t.milestoneId, t.position)],
+);
+
+/**
+ * 0016: a submission from a project's public request form. The task it created holds the
+ * title and description; reporter contact details live only here and are deleted on schedule.
+ */
+export const taskRequests = pgTable(
+  'task_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    taskId: uuid('task_id')
+      .notNull()
+      .unique('task_requests_task_unique')
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    status: text('status').notNull().default('new'),
+    reporterName: text('reporter_name'),
+    reporterEmail: text('reporter_email'),
+    contactDeletedAt: timestamptz('contact_deleted_at'),
+    triagedBy: uuid('triaged_by').references(() => users.id, { onDelete: 'set null' }),
+    triagedAt: timestamptz('triaged_at'),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    index('task_requests_project_status_idx').on(t.projectId, t.status, t.createdAt),
+    check('task_requests_kind_check', sql`${t.kind} IN ('bug', 'request')`),
+    check('task_requests_status_check', sql`${t.status} IN ('new', 'accepted', 'declined')`),
+  ],
 );

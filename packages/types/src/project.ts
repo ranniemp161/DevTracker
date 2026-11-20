@@ -1,3 +1,4 @@
+import type { ProjectIntake } from './request.js';
 /** Architecture §7.2 / §7.3 enums. */
 export const ProjectStatus = {
   PLANNING: 'PLANNING',
@@ -42,6 +43,10 @@ export interface Project {
   memberCount: number;
   /** Real counts of the project's non-deleted tasks; never an estimate. */
   taskCounts: { total: number; done: number };
+  /** Request form settings (0016); null unless the viewer can manage the project. */
+  intake: ProjectIntake | null;
+  /** Untriaged requests from the public form (0016). */
+  newRequestCount: number;
   /** True for workspace Owners/Admins: may edit, archive and manage members. */
   viewerCanManage: boolean;
   createdAt: string;

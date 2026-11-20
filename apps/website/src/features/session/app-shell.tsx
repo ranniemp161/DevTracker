@@ -20,6 +20,7 @@ import {
   DevtrackMark,
   FlagIcon,
   FolderIcon,
+  InboxIcon,
   ListIcon,
   MoreIcon,
   MyTasksIcon,
@@ -443,6 +444,16 @@ function ProjectMoreLinks({
   const links = [
     { href: `${base}/milestones`, label: 'Milestones', icon: FlagIcon },
     { href: `${base}/activity`, label: 'Activity', icon: ActivityIcon },
+    ...(project.status === 'ARCHIVED'
+      ? []
+      : [
+          {
+            href: `${base}/triage`,
+            label: 'Triage',
+            icon: InboxIcon,
+            count: project.newRequestCount,
+          },
+        ]),
     project.viewerCanManage
       ? { href: `${base}/settings`, label: 'Settings', icon: SettingsIcon }
       : { href: `${base}/members`, label: 'Members', icon: UsersIcon },
@@ -450,8 +461,8 @@ function ProjectMoreLinks({
   return (
     <section aria-label={`More in ${project.name}`} className="shrink-0 border-b border-line p-3">
       <h3 className="truncate px-1 pb-2 text-xs font-medium text-fg-muted">{project.name}</h3>
-      <ul className="grid grid-cols-3 gap-2">
-        {links.map(({ href, label, icon: Icon }) => {
+      <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {links.map(({ href, label, icon: Icon, count }) => {
           const active = pathname.startsWith(href);
           return (
             <li key={href}>
@@ -466,7 +477,18 @@ function ProjectMoreLinks({
                 }`}
               >
                 <Icon size={18} />
-                {label}
+                <span>
+                  {label}
+                  {count ? <span className="sr-only">, {count} new</span> : null}
+                </span>
+                {count ? (
+                  <span
+                    aria-hidden="true"
+                    className="min-w-4.5 rounded-full bg-primary px-1.5 text-center text-pill leading-4.5 font-semibold text-fg-on-inverse"
+                  >
+                    {count > 99 ? '99+' : count}
+                  </span>
+                ) : null}
               </Link>
             </li>
           );

@@ -21,6 +21,11 @@ export interface AppConfig {
   githubWebhookSecret: string | null;
   /** Bearer secret for the scheduled delivery-retry job (M6). Null: the job is disabled. */
   cronSecret: string | null;
+  /**
+   * Cloudflare Turnstile secret for public request forms (0016). Null skips the check,
+   * which is allowed only outside production.
+   */
+  turnstileSecretKey: string | null;
   /** Shared with the website's proxy so the API can trust its client-IP header (M8). */
   webProxySecret: string | null;
   /** Error tracking (M8). Null DSN: disabled. */
@@ -136,6 +141,7 @@ const envSchema = z
     GITHUB_APP_WEBHOOK_SECRET: optionalString.pipe(
       z.string().min(16, { error: 'must be at least 16 characters' }).optional(),
     ),
+    TURNSTILE_SECRET_KEY: optionalString,
     CRON_SECRET: optionalString.pipe(
       z.string().min(16, { error: 'must be at least 16 characters' }).optional(),
     ),
@@ -285,6 +291,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     },
     githubWebhookSecret: e.GITHUB_APP_WEBHOOK_SECRET ?? null,
     cronSecret: e.CRON_SECRET ?? null,
+    turnstileSecretKey: e.TURNSTILE_SECRET_KEY ?? null,
     realtime: {
       // Development falls back to a per-process key: fine for a single local API process.
       secret: e.REALTIME_SECRET ?? randomBytes(32).toString('base64url'),

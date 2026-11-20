@@ -53,6 +53,7 @@ export function testConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     },
     githubWebhookSecret: TEST_WEBHOOK_SECRET,
     cronSecret: TEST_CRON_SECRET,
+    turnstileSecretKey: null,
     webProxySecret: TEST_PROXY_SECRET,
     sentry: { dsn: null, environment: 'test', release: null },
     realtime: {

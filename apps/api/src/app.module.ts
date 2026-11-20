@@ -6,6 +6,7 @@ import { AuthGuard } from './auth/guards/auth.guard';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { OriginGuard } from './common/guards/origin.guard';
 import { ResponseEnvelopeInterceptor } from './common/interceptors/response-envelope.interceptor';
+import { RequestsModule } from './requests/requests.module';
 import { ChatModule } from './chat/chat.module';
 import { CommentsModule } from './comments/comments.module';
 import { ConfigModule } from './config/config.module';
@@ -43,6 +44,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
     MilestonesModule,
     CommentsModule,
     ChatModule,
+    RequestsModule,
     ActivityModule,
     NotificationsModule,
     GithubModule,
