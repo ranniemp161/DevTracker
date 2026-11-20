@@ -233,7 +233,12 @@ export function MenuItem({
       onClick={(e) => menu.activate(onSelect, e.detail !== 0)}
       className={`${itemClass} ${className}`}
     >
-      {icon}
+      {/* The label names the item; icons are decoration. */}
+      {icon ? (
+        <span aria-hidden="true" className="inline-flex shrink-0">
+          {icon}
+        </span>
+      ) : null}
       <span className="min-w-0 flex-1">{children}</span>
       {checked ? <CheckIcon size={14} className="shrink-0 text-primary" /> : null}
     </button>
@@ -270,7 +275,12 @@ export function MenuLink({
       onClick={(e) => menu.activate(onNavigate, e.detail !== 0)}
       className={`${itemClass} ${className}`}
     >
-      {icon}
+      {/* The label names the item; icons are decoration. */}
+      {icon ? (
+        <span aria-hidden="true" className="inline-flex shrink-0">
+          {icon}
+        </span>
+      ) : null}
       <span className="min-w-0 flex-1">{children}</span>
       {current ? <CheckIcon size={14} className="shrink-0 text-primary" /> : null}
     </Link>
