@@ -5,6 +5,7 @@ import { createLabelSchema } from '@devtrack/validators';
 import { useState, type FormEvent } from 'react';
 import { Button, PanelSection } from '@/components/ui';
 import { PlusIcon, XIcon } from '@/components/icons';
+import { Menu, MenuItem } from '@/components/menu';
 import { api, ApiError } from '@/lib/api';
 import { useApiQuery } from '@/lib/use-api-query';
 import { LABEL_COLORS, LabelChip } from './label-chip';
@@ -82,25 +83,36 @@ export function TaskLabels({ task, onChanged }: { task: Task; onChanged: () => v
       {readOnly ? null : (
         <div className="mt-3 space-y-2">
           {available.length > 0 ? (
-            <label className="block text-sm">
-              <span className="sr-only">Add a label</span>
-              <select
-                value=""
-                disabled={busy}
-                onChange={(e) =>
-                  e.target.value &&
-                  call(() => api(`/tasks/${task.id}/labels`, { body: { labelId: e.target.value } }))
-                }
-                className="h-8 w-full cursor-pointer rounded-control pointer-coarse:h-11 border border-dashed border-line-control bg-transparent px-2 text-label text-fg-muted hover:bg-surface-muted"
-              >
-                <option value="">Add a label…</option>
-                {available.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <Menu
+              label="Add a label"
+              disabled={busy}
+              triggerClassName="inline-flex h-8 w-full items-center gap-1.5 rounded-control border border-dashed border-line-control px-2.5 text-label text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg aria-expanded:bg-surface-muted pointer-coarse:h-11"
+              menuClassName="w-60"
+              trigger={
+                <>
+                  <PlusIcon size={14} />
+                  Add a label
+                </>
+              }
+            >
+              {available.map((l) => (
+                <MenuItem
+                  key={l.id}
+                  icon={
+                    <span
+                      aria-hidden="true"
+                      className="size-2 shrink-0 rounded-xs"
+                      style={{ backgroundColor: l.color }}
+                    />
+                  }
+                  onSelect={() =>
+                    call(() => api(`/tasks/${task.id}/labels`, { body: { labelId: l.id } }))
+                  }
+                >
+                  {l.name}
+                </MenuItem>
+              ))}
+            </Menu>
           ) : null}
           {creating ? (
             <form onSubmit={createAndAttach} className="space-y-2">
