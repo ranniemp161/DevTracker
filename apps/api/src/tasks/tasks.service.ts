@@ -5,8 +5,10 @@ import {
   asc,
   desc,
   eq,
+  githubPullRequests,
   ilike,
   inArray,
+  isNotNull,
   isNull,
   labels,
   lt,
@@ -18,6 +20,7 @@ import {
   projects,
   sql,
   taskAssignees,
+  taskGithubLinks,
   taskLabels,
   tasks,
   timeEntries,
@@ -695,8 +698,8 @@ export class TasksService {
   }
 
   /**
-   * Adds assignees, labels and logged time to task rows, keeping their order. The three lookups
-   * only need the ids, so they run in parallel on the pool (3 of its 5 connections); this must
+   * Adds assignees, labels and logged time to task rows, keeping their order. The four lookups
+   * only need the ids, so they run in parallel on the pool (4 of its 5 connections); this must
    * stay on `this.db`, never a transaction, which can't run queries concurrently.
    */
   private async hydrate(
@@ -706,7 +709,7 @@ export class TasksService {
     const keyPrefix = typeof projectKey === 'string' ? () => projectKey : projectKey;
     if (rows.length === 0) return [];
     const ids = rows.map((r) => r.task.id);
-    const [assignees, attached, logged] = await Promise.all([
+    const [assignees, attached, logged, prChecks] = await Promise.all([
       this.db
         .select({ taskId: taskAssignees.taskId, user: userRef })
         .from(taskAssignees)
@@ -730,7 +733,25 @@ export class TasksService {
         .from(timeEntries)
         .where(inArray(timeEntries.taskId, ids))
         .groupBy(timeEntries.taskId),
+      // CI badge on cards (0015): only open PRs count; merged or closed ones are history.
+      this.db
+        .select({ taskId: taskGithubLinks.taskId, checks: githubPullRequests.checksState })
+        .from(taskGithubLinks)
+        .innerJoin(githubPullRequests, eq(githubPullRequests.id, taskGithubLinks.pullRequestId))
+        .where(
+          and(
+            inArray(taskGithubLinks.taskId, ids),
+            eq(githubPullRequests.state, 'open'),
+            isNotNull(githubPullRequests.checksState),
+          ),
+        ),
     ]);
+    const checksByTask = new Map<string, Task['checks']>();
+    for (const { taskId, checks } of prChecks) {
+      if (checksByTask.get(taskId) !== 'failing') {
+        checksByTask.set(taskId, checks === 'failing' ? 'failing' : 'passing');
+      }
+    }
     const loggedByTask = new Map(logged.map((l) => [l.taskId, l.minutes]));
 
     const assigneesByTask = new Map<string, UserRef[]>();
@@ -758,6 +779,7 @@ export class TasksService {
         milestoneId: task.milestoneId,
         estimateMinutes: task.estimateMinutes,
         loggedMinutes: loggedByTask.get(task.id) ?? 0,
+        checks: checksByTask.get(task.id) ?? null,
         createdAt: task.createdAt.toISOString(),
         updatedAt: task.updatedAt.toISOString(),
         completedAt: task.completedAt?.toISOString() ?? null,

@@ -59,3 +59,10 @@ Retention: suites are kept like other GitHub history (0008).
   - a suite for an old commit doesn't change the current state.
 - **Chat:** a failure posts once; a later failing suite on the same commit doesn't post again; a project with `checks.failed` switched off gets nothing.
 - **Ignored deliveries:** non-`completed` actions and unconnected repositories.
+
+## 7. Board cards (added 2026-11-22)
+
+- Task responses carry `checks: 'passing' | 'failing' | null`, worked out from the task's linked PRs that are still **open**: `failing` if any of them fails, `passing` if some pass and none fail, otherwise `null`. Merged and closed PRs don't count.
+- Board cards show it in the footer as an icon and a word ("Checks passing" / "Checks failing"), never color alone.
+- When a PR's checks state changes, every project the repository is connected to gets a `github.pull_request.updated` event (`action: 'checks'`), so open boards and task pages refresh.
+- **Test:** the task list reports `failing`, then `passing`, then `null` once the PR closes; tasks without a linked PR stay `null`.

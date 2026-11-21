@@ -467,13 +467,26 @@ export class GithubEventProcessor {
       .update(githubPullRequests)
       .set({ checksState: next })
       .where(eq(githubPullRequests.id, pr.id));
-    if (next !== 'failing') return;
     for (const project of target.projects) {
       const actor = await this.actor(tx, sender, project.workspaceId);
-      await this.chat.post(tx, project, actor, {
-        event: 'checks.failed',
-        ...chatPr(pr, target.repo, sender),
-      });
+      // Open boards and task pages refetch, so card badges follow CI live.
+      await this.events.event(
+        tx,
+        'github.pull_request.updated',
+        {
+          workspaceId: project.workspaceId,
+          projectId: project.id,
+          actor,
+          entity: { type: 'pull_request', id: pr.id },
+        },
+        { pullRequestId: pr.id, state: stateOf(pr), action: 'checks' },
+      );
+      if (next === 'failing') {
+        await this.chat.post(tx, project, actor, {
+          event: 'checks.failed',
+          ...chatPr(pr, target.repo, sender),
+        });
+      }
     }
   }
 

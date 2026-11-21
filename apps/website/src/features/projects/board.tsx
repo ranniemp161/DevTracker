@@ -3,7 +3,7 @@
 import { TASK_STATUSES, type Task, type TaskStatus } from '@devtrack/types';
 import Link from 'next/link';
 import { useEffect, useRef, useState, type DragEvent, type FormEvent, type RefObject } from 'react';
-import { CalendarIcon, PlusIcon } from '@/components/icons';
+import { AlertIcon, CalendarIcon, CheckIcon, PlusIcon } from '@/components/icons';
 import { HeaderActions } from '@/components/page-header';
 import { useToast } from '@/components/toaster';
 import {
@@ -393,15 +393,30 @@ function TaskCard({
         ))}
         {extraLabels > 0 ? <span className="text-xs text-fg-muted">+{extraLabels}</span> : null}
       </div>
-      {task.dueDate ? (
-        <div className="border-t border-line-subtle pt-2 text-xs text-fg-muted">
-          <span
-            className={`inline-flex items-center gap-1.5 ${overdue ? 'font-medium text-danger' : ''}`}
-          >
-            <CalendarIcon size={14} />
-            {overdue ? 'Overdue · ' : ''}
-            {formatDate(task.dueDate)}
-          </span>
+      {task.dueDate || task.checks ? (
+        <div className="flex items-center justify-between gap-2 border-t border-line-subtle pt-2 text-xs text-fg-muted">
+          {task.dueDate ? (
+            <span
+              className={`inline-flex items-center gap-1.5 ${overdue ? 'font-medium text-danger' : ''}`}
+            >
+              <CalendarIcon size={14} />
+              {overdue ? 'Overdue · ' : ''}
+              {formatDate(task.dueDate)}
+            </span>
+          ) : (
+            <span />
+          )}
+          {/* CI on open linked PRs (0015). Never color alone: icon + word. */}
+          {task.checks ? (
+            <span
+              className={`inline-flex items-center gap-1 font-medium ${
+                task.checks === 'failing' ? 'text-danger' : 'text-status-done-fg'
+              }`}
+            >
+              {task.checks === 'failing' ? <AlertIcon size={12} /> : <CheckIcon size={12} />}
+              {task.checks === 'failing' ? 'Checks failing' : 'Checks passing'}
+            </span>
+          ) : null}
         </div>
       ) : null}
     </li>
