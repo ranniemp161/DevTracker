@@ -79,6 +79,8 @@ export interface PullRequest {
   baseBranch: string;
   state: PullRequestState;
   isDraft: boolean;
+  /** CI on the head commit (decision record 0015); null until results arrive. */
+  checks: 'passing' | 'failing' | null;
   openedAt: string;
   mergedAt: string | null;
   closedAt: string | null;

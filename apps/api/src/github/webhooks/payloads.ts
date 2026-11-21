@@ -10,6 +10,8 @@ const id = z.number().int().positive();
 const httpsUrl = z.string().startsWith('https://');
 const login = z.object({ login: z.string().min(1) });
 
+/** A git commit SHA (SHA-1 or SHA-256). */
+const sha = /^[0-9a-f]{40,64}$/;
 const installationRef = z.object({ id });
 const repositoryRef = z.object({ id, full_name: z.string().min(1) });
 export const senderSchema = z
@@ -22,7 +24,7 @@ export const pullRequestSchema = z.object({
   title: z.string(),
   html_url: httpsUrl,
   user: login.nullable().optional(),
-  head: z.object({ ref: z.string().min(1) }),
+  head: z.object({ ref: z.string().min(1), sha: z.string().regex(sha).optional() }),
   base: z.object({ ref: z.string().min(1) }),
   state: z.enum(['open', 'closed']),
   draft: z.boolean().optional(),
@@ -116,3 +118,18 @@ export function routingFields(payload: unknown): {
     githubRepositoryId: num((p.repository as { id?: unknown } | undefined)?.id),
   };
 }
+
+/** 0015: a check suite (one CI app's results for one commit). */
+export const checkSuiteEventSchema = z.object({
+  ...repoEvent,
+  action: z.string(),
+  check_suite: z.object({
+    id,
+    head_sha: z.string().regex(sha),
+    status: z.string().nullable().optional(),
+    conclusion: z.string().nullable().optional(),
+    updated_at: z.string().optional(),
+    app: z.object({ slug: z.string().optional() }).nullable().optional(),
+    pull_requests: z.array(z.object({ id, number: z.number().int().positive() })).default([]),
+  }),
+});

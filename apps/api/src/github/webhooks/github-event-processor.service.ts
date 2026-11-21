@@ -3,6 +3,7 @@ import {
   accounts,
   and,
   eq,
+  githubCheckSuites,
   githubCommits,
   githubInstallations,
   githubPullRequests,
@@ -13,6 +14,7 @@ import {
   inArray,
   isNull,
   ne,
+  or,
   projectRepositories,
   projects,
   sql,
@@ -36,6 +38,7 @@ import {
   pullRequestReviewEventSchema,
   pushEventSchema,
   releaseEventSchema,
+  checkSuiteEventSchema,
   type PullRequestPayload,
   senderSchema,
 } from './payloads';
@@ -119,6 +122,8 @@ export class GithubEventProcessor {
         return this.parse(pullRequestReviewEventSchema, payload, (p) => this.review(tx, p));
       case 'release':
         return this.parse(releaseEventSchema, payload, (p) => this.release(tx, p));
+      case 'check_suite':
+        return this.parse(checkSuiteEventSchema, payload, (p) => this.checkSuite(tx, p));
       case 'installation':
         return this.parse(installationEventSchema, payload, (p) => this.installation(tx, p));
       case 'installation_repositories':
@@ -266,6 +271,9 @@ export class GithubEventProcessor {
       }
     }
 
+    // A new head commit has its own checks (0015).
+    await this.refreshChecks(tx, target, pr, p.sender);
+
     if (action === 'opened') {
       await this.notifyLinkedTasks(tx, target, pr, p.sender, 'PULL_REQUEST_OPENED', 'opened');
     } else if (action === 'merged') {
@@ -373,6 +381,100 @@ export class GithubEventProcessor {
       });
     }
     return PROCESSED;
+  }
+
+  // ------------------------------------------------------- CI status (0015)
+
+  private async checkSuite(
+    tx: Transaction,
+    p: z.infer<typeof checkSuiteEventSchema>,
+  ): Promise<ProcessResult> {
+    if (p.action !== 'completed') return ignored(`check_suite.${p.action} is not handled`);
+    const target = await this.target(tx, p.installation.id, p.repository.id);
+    if (!target) return ignored('repository not connected');
+    const suite = p.check_suite;
+
+    const values = {
+      headSha: suite.head_sha,
+      appSlug: suite.app?.slug ?? null,
+      conclusion: suite.conclusion ?? null,
+      completedAt: date(suite.updated_at) ?? new Date(),
+    };
+    await tx
+      .insert(githubCheckSuites)
+      .values({ ...values, repositoryId: target.repo.id, githubSuiteId: suite.id })
+      .onConflictDoUpdate({
+        target: [githubCheckSuites.repositoryId, githubCheckSuites.githubSuiteId],
+        set: values,
+      });
+
+    // PRs GitHub names (empty for forks), plus open PRs whose head is this commit.
+    const listed = suite.pull_requests.map((pr) => pr.id);
+    const prs = await tx
+      .select()
+      .from(githubPullRequests)
+      .where(
+        and(
+          eq(githubPullRequests.repositoryId, target.repo.id),
+          or(
+            listed.length > 0 ? inArray(githubPullRequests.githubPrId, listed) : sql`false`,
+            and(
+              eq(githubPullRequests.headSha, suite.head_sha),
+              eq(githubPullRequests.state, 'open'),
+            ),
+          ),
+        ),
+      );
+    for (const pr of prs) {
+      // Rows stored before 0015 have no head SHA yet: a listed suite tells us it.
+      const current = pr.headSha
+        ? pr
+        : (
+            await tx
+              .update(githubPullRequests)
+              .set({ headSha: suite.head_sha })
+              .where(eq(githubPullRequests.id, pr.id))
+              .returning()
+          )[0]!;
+      await this.refreshChecks(tx, target, current, p.sender);
+    }
+    return PROCESSED;
+  }
+
+  /**
+   * Recomputes a PR's checks state from the suites on its head commit, and posts to chat
+   * when it newly fails (0015 §3–4).
+   */
+  private async refreshChecks(
+    tx: Transaction,
+    target: Target,
+    pr: PrRow,
+    sender: z.infer<typeof senderSchema>,
+  ): Promise<void> {
+    if (!pr.headSha) return;
+    const suites = await tx
+      .select({ conclusion: githubCheckSuites.conclusion })
+      .from(githubCheckSuites)
+      .where(
+        and(
+          eq(githubCheckSuites.repositoryId, pr.repositoryId),
+          eq(githubCheckSuites.headSha, pr.headSha),
+        ),
+      );
+    const next = checksState(suites.map((s) => s.conclusion));
+    if (next === pr.checksState) return;
+    await tx
+      .update(githubPullRequests)
+      .set({ checksState: next })
+      .where(eq(githubPullRequests.id, pr.id));
+    if (next !== 'failing') return;
+    for (const project of target.projects) {
+      const actor = await this.actor(tx, sender, project.workspaceId);
+      await this.chat.post(tx, project, actor, {
+        event: 'checks.failed',
+        ...chatPr(pr, target.repo, sender),
+      });
+    }
   }
 
   // ------------------------------------------------- installation lifecycle
@@ -569,6 +671,8 @@ export class GithubEventProcessor {
       mergedAt: date(pr.merged_at),
       closedAt: date(pr.closed_at),
       githubUpdatedAt: new Date(pr.updated_at),
+      // Older payloads (and test fixtures) may omit it; never clear a known SHA.
+      ...(pr.head.sha ? { headSha: pr.head.sha } : {}),
     };
     const [row] = await tx
       .insert(githubPullRequests)
@@ -724,6 +828,16 @@ export class GithubEventProcessor {
       );
     return row ?? null;
   }
+}
+
+const FAILED = new Set(['failure', 'timed_out', 'cancelled', 'action_required']);
+const OK = new Set(['success', 'neutral', 'skipped']);
+
+/** A PR's checks state from the conclusions of the suites on its head commit (0015 §3). */
+export function checksState(conclusions: (string | null)[]): 'passing' | 'failing' | null {
+  if (conclusions.length === 0) return null;
+  if (conclusions.some((c) => c !== null && FAILED.has(c))) return 'failing';
+  return conclusions.every((c) => c !== null && OK.has(c)) ? 'passing' : null;
 }
 
 export function stateOf(pr: Pick<PrRow, 'state' | 'mergedAt'>): 'open' | 'closed' | 'merged' {

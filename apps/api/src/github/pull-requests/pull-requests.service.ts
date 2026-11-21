@@ -40,6 +40,7 @@ export const toPullRequest = (pr: PrRow, repo: { id: string; fullName: string })
   baseBranch: pr.baseBranch,
   state: stateOf(pr),
   isDraft: pr.isDraft,
+  checks: pr.checksState === 'passing' || pr.checksState === 'failing' ? pr.checksState : null,
   openedAt: pr.openedAt.toISOString(),
   mergedAt: pr.mergedAt?.toISOString() ?? null,
   closedAt: pr.closedAt?.toISOString() ?? null,
