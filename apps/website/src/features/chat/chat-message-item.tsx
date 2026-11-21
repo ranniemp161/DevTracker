@@ -3,7 +3,14 @@
 import type { ProjectMessage, PublicUser } from '@devtrack/types';
 import Link from 'next/link';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { AlertIcon, ChevronRightIcon, PullRequestIcon, TagIcon } from '@/components/icons';
+import {
+  AlertIcon,
+  ChevronRightIcon,
+  MoreIcon,
+  PullRequestIcon,
+  TagIcon,
+} from '@/components/icons';
+import { Menu, MenuItem } from '@/components/menu';
 import { Avatar, Button, StatusDot } from '@/components/ui';
 import { api } from '@/lib/api';
 import type { CreateChatMessageInput } from '@devtrack/validators';
@@ -163,7 +170,7 @@ export function ChatMessageItem({
               </>
             ) : null}
           </p>
-          <p className="mt-0.5 text-xs text-fg-muted">
+          <p className="mt-0.5 truncate text-xs text-fg-muted">
             <span className="font-mono">{g.repository}</span>
             {g.sender ? ` · ${g.sender}` : ''} · {formattedTime}
           </p>
@@ -190,13 +197,7 @@ export function ChatMessageItem({
           ) : null}
         </div>
         {canDelete && !confirmDelete ? (
-          <button
-            type="button"
-            onClick={() => setConfirmDelete(true)}
-            className="rounded-chip px-1.5 py-0.5 text-xs text-danger opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 hover:bg-status-blocked-bg pointer-coarse:min-h-11 pointer-coarse:px-3 pointer-coarse:opacity-100"
-          >
-            Delete
-          </button>
+          <MessageActions label="GitHub update actions" onDelete={() => setConfirmDelete(true)} />
         ) : null}
       </div>
     );
@@ -220,7 +221,7 @@ export function ChatMessageItem({
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-2">
+        <div className="flex flex-wrap items-baseline gap-x-2">
           <span className="text-sm font-semibold text-fg">
             {message.author ? `@${message.author.username}` : 'Former member'}
           </span>
@@ -248,31 +249,19 @@ export function ChatMessageItem({
             </span>
           ) : null}
 
-          {/* Shown on hover or keyboard focus with a mouse; always shown on touch screens, which can't hover. */}
           {!isEditing && (canEdit || canDelete) ? (
-            <div className="ml-auto flex items-center gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 pointer-coarse:gap-2 pointer-coarse:opacity-100">
-              {canEdit ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditBody(message.body ?? '');
-                    setIsEditing(true);
-                  }}
-                  className="rounded-chip px-1.5 py-0.5 text-xs text-fg-muted hover:bg-surface-muted pointer-coarse:min-h-11 pointer-coarse:px-3"
-                >
-                  Edit
-                </button>
-              ) : null}
-              {canDelete ? (
-                <button
-                  type="button"
-                  onClick={() => setConfirmDelete(true)}
-                  className="rounded-chip px-1.5 py-0.5 text-xs text-danger hover:bg-status-blocked-bg pointer-coarse:min-h-11 pointer-coarse:px-3"
-                >
-                  Delete
-                </button>
-              ) : null}
-            </div>
+            <MessageActions
+              label="Message actions"
+              onEdit={
+                canEdit
+                  ? () => {
+                      setEditBody(message.body ?? '');
+                      setIsEditing(true);
+                    }
+                  : undefined
+              }
+              onDelete={canDelete ? () => setConfirmDelete(true) : undefined}
+            />
           ) : null}
         </div>
 
@@ -376,6 +365,41 @@ export function ChatMessageItem({
         ) : null}
       </div>
     </div>
+  );
+}
+
+/**
+ * Edit/Delete behind one "⋯" button, so actions never squeeze the message text.
+ * Shown on hover or keyboard focus with a mouse; always shown on touch screens, which can't hover.
+ */
+function MessageActions({
+  label,
+  onEdit,
+  onDelete,
+}: {
+  label: string;
+  onEdit?: () => void;
+  onDelete?: () => void;
+}) {
+  return (
+    <Menu
+      label={label}
+      align="end"
+      triggerProps={{ 'aria-label': label }}
+      triggerClassName="touch-target ml-auto inline-flex size-7 shrink-0 items-center justify-center self-start rounded-control text-fg-muted opacity-0 transition-opacity hover:bg-surface-muted hover:text-fg group-focus-within:opacity-100 group-hover:opacity-100 aria-expanded:bg-surface-muted aria-expanded:opacity-100 pointer-coarse:opacity-100"
+      menuClassName="w-40"
+      trigger={<MoreIcon size={16} />}
+    >
+      {onEdit ? <MenuItem onSelect={onEdit}>Edit</MenuItem> : null}
+      {onDelete ? (
+        <MenuItem
+          onSelect={onDelete}
+          className="text-danger! hover:text-danger! focus-visible:text-danger!"
+        >
+          Delete
+        </MenuItem>
+      ) : null}
+    </Menu>
   );
 }
 
