@@ -273,9 +273,6 @@ function TaskEditor({
           </span>
         </nav>
         <div className="flex items-center gap-2">
-          <span role="status" className="text-label font-medium text-status-done-fg">
-            {saved ? 'Saved' : copied ? 'Link copied' : ''}
-          </span>
           <Link
             href={`${base}/chat?task=${task.id}`}
             className="inline-flex h-7.5 items-center rounded-control border border-line-control bg-surface px-2.5 text-label font-medium text-fg transition-colors hover:bg-surface-sunken"
@@ -297,6 +294,10 @@ function TaskEditor({
               <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
             </svg>
           </IconButton>
+          {/* Last in the row so the empty live region never offsets the buttons. */}
+          <span role="status" className="text-label font-medium text-status-done-fg">
+            {saved ? 'Saved' : copied ? 'Link copied' : ''}
+          </span>
         </div>
       </header>
 
@@ -311,15 +312,28 @@ function TaskEditor({
             <label htmlFor="task-title" className="sr-only">
               Title
             </label>
-            <input
-              id="task-title"
-              value={form.title}
-              disabled={readOnly}
-              maxLength={200}
-              placeholder="Task title"
-              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-              className="block w-full rounded-control border border-transparent bg-transparent px-2 py-1 -mx-2 text-title font-semibold tracking-tight text-fg placeholder:text-fg-subtle hover:border-line focus-visible:border-primary"
-            />
+            {/* A one-line textarea that grows, so long titles wrap instead of being cut off. */}
+            <div className="-mx-2">
+              <textarea
+                id="task-title"
+                rows={1}
+                value={form.title}
+                disabled={readOnly}
+                maxLength={200}
+                placeholder="Task title"
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, title: e.target.value.replace(/[\r\n]+/g, ' ') }))
+                }
+                onKeyDown={(e) => {
+                  // Enter saves, like the single-line field it replaces (never mid-IME composition).
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    e.currentTarget.form?.requestSubmit();
+                  }
+                }}
+                className="block w-full resize-none rounded-control border border-transparent bg-transparent px-2 py-1 text-title font-semibold tracking-tight text-fg field-sizing-content placeholder:text-fg-subtle hover:border-line focus-visible:border-primary"
+              />
+            </div>
             <Menu
               label="Status"
               disabled={readOnly}
@@ -357,7 +371,7 @@ function TaskEditor({
               disabled={readOnly}
               placeholder="Add a description"
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              className="block min-h-24 w-full rounded-control border border-line bg-surface px-3 py-2 text-base leading-relaxed text-fg-secondary placeholder:text-fg-subtle hover:border-line-control focus-visible:border-primary lg:text-sm"
+              className="block min-h-24 w-full rounded-control border border-line bg-surface px-3 py-2 field-sizing-content text-base leading-relaxed text-fg-secondary placeholder:text-fg-subtle hover:border-line-control focus-visible:border-primary lg:text-sm"
             />
           </div>
         </form>

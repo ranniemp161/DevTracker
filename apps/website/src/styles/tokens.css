@@ -193,6 +193,7 @@
   --dt-control-lg: 40px; /* inputs */
   --dt-control-xl: 44px; /* auth forms (touch-friendly) */
   --dt-target-touch: 44px; /* minimum hit area on touch screens (WCAG 2.5.5) */
+  --dt-scrollbar-size: 8px; /* fallback scrollbar thickness where scrollbar-width is unsupported */
   --dt-sidebar-width: 248px;
   --dt-board-column-width: 272px;
   --dt-card-min-width: 320px; /* project cards */

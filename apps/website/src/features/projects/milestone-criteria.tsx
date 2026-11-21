@@ -170,11 +170,11 @@ function CriterionRow({
   onRemove: () => void;
 }) {
   return (
-    <li className="flex items-start gap-2 rounded-control px-1 py-0.5 hover:bg-surface-sunken">
+    <li className="flex items-start gap-2 rounded-control px-1 py-0.5 hover:bg-surface-sunken pointer-coarse:py-2">
       <input
         id={`criterion-check-${c.id}`}
         type="checkbox"
-        className="mt-0.5 accent-primary"
+        className="mt-0.5 size-4 shrink-0 accent-primary"
         checked={c.done}
         disabled={!canManage || busy}
         onChange={(e) => onToggle(e.target.checked)}

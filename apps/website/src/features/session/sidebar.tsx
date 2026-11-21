@@ -105,7 +105,7 @@ export function Sidebar({
       </div>
 
       {active ? (
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="relative min-h-0 flex-1 overflow-y-auto">
           <div className="mb-3">
             <NavLink
               href={`${base}/my-tasks`}
