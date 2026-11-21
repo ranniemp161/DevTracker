@@ -254,7 +254,7 @@ function VerifiedFrame({ session, children }: { session: Session; children: Reac
           <main
             id="main-content"
             tabIndex={-1}
-            className="my-2 mr-2 min-w-0 flex-1 overflow-y-auto rounded-panel border border-line bg-surface focus-visible:shadow-none"
+            className="relative my-2 mr-2 min-w-0 flex-1 overflow-y-auto rounded-panel border border-line bg-surface focus-visible:shadow-none"
           >
             <div className="sticky top-0 z-10">
               <ActiveTimerBar />
@@ -283,7 +283,7 @@ function VerifiedFrame({ session, children }: { session: Session; children: Reac
           <main
             id="main-content"
             tabIndex={-1}
-            className={`min-h-0 flex-1 overflow-y-auto focus-visible:shadow-none ${isMobileChat ? 'flex flex-col' : ''}`}
+            className={`relative min-h-0 flex-1 overflow-y-auto focus-visible:shadow-none ${isMobileChat ? 'flex flex-col' : ''}`}
           >
             {content}
           </main>

@@ -3,7 +3,7 @@
 import type { Milestone } from '@devtrack/types';
 import { createMilestoneSchema } from '@devtrack/validators';
 import { useState } from 'react';
-import { FlagIcon, CheckIcon } from '@/components/icons';
+import { CheckIcon, FlagIcon, PlusIcon } from '@/components/icons';
 import { Alert, Button, EmptyState, Field, SubmitButton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useApiQuery } from '@/lib/use-api-query';
@@ -99,52 +99,57 @@ function MilestoneRow({
 
   const completed = m.status === 'COMPLETED';
   return (
-    <li className="flex flex-wrap items-start gap-3 rounded-card border border-line bg-surface p-4">
+    <li className="flex items-start gap-3 rounded-card border border-line bg-surface p-4">
       <FlagIcon
         size={18}
-        className={`mt-0.5 shrink-0 ${completed ? 'text-status-done' : 'text-fg-subtle'}`}
+        className={`mt-1 shrink-0 ${completed ? 'text-status-done' : 'text-fg-subtle'}`}
       />
       <div className="min-w-0 flex-1">
-        <p className={`text-lg font-semibold ${completed ? 'text-fg-muted' : 'text-fg'}`}>
-          {m.name}
-        </p>
-        {m.description ? <p className="mt-0.5 text-sm text-fg-muted">{m.description}</p> : null}
-        {m.dueDate ? (
-          <p className={`mt-1.5 text-xs ${dueTone(m.dueDate, completed)}`}>
-            {dueLabel(m.dueDate, completed)}
-          </p>
-        ) : null}
+        {/* Name and actions share a row on wide cards; on phones the actions wrap below the name. */}
+        <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+          <div className="min-w-0 flex-1 basis-48">
+            <p className={`text-lg font-semibold ${completed ? 'text-fg-muted' : 'text-fg'}`}>
+              {m.name}
+            </p>
+            {m.description ? <p className="mt-0.5 text-sm text-fg-muted">{m.description}</p> : null}
+            {m.dueDate ? (
+              <p className={`mt-1.5 text-xs ${dueTone(m.dueDate, completed)}`}>
+                {dueLabel(m.dueDate, completed)}
+              </p>
+            ) : null}
+          </div>
+          {canManage ? (
+            <div className="flex shrink-0 items-center gap-2">
+              <Button
+                size="sm"
+                disabled={busy}
+                onClick={() =>
+                  call(() =>
+                    api(`/milestones/${m.id}`, {
+                      method: 'PATCH',
+                      body: { status: completed ? 'OPEN' : 'COMPLETED' },
+                    }),
+                  )
+                }
+              >
+                {completed ? null : <CheckIcon size={14} />}
+                {completed ? 'Reopen' : 'Mark complete'}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => call(() => api(`/milestones/${m.id}`, { method: 'DELETE' }))}
+              >
+                Delete
+              </Button>
+            </div>
+          ) : null}
+        </div>
         {error ? <p className="mt-1 text-sm text-danger">{error}</p> : null}
         <MilestoneProgress milestone={m} projectId={project.id} />
         <MilestoneCriteria milestone={m} canManage={canManage} onChanged={onChanged} />
       </div>
-      {canManage ? (
-        <>
-          <Button
-            size="sm"
-            disabled={busy}
-            onClick={() =>
-              call(() =>
-                api(`/milestones/${m.id}`, {
-                  method: 'PATCH',
-                  body: { status: completed ? 'OPEN' : 'COMPLETED' },
-                }),
-              )
-            }
-          >
-            {completed ? null : <CheckIcon size={14} />}
-            {completed ? 'Reopen' : 'Mark complete'}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={busy}
-            onClick={() => call(() => api(`/milestones/${m.id}`, { method: 'DELETE' }))}
-          >
-            Delete
-          </Button>
-        </>
-      ) : null}
     </li>
   );
 }
@@ -173,55 +178,66 @@ function dueLabel(iso: string, completed: boolean) {
 
 function CreateMilestone({ onCreated }: { onCreated: () => void }) {
   const { project } = useProject();
+  // Phones start with a button so the milestones themselves are on the first screen.
+  const [expanded, setExpanded] = useState(false);
   const form = useAuthForm(
     withoutBlanks(createMilestoneSchema),
     { name: '', description: '', dueDate: '' },
     async (values) => {
       await api(`/projects/${project.id}/milestones`, { body: values });
+      setExpanded(false);
       onCreated();
     },
   );
   return (
-    <section
-      aria-label="New milestone"
-      className="rounded-panel border border-line-control bg-surface p-5 shadow-raised"
-    >
-      <form
-        onSubmit={form.onSubmit}
-        noValidate
-        className="grid gap-3 sm:grid-cols-milestone-form sm:items-end"
+    <>
+      {expanded ? null : (
+        <Button className="sm:hidden" onClick={() => setExpanded(true)}>
+          <PlusIcon size={14} />
+          New milestone
+        </Button>
+      )}
+      <section
+        aria-label="New milestone"
+        className={`rounded-panel border border-line-control bg-surface p-5 shadow-raised sm:block ${expanded ? '' : 'hidden'}`}
       >
-        <Field
-          label="Name"
-          name="name"
-          value={form.values.name}
-          onChange={form.onChange}
-          error={form.fieldErrors.name}
-        />
-        <Field
-          label="Description"
-          name="description"
-          value={form.values.description}
-          onChange={form.onChange}
-          error={form.fieldErrors.description}
-        />
-        <Field
-          label="Due date"
-          name="dueDate"
-          type="date"
-          value={form.values.dueDate}
-          onChange={form.onChange}
-          error={form.fieldErrors.dueDate}
-        />
-        <div className="w-28">
-          <SubmitButton pending={form.pending}>Add</SubmitButton>
-        </div>
-      </form>
-      {form.formError ? (
-        <div className="mt-3">
-          <Alert>{form.formError}</Alert>
-        </div>
-      ) : null}
-    </section>
+        <form
+          onSubmit={form.onSubmit}
+          noValidate
+          className="grid gap-3 sm:grid-cols-milestone-form sm:items-end"
+        >
+          <Field
+            label="Name"
+            name="name"
+            value={form.values.name}
+            onChange={form.onChange}
+            error={form.fieldErrors.name}
+          />
+          <Field
+            label="Description"
+            name="description"
+            value={form.values.description}
+            onChange={form.onChange}
+            error={form.fieldErrors.description}
+          />
+          <Field
+            label="Due date"
+            name="dueDate"
+            type="date"
+            value={form.values.dueDate}
+            onChange={form.onChange}
+            error={form.fieldErrors.dueDate}
+          />
+          <div className="w-28">
+            <SubmitButton pending={form.pending}>Add</SubmitButton>
+          </div>
+        </form>
+        {form.formError ? (
+          <div className="mt-3">
+            <Alert>{form.formError}</Alert>
+          </div>
+        ) : null}
+      </section>
+    </>
   );
 }

@@ -141,7 +141,7 @@ export function Board() {
       {/* Under 1024px only one or two lanes fit, so offer a jump list with counts (one scrolling row). */}
       <nav
         aria-label="Board columns"
-        className="-mx-4 overflow-x-auto px-4 sm:-mx-7 sm:px-7 lg:hidden"
+        className="scrollbar-none -mx-4 overflow-x-auto px-4 sm:-mx-7 sm:px-7 lg:hidden"
       >
         <ul className="flex w-max gap-1.5 pb-1">
           {TASK_STATUSES.map((status) => {
