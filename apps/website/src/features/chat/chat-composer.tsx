@@ -4,6 +4,7 @@ import type { ProjectMember, Task } from '@devtrack/types';
 import { MAX_CHAT_ATTACHMENT_BYTES } from '@devtrack/validators';
 import { useSearchParams } from 'next/navigation';
 import { useId, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
+import { PaperclipIcon } from '@/components/icons';
 import { Button } from '@/components/ui';
 import { useApiQuery } from '@/lib/use-api-query';
 import { getChatDraft, setChatDraft } from './chat-drafts';
@@ -28,6 +29,7 @@ export function ChatComposer({ projectId, members, readOnly, onSend, sending }: 
   const [file, setFile] = useState<File>();
   const [fileError, setFileError] = useState<string>();
   const fileInputId = useId();
+  const hintId = useId();
   const fileInput = useRef<HTMLInputElement>(null);
 
   // Mention autocomplete state
@@ -238,19 +240,40 @@ export function ChatComposer({ projectId, members, readOnly, onSend, sending }: 
 
       <textarea
         ref={textareaRef}
-        rows={2}
+        rows={1}
         value={body}
         onChange={handleInputChange}
         onKeyDown={handleKeyDown}
-        placeholder="Type a message… (Enter to send, Shift+Enter for new line, @ to mention)"
-        className="w-full resize-none border-0 bg-transparent p-0 text-sm outline-none placeholder:text-fg-subtle focus:ring-0"
+        aria-label="Message"
+        aria-describedby={hintId}
+        placeholder="Message"
+        className="block max-h-40 min-h-6 w-full resize-none border-0 bg-transparent p-0 text-base outline-none field-sizing-content placeholder:text-fg-subtle focus:ring-0 lg:text-sm"
       />
 
-      <div className="mt-2 space-y-1">
-        <label htmlFor={fileInputId} className="block text-xs font-medium text-fg-muted">
-          Attach Markdown (.md, up to 32 KiB)
-        </label>
-        <div className="flex flex-wrap items-center gap-2">
+      {file ? (
+        <div className="mt-2 flex max-w-full items-center gap-2 rounded-chip bg-surface-muted px-2.5 py-1 text-xs">
+          <PaperclipIcon size={12} className="shrink-0 text-fg-subtle" />
+          <span className="min-w-0 truncate font-medium text-fg-secondary">{file.name}</span>
+          <button
+            type="button"
+            onClick={clearFile}
+            disabled={sending}
+            aria-label={`Remove ${file.name}`}
+            className="touch-target shrink-0 text-fg-subtle hover:text-fg"
+          >
+            ✕
+          </button>
+        </div>
+      ) : null}
+      {fileError ? (
+        <p role="alert" className="mt-2 text-xs text-danger">
+          {fileError}
+        </p>
+      ) : null}
+
+      <div className="mt-2 flex items-center justify-between gap-2 border-t border-line-subtle pt-2">
+        <div className="flex min-w-0 items-center gap-1">
+          {/* The real file input stays focusable; the label is its visible button. */}
           <input
             id={fileInputId}
             ref={fileInput}
@@ -258,28 +281,16 @@ export function ChatComposer({ projectId, members, readOnly, onSend, sending }: 
             accept=".md"
             onChange={selectFile}
             disabled={sending}
-            className="max-w-full text-xs"
+            className="peer sr-only"
           />
-          {file ? (
-            <button
-              type="button"
-              onClick={clearFile}
-              disabled={sending}
-              className="text-xs underline"
-            >
-              Remove file
-            </button>
-          ) : null}
-        </div>
-        {fileError ? (
-          <p role="alert" className="text-xs text-danger">
-            {fileError}
-          </p>
-        ) : null}
-      </div>
-
-      <div className="mt-2 flex items-center justify-between gap-2 pt-1 border-t border-line-subtle">
-        <div className="flex items-center gap-2">
+          <label
+            htmlFor={fileInputId}
+            title="Attach a Markdown file (.md, up to 32 KiB)"
+            className="touch-target inline-flex size-8 cursor-pointer items-center justify-center rounded-control text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-disabled:cursor-default peer-disabled:opacity-50"
+          >
+            <PaperclipIcon size={16} />
+            <span className="sr-only">Attach a Markdown file (.md, up to 32 KiB)</span>
+          </label>
           {showTaskPicker ? (
             <select
               aria-label="Link a task"
@@ -288,7 +299,7 @@ export function ChatComposer({ projectId, members, readOnly, onSend, sending }: 
                 updateTaskId(e.target.value || undefined);
                 setShowTaskPicker(false);
               }}
-              className="rounded border border-line-control bg-surface px-2 py-1 text-xs"
+              className="min-w-0 max-w-full rounded border border-line-control bg-surface px-2 py-1 text-xs"
             >
               <option value="">No task linked</option>
               {projectTasks.map((t) => (
@@ -301,21 +312,26 @@ export function ChatComposer({ projectId, members, readOnly, onSend, sending }: 
             <button
               type="button"
               onClick={() => setShowTaskPicker(true)}
-              className="text-xs font-medium text-fg-muted hover:text-fg"
+              className="inline-flex h-8 items-center rounded-control px-2 text-xs font-medium text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg pointer-coarse:h-11"
             >
               + Link task
             </button>
           )}
         </div>
 
-        <Button
-          variant="primary"
-          size="sm"
-          disabled={(!body.trim() && !file) || sending}
-          onClick={handleSubmit}
-        >
-          {sending ? 'Sending…' : 'Send'}
-        </Button>
+        <div className="flex shrink-0 items-center gap-3">
+          <span id={hintId} className="hidden text-xs text-fg-subtle lg:inline">
+            Enter to send · Shift+Enter for a new line · @ to mention
+          </span>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={(!body.trim() && !file) || sending}
+            onClick={handleSubmit}
+          >
+            {sending ? 'Sending…' : 'Send'}
+          </Button>
+        </div>
       </div>
     </div>
   );
