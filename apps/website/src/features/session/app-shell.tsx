@@ -29,7 +29,7 @@ import {
   XIcon,
 } from '@/components/icons';
 import { ToastProvider } from '@/components/toaster';
-import { Alert, Avatar, Button, IconButton } from '@/components/ui';
+import { Alert, Avatar, Button, IconButton, Skeleton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { forgetLastWorkspace, rememberLastWorkspace } from '@/lib/last-workspace';
 import { RealtimeProvider, useRealtimeRefresh, type RealtimeEvent } from '@/lib/realtime';
@@ -69,7 +69,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     );
   }
   if (!session || (verified && workspaces.loading)) {
-    return <p className="p-8 text-sm text-fg-subtle">Loading…</p>;
+    return <ShellSkeleton />;
   }
 
   const page = verified ? (
@@ -587,5 +587,47 @@ function VerifyEmailNotice({ user }: { user: PublicUser }) {
       </div>
       {typeof state === 'object' ? <p className="mt-2 text-sm text-danger">{state.error}</p> : null}
     </section>
+  );
+}
+
+/**
+ * Shown while the session loads (a cold start can take a few seconds): the app's outline
+ * instead of a bare "Loading…", so the page doesn't jump when it arrives. Pure CSS
+ * breakpoints, since the desktop/phone choice isn't known before hydration.
+ */
+function ShellSkeleton() {
+  return (
+    <div role="status" className="flex h-dvh bg-bg">
+      <span className="sr-only">Loading…</span>
+      <div aria-hidden="true" className="hidden w-62 shrink-0 flex-col gap-2 px-2.5 py-3 lg:flex">
+        <div className="flex h-10 items-center gap-2.5 px-1.5">
+          <DevtrackMark size={24} />
+          <Skeleton className="h-4 w-28" />
+        </div>
+        <Skeleton className="mt-3 h-8" />
+        <Skeleton className="mt-4 h-3 w-16" />
+        <Skeleton className="h-8" />
+        <Skeleton className="h-8" />
+        <Skeleton className="h-8" />
+      </div>
+      <div
+        aria-hidden="true"
+        className="flex min-w-0 flex-1 flex-col bg-surface lg:my-2 lg:mr-2 lg:rounded-panel lg:border lg:border-line"
+      >
+        <div className="flex h-14 shrink-0 items-center gap-3 border-b border-line px-4 lg:hidden">
+          <DevtrackMark size={26} />
+          <Skeleton className="h-4 w-32" />
+        </div>
+        <div className="space-y-4 px-4 py-6 sm:px-7 lg:pt-8">
+          <Skeleton className="h-3 w-36" />
+          <Skeleton className="h-8 w-56" />
+          <div className="grid-cols-cards grid gap-4 pt-4">
+            <Skeleton className="h-40 rounded-card" />
+            <Skeleton className="h-40 rounded-card" />
+            <Skeleton className="hidden h-40 rounded-card sm:block" />
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

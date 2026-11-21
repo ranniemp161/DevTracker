@@ -189,13 +189,17 @@ export function ProjectTimesheet() {
                     <caption className="sr-only">Logged time by task and collaborator</caption>
                     <thead className="border-b border-line bg-surface-sunken text-fg-secondary">
                       <tr>
-                        <th scope="col" className="px-4 py-2 font-medium">
+                        <th scope="col" className="px-3 py-2 font-medium sm:px-4">
                           Task
                         </th>
-                        <th scope="col" className="px-4 py-2 font-medium">
+                        {/* Phones show the collaborator under the task instead of in a column. */}
+                        <th
+                          scope="col"
+                          className="hidden px-4 py-2 font-medium sm:table-cell print:table-cell"
+                        >
                           Collaborator
                         </th>
-                        <th scope="col" className="px-4 py-2 text-right font-medium">
+                        <th scope="col" className="px-3 py-2 text-right font-medium sm:px-4">
                           Time
                         </th>
                       </tr>
@@ -203,7 +207,7 @@ export function ProjectTimesheet() {
                     <tbody className="divide-y divide-line">
                       {rows.map((row) => (
                         <tr key={`${row.taskId}:${row.user?.id ?? 'deleted'}`}>
-                          <th scope="row" className="px-4 py-2.5 font-medium">
+                          <th scope="row" className="px-3 py-2.5 font-medium sm:px-4">
                             <Link
                               href={`/projects/${project.id}/tasks/${row.taskId}`}
                               className="hover:underline"
@@ -213,11 +217,14 @@ export function ProjectTimesheet() {
                               </span>
                               {row.taskTitle}
                             </Link>
+                            <span className="mt-0.5 block text-xs font-normal text-fg-muted sm:hidden print:hidden">
+                              {row.user?.username ?? 'Deleted user'}
+                            </span>
                           </th>
-                          <td className="px-4 py-2.5 text-fg-secondary">
+                          <td className="hidden px-4 py-2.5 text-fg-secondary sm:table-cell print:table-cell">
                             {row.user?.username ?? 'Deleted user'}
                           </td>
-                          <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">
+                          <td className="whitespace-nowrap px-3 py-2.5 text-right align-top tabular-nums sm:px-4 sm:align-middle">
                             {formatMinutes(row.minutes)}
                           </td>
                         </tr>
