@@ -90,6 +90,47 @@ describe('CI status on pull requests (0015)', () => {
     expect(await failurePosts()).toHaveLength(2);
   });
 
+  it('shows the CI state of open linked PRs on board tasks', async () => {
+    const f = await githubFixture(t);
+    const taskId = await linkedTask(f);
+    const unlinked = (
+      await f.owner.browser
+        .post(`/api/v1/projects/${f.project}/tasks`)
+        .send({ title: 'No PR here' })
+        .expect(201)
+    ).body.data.task.id as string;
+    const boardChecks = async () => {
+      const res = await f.dev.browser.get(`/api/v1/projects/${f.project}/tasks`).expect(200);
+      const items = res.body.data as { id: string; checks: string | null }[];
+      return {
+        linked: items.find((i) => i.id === taskId)!.checks,
+        unlinked: items.find((i) => i.id === unlinked)!.checks,
+      };
+    };
+
+    await deliver(t, 'pull_request', openPr()).expect(202);
+    expect(await boardChecks()).toEqual({ linked: null, unlinked: null });
+
+    await deliver(t, 'check_suite', checkSuiteEvent('failure')).expect(202);
+    expect(await boardChecks()).toEqual({ linked: 'failing', unlinked: null });
+
+    await deliver(t, 'check_suite', checkSuiteEvent('success', { suiteId: 9001 })).expect(202);
+    expect(await boardChecks()).toEqual({ linked: 'passing', unlinked: null });
+    const view = await f.dev.browser.get(`/api/v1/tasks/${taskId}`).expect(200);
+    expect(view.body.data.task.checks).toBe('passing');
+
+    // A closed PR is history: its checks no longer show on the card.
+    await deliver(
+      t,
+      'pull_request',
+      pullRequestEvent('closed', {
+        state: 'closed',
+        head: { ref: 'feature/dev-1-login', sha: SHA_A },
+      }),
+    ).expect(202);
+    expect(await boardChecks()).toEqual({ linked: null, unlinked: null });
+  });
+
   it("respects the project's chat setting and ignores other actions and repositories", async () => {
     const f = await githubFixture(t);
     await f.owner.browser

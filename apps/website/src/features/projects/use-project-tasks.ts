@@ -38,7 +38,13 @@ export function useProjectTasks(projectId: string) {
   }, [projectId, version]);
 
   const reload = useCallback(() => setVersion((v) => v + 1), []);
-  // Live updates (M7): any task change in this project refetches the board.
-  useRealtimeRefresh((e) => e.projectId === projectId && e.type.startsWith('task.'), reload);
+  // Live updates (M7): any task change in this project refetches the board, and so does a
+  // pull request change, since cards show the CI state of linked PRs (0015).
+  useRealtimeRefresh(
+    (e) =>
+      e.projectId === projectId &&
+      (e.type.startsWith('task.') || e.type === 'github.pull_request.updated'),
+    reload,
+  );
   return { tasks, setTasks, error, reload };
 }

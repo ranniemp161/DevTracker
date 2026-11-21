@@ -81,6 +81,11 @@ export interface Task {
   estimateMinutes: number | null;
   /** Sum of the task's time entries, in minutes. Real logged time, never an estimate. */
   loggedMinutes: number;
+  /**
+   * CI on the task's open linked pull requests (0015): `failing` if any fails, `passing` if
+   * some pass and none fail, null when no open linked PR has finished checks.
+   */
+  checks: 'passing' | 'failing' | null;
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
