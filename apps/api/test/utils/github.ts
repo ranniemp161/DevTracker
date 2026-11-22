@@ -181,6 +181,7 @@ export const checkRunEvent = (
     app?: string;
     action?: string;
     at?: string;
+    status?: string;
   } = {},
 ) => ({
   ...repoRef,
@@ -188,7 +189,7 @@ export const checkRunEvent = (
   check_run: {
     id: 8001,
     head_sha: options.sha ?? SHA_A,
-    status: 'queued',
+    status: options.status ?? 'queued',
     started_at: options.at ?? '2026-11-06T11:55:00Z',
     app: { slug: options.app ?? 'github-actions' },
     check_suite: { id: options.suiteId ?? 9001 },

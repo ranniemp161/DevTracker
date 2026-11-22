@@ -154,6 +154,18 @@ describe('CI status on pull requests (0015)', () => {
     // A late "created" for a run that already finished changes nothing.
     await deliver(t, 'check_run', checkRunEvent({ at: '2026-11-06T11:58:00Z' })).expect(202);
     expect(await state()).toBe('passing');
+
+    // A run added already finished to a completed suite (Vercel's preview comments) gets no new
+    // suite result, so it must not reopen the suite.
+    const instant = checkRunEvent({
+      suiteId: 9002,
+      app: 'vercel',
+      at: '2026-11-06T12:30:00Z',
+      status: 'completed',
+    });
+    const res = await deliver(t, 'check_run', instant).expect(202);
+    expect(res.body.data.status).toBe('IGNORED');
+    expect(await state()).toBe('passing');
   });
 
   it('reopens a suite on a re-run and ignores results from before it', async () => {
