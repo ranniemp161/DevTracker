@@ -34,6 +34,7 @@ import { ShortcutsHelp } from '@/components/shortcuts-help';
 import { ToastProvider } from '@/components/toaster';
 import { Alert, Avatar, avatarTone, Button, IconButton, Skeleton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
+import { clearApiCache } from '@/lib/api-cache';
 import { forgetLastWorkspace, rememberLastWorkspace } from '@/lib/last-workspace';
 import { useFavoriteProjects } from '@/lib/project-prefs';
 import { setSidebarCollapsed, useSidebarCollapsed } from '@/lib/sidebar-collapsed';
@@ -113,6 +114,7 @@ async function signOut(router: ReturnType<typeof useRouter>) {
   clearChatDrafts();
   forgetLastWorkspace();
   await api('/auth/logout', { method: 'POST' }).catch(() => undefined);
+  clearApiCache();
   router.replace('/login');
   router.refresh();
 }
