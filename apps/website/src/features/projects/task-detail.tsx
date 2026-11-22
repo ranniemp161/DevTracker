@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
+  AlertIcon,
   CalendarIcon,
   ChatIcon,
   CheckIcon,
@@ -44,6 +45,7 @@ import { TaskTime } from './task-time';
 import { TaskTimeEntries } from './task-time-entries';
 import { TaskAttachments } from './task-attachments';
 import { TaskChecklist } from './task-checklist';
+import { TaskRelations } from './task-relations';
 import { useTaskTimer } from './task-timer';
 
 export function TaskDetail() {
@@ -476,6 +478,13 @@ function TaskEditor({
                 ))}
               </Menu>
               <TaskLabels task={task} onChanged={onSaved} />
+              {/* Open blockers (0020): visible next to the status they hold up. */}
+              {task.blockedByCount > 0 && task.status !== 'DONE' ? (
+                <span className={`${chipStatic} border-danger-line! text-danger!`}>
+                  <AlertIcon size={14} />
+                  Blocked by {task.blockedByCount} {task.blockedByCount === 1 ? 'task' : 'tasks'}
+                </span>
+              ) : null}
             </div>
             <DescriptionField
               value={form.description}
@@ -532,6 +541,7 @@ function TaskEditor({
         <div className="min-w-0 px-4 pt-8 pb-10 sm:px-7 lg:col-start-1 lg:row-start-2 lg:px-10">
           <div className="mx-auto max-w-3xl space-y-10">
             <TaskChecklist key={`checklist-${task.id}`} taskId={task.id} onChanged={onSaved} />
+            <TaskRelations key={`relations-${task.id}`} taskId={task.id} onChanged={onSaved} />
             <TaskAttachments key={task.id} taskId={task.id} />
             <TaskTimeline task={task} refreshKey={historyKey} onActivity={onActivity} />
           </div>

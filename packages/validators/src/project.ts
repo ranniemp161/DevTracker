@@ -438,3 +438,11 @@ export const reorderChecklistSchema = z.object({
     .refine((ids) => new Set(ids).size === ids.length, { error: 'Each item must appear once.' }),
 });
 export type ReorderChecklistInput = z.infer<typeof reorderChecklistSchema>;
+
+// --- Task relations (decision record 0020) ---
+
+export const createTaskRelationSchema = z.object({
+  kind: z.enum(['BLOCKS', 'BLOCKED_BY', 'RELATES'], { error: 'Choose how the tasks relate.' }),
+  taskId: z.uuid({ error: 'Choose a task.' }),
+});
+export type CreateTaskRelationInput = z.infer<typeof createTaskRelationSchema>;

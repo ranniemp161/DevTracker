@@ -731,6 +731,8 @@ export class TasksService {
           minutes: sql<number>`(select coalesce(sum(te.minutes), 0) from time_entries te where te.task_id = "tasks"."id")::int`,
           checklistTotal: sql<number>`(select count(*) from task_checklist_items ci where ci.task_id = "tasks"."id")::int`,
           checklistDone: sql<number>`(select count(*) from task_checklist_items ci where ci.task_id = "tasks"."id" and ci.done_at is not null)::int`,
+          // Open blockers (0020): BLOCKS relations into this task from tasks not yet Done.
+          blockedBy: sql<number>`(select count(*) from task_relations r join tasks b on b.id = r.task_id where r.related_task_id = "tasks"."id" and r.type = 'BLOCKS' and b.deleted_at is null and b.status <> 'DONE')::int`,
         })
         .from(tasks)
         .where(inArray(tasks.id, ids)),
@@ -783,6 +785,7 @@ export class TasksService {
         estimateMinutes: task.estimateMinutes,
         loggedMinutes: totalsByTask.get(task.id)?.minutes ?? 0,
         checks: checksByTask.get(task.id) ?? null,
+        blockedByCount: totalsByTask.get(task.id)?.blockedBy ?? 0,
         checklist: {
           done: totalsByTask.get(task.id)?.checklistDone ?? 0,
           total: totalsByTask.get(task.id)?.checklistTotal ?? 0,
