@@ -26,6 +26,7 @@ import {
   MyTasksIcon,
   SearchIcon,
   SettingsIcon,
+  SidebarIcon,
   UsersIcon,
   XIcon,
 } from '@/components/icons';
@@ -33,6 +34,7 @@ import { ToastProvider } from '@/components/toaster';
 import { Alert, Avatar, Button, IconButton, Skeleton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { forgetLastWorkspace, rememberLastWorkspace } from '@/lib/last-workspace';
+import { setSidebarCollapsed, useSidebarCollapsed } from '@/lib/sidebar-collapsed';
 import { RealtimeProvider, useRealtimeRefresh, type RealtimeEvent } from '@/lib/realtime';
 import { useApiQuery } from '@/lib/use-api-query';
 import { NotificationBell } from '../collaboration/notification-bell';
@@ -137,6 +139,7 @@ function VerifiedFrame({ session, children }: { session: Session; children: Reac
   const pathname = usePathname();
   const params = useParams<{ id?: string }>();
   const isDesktop = useIsDesktop();
+  const sidebarCollapsed = useSidebarCollapsed();
   const [drawerPath, setDrawerPath] = useState<string | null>(null);
   const { user, workspaces } = session;
 
@@ -208,6 +211,7 @@ function VerifiedFrame({ session, children }: { session: Session; children: Reac
       onNavigate={closeDrawer}
       showBell={showBell}
       onSearch={openSearch}
+      onCollapse={isDesktop ? () => setSidebarCollapsed(true) : undefined}
     />
   );
 
@@ -273,7 +277,29 @@ function VerifiedFrame({ session, children }: { session: Session; children: Reac
         </div>
       ) : isDesktop ? (
         <div className="flex h-dvh bg-bg">
-          <aside className="w-62 shrink-0">{sidebar(true)}</aside>
+          {sidebarCollapsed ? (
+            // A slim rail keeps the way back, search and notifications in reach.
+            <nav
+              aria-label="Primary"
+              className="flex w-13 shrink-0 flex-col items-center gap-1 py-3"
+            >
+              <IconButton
+                aria-label="Show sidebar"
+                title="Show sidebar"
+                onClick={() => setSidebarCollapsed(false)}
+              >
+                <SidebarIcon size={16} />
+              </IconButton>
+              {canSearch ? (
+                <IconButton aria-label="Search" title="Search (Ctrl K)" onClick={openSearch}>
+                  <SearchIcon size={16} />
+                </IconButton>
+              ) : null}
+              <NotificationBell />
+            </nav>
+          ) : (
+            <aside className="w-62 shrink-0">{sidebar(true)}</aside>
+          )}
           <main
             id="main-content"
             tabIndex={-1}

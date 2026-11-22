@@ -25,6 +25,7 @@ import {
   PlusIcon,
   SearchIcon,
   SettingsIcon,
+  SidebarIcon,
   UsersIcon,
 } from '@/components/icons';
 import { Menu, MenuGroup, MenuItem, MenuLink, MenuSeparator } from '@/components/menu';
@@ -83,6 +84,8 @@ export interface SidebarProps {
   showBell: boolean;
   /** Opens workspace search (record 0017). */
   onSearch: () => void;
+  /** Desktop only: hides the sidebar to give the page more room. */
+  onCollapse?: () => void;
 }
 
 export function Sidebar({
@@ -96,6 +99,7 @@ export function Sidebar({
   onNavigate,
   showBell,
   onSearch,
+  onCollapse,
 }: SidebarProps) {
   const pathname = usePathname();
   const active = workspaces.find((w) => w.id === activeWorkspaceId);
@@ -106,6 +110,17 @@ export function Sidebar({
       <div className="flex items-center gap-1">
         <WorkspaceSwitcher workspaces={workspaces} active={active} onNavigate={onNavigate} />
         {showBell ? <NotificationBell /> : null}
+        {onCollapse ? (
+          <button
+            type="button"
+            onClick={onCollapse}
+            aria-label="Hide sidebar"
+            title="Hide sidebar"
+            className="touch-target inline-flex size-8 shrink-0 items-center justify-center rounded-control text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
+          >
+            <SidebarIcon size={16} />
+          </button>
+        ) : null}
       </div>
 
       {active ? (
