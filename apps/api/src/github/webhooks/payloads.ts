@@ -140,6 +140,7 @@ export const checkRunEventSchema = z.object({
   action: z.string(),
   check_run: z.object({
     head_sha: z.string().regex(sha),
+    status: z.string().nullable().optional(),
     started_at: z.string().nullable().optional(),
     app: z.object({ slug: z.string().optional() }).nullable().optional(),
     check_suite: z.object({ id }),

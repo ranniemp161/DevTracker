@@ -434,6 +434,9 @@ export class GithubEventProcessor {
     p: z.infer<typeof checkRunEventSchema>,
   ): Promise<ProcessResult> {
     if (p.action !== 'created') return ignored(`check_run.${p.action} is not handled`);
+    // Some apps add a run that is already finished to a suite that already completed (Vercel's
+    // preview comments). GitHub sends no new suite result for it, so it must not reopen the suite.
+    if (p.check_run.status === 'completed') return ignored('check run was created completed');
     const target = await this.target(tx, p.installation.id, p.repository.id);
     if (!target) return ignored('repository not connected');
     const run = p.check_run;

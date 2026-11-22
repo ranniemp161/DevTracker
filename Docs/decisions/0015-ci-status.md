@@ -75,7 +75,8 @@ Retention: suites are kept like other GitHub history (0008).
 - **Re-runs and late deliveries:**
   - a run that starts after the suite's last result (a re-run) reopens the suite;
   - a `created` delivery for a run older than the suite's last result changes nothing;
-  - a `completed` delivery older than the suite's latest run doesn't end that run.
+  - a `completed` delivery older than the suite's latest run doesn't end that run;
+  - a run that is created already `completed` is ignored. Vercel adds its "Preview Comments" run this way to a suite that already completed, and GitHub sends no new suite result, so reopening the suite would leave it running forever (seen on PR #78).
 - **Board and task pages:** "Checks running" with a clock icon, in the muted text color. On a task, the worst of its open PRs wins: failing, then running, then passing.
 - **Chat:** unchanged. A failure posts when the state becomes `failing`, so a re-run that fails again posts again.
 - **Limit:** if a quick suite finishes before CI even queues its first run, the badge can show "passing" for a few seconds.
