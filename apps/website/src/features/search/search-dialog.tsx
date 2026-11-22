@@ -78,7 +78,9 @@ export function SearchDialog({
 
   const close = () => dialogRef.current?.close();
   const open = (item: SearchItem) => {
-    close();
+    // Tell the shell directly: navigating can unmount the dialog before its `close` event
+    // reaches React, and the search would then reopen on the next page.
+    onClose();
     router.push(item.href);
   };
 
@@ -121,7 +123,7 @@ export function SearchDialog({
       aria-labelledby={titleId}
       onClose={onClose}
       onClick={(e) => e.target === e.currentTarget && close()}
-      className="m-0 h-dvh max-h-none w-full max-w-none flex-col border-0 bg-surface p-0 text-fg open:flex backdrop:bg-fg/40 sm:mx-auto sm:mt-24 sm:h-auto sm:max-w-xl sm:rounded-panel sm:border sm:border-line sm:shadow-overlay"
+      className="m-0 h-dvh max-h-none w-full max-w-none flex-col border-0 bg-surface p-0 text-fg open:flex backdrop:bg-fg/40 sm:mx-auto sm:mt-24 sm:mb-auto sm:h-auto sm:max-w-xl sm:rounded-panel sm:border sm:border-line sm:shadow-overlay"
     >
       <h2 id={titleId} className="sr-only">
         Search this workspace
