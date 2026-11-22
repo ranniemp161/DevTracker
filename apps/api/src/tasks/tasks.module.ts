@@ -5,13 +5,15 @@ import { WorkspacesModule } from '../workspaces/workspaces.module';
 import { TaskAccessService } from './task-access.service';
 import { TaskAttachmentsController } from './task-attachments.controller';
 import { TaskAttachmentsService } from './task-attachments.service';
+import { TaskChecklistController } from './task-checklist.controller';
+import { TaskChecklistService } from './task-checklist.service';
 import { TasksController } from './tasks.controller';
 import { TasksService } from './tasks.service';
 
 @Module({
   imports: [ProjectsModule, RateLimitModule, WorkspacesModule],
-  controllers: [TasksController, TaskAttachmentsController],
-  providers: [TasksService, TaskAccessService, TaskAttachmentsService],
+  controllers: [TasksController, TaskAttachmentsController, TaskChecklistController],
+  providers: [TasksService, TaskAccessService, TaskAttachmentsService, TaskChecklistService],
   exports: [TaskAccessService],
 })
 export class TasksModule {}

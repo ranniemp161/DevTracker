@@ -56,6 +56,14 @@ export function describeActivity(entry: ActivityEntry): string {
         ? 'edited a time entry'
         : `changed a time entry from ${formatMinutes(Number(minutes.from))} to ${formatMinutes(Number(minutes.to))}`;
     }
+    case 'task.checklist_item_added':
+      return 'added a checklist item';
+    case 'task.checklist_item_completed':
+      return 'completed a checklist item';
+    case 'task.checklist_item_reopened':
+      return 'reopened a checklist item';
+    case 'task.checklist_item_removed':
+      return 'removed a checklist item';
     case 'task.time_removed':
       return `removed a ${formatMinutes(Number(m.minutes ?? 0))} time entry`;
     case 'comment.created':

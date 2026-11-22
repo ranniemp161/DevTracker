@@ -296,6 +296,33 @@ export const milestoneCriteria = pgTable(
   (t) => [index('milestone_criteria_milestone_id_idx').on(t.milestoneId, t.position)],
 );
 
+/** 0018: a task's checklist (lightweight sub-tasks), in display order. */
+export const taskChecklistItems = pgTable(
+  'task_checklist_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    body: text('body').notNull(),
+    /** Display order within the task (ascending). */
+    position: integer('position').notNull(),
+    assigneeId: uuid('assignee_id').references(() => users.id, { onDelete: 'set null' }),
+    doneAt: timestamptz('done_at'),
+    doneBy: uuid('done_by').references(() => users.id, { onDelete: 'set null' }),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+    updatedAt: timestamptz('updated_at')
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index('task_checklist_items_task_idx').on(t.taskId, t.position),
+    check('task_checklist_items_body_length', sql`char_length(${t.body}) between 1 and 500`),
+  ],
+);
+
 /**
  * 0016: a submission from a project's public request form. The task it created holds the
  * title and description; reporter contact details live only here and are deleted on schedule.

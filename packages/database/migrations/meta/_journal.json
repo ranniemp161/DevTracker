@@ -134,6 +134,13 @@
       "when": 1795320364139,
       "tag": "0018_checks_running",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1795333607952,
+      "tag": "0019_task_checklist",
+      "breakpoints": true
     }
   ]
 }
