@@ -129,6 +129,13 @@ export const ChecklistIcon = (p: IconProps) => (
   </Icon>
 );
 
+/** Favourite; `filled` for one that is set. */
+export const StarIcon = ({ filled = false, ...p }: IconProps & { filled?: boolean }) => (
+  <Icon {...p} fill={filled ? 'currentColor' : 'none'}>
+    <path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" />
+  </Icon>
+);
+
 export const LinkIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
