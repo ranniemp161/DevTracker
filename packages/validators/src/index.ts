@@ -6,3 +6,4 @@ export * from './project.js';
 export * from './task-attachment.js';
 export * from './workspace.js';
 export * from './requests.js';
+export * from './search.js';

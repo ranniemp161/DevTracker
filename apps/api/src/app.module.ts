@@ -23,6 +23,7 @@ import { MilestonesModule } from './milestones/milestones.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ProjectsModule } from './projects/projects.module';
 import { RealtimeModule } from './realtime/realtime.module';
+import { SearchModule } from './search/search.module';
 import { TasksModule } from './tasks/tasks.module';
 import { TimeEntriesModule } from './time-entries/time-entries.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
@@ -50,6 +51,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
     GithubModule,
     RealtimeModule,
     MaintenanceModule,
+    SearchModule,
   ],
   controllers: [HealthController],
   providers: [

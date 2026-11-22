@@ -24,6 +24,7 @@ import {
   ListIcon,
   MoreIcon,
   MyTasksIcon,
+  SearchIcon,
   SettingsIcon,
   UsersIcon,
   XIcon,
@@ -37,6 +38,7 @@ import { useApiQuery } from '@/lib/use-api-query';
 import { NotificationBell } from '../collaboration/notification-bell';
 import { usePendingInvitation } from '../invitations/pending-invitation';
 import { clearChatDrafts } from '../chat/chat-drafts';
+import { SearchDialog } from '../search/search-dialog';
 import { ActiveTimerBar, TaskTimerProvider } from '../projects/task-timer';
 import { SessionContext, type Session } from './session-context';
 import { ShellDataContext } from './shell-data';
@@ -174,6 +176,26 @@ function VerifiedFrame({ session, children }: { session: Session; children: Reac
   const drawerOpen = !isDesktop && drawerPath === pathname;
   const closeDrawer = () => setDrawerPath(null);
 
+  // Workspace search (record 0017): Ctrl+K or ⌘K anywhere in a workspace.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const canSearch = Boolean(activeWorkspace);
+  const openSearch = () => {
+    closeDrawer();
+    setSearchOpen(true);
+  };
+  useEffect(() => {
+    if (!canSearch) return;
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setDrawerPath(null);
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [canSearch]);
+
   const sidebar = (showBell: boolean) => (
     <Sidebar
       user={user}
@@ -185,6 +207,7 @@ function VerifiedFrame({ session, children }: { session: Session; children: Reac
       onLogout={() => signOut(router)}
       onNavigate={closeDrawer}
       showBell={showBell}
+      onSearch={openSearch}
     />
   );
 
@@ -276,6 +299,11 @@ function VerifiedFrame({ session, children }: { session: Session; children: Reac
               <span className="min-w-0 flex-1 truncate text-sm font-semibold">
                 {projectQuery.data?.project.name ?? activeWorkspace?.name ?? 'DevTrack'}
               </span>
+              {canSearch ? (
+                <IconButton aria-label="Search" onClick={openSearch}>
+                  <SearchIcon size={18} />
+                </IconButton>
+              ) : null}
               <NotificationBell />
             </div>
           </header>
@@ -311,6 +339,9 @@ function VerifiedFrame({ session, children }: { session: Session; children: Reac
           ) : null}
         </div>
       )}
+      {searchOpen && activeWorkspace ? (
+        <SearchDialog workspaceId={activeWorkspace.id} onClose={() => setSearchOpen(false)} />
+      ) : null}
     </ShellDataContext.Provider>
   );
 }

@@ -548,6 +548,7 @@ html {
   --color-activity-other-bg: var(--dt-activity-other-bg);
   --color-activity-other-fg: var(--dt-activity-other-fg);
 
+  --radius-kbd: var(--dt-radius-xs);
   --radius-chip: var(--dt-radius-sm);
   --radius-control: var(--dt-radius-md);
   --radius-card: var(--dt-radius-lg);
