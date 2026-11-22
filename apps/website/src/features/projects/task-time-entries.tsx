@@ -3,13 +3,15 @@
 import type { Task, TimeEntry } from '@devtrack/types';
 import { createTimeEntrySchema, MAX_ENTRY_MINUTES } from '@devtrack/validators';
 import { useEffect, useState, type FormEvent } from 'react';
-import { PlusIcon } from '@/components/icons';
+import { ChevronRightIcon, MoreIcon, PlusIcon } from '@/components/icons';
+import { Menu, MenuItem } from '@/components/menu';
 import { Avatar, Button, PanelSection, Skeleton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useRealtimeRefresh } from '@/lib/realtime';
 import { useApiQuery } from '@/lib/use-api-query';
 import { formatDate, formatMinutes } from './labels';
 import { useProject } from './project-context';
+import { rowMenuTrigger } from './property-styles';
 import { localWorkDate, TaskTimerButton, useTaskTimer } from './task-timer';
 
 const field =
@@ -97,73 +99,82 @@ export function TaskTimeEntries({ task, onChanged }: { task: Task; onChanged: ()
         <p className="text-label text-fg-subtle">Could not load the time entries.</p>
       ) : !entries ? (
         <Skeleton className="h-10" />
+      ) : entries.length === 0 ? (
+        <p className="text-sm text-fg-subtle">No time logged yet.</p>
       ) : (
-        <ul className="space-y-2">
-          {entries.map((entry) =>
-            editing === entry.id ? (
-              <li key={entry.id}>
-                <EntryForm
-                  entry={entry}
-                  busy={busy}
-                  onCancel={() => setEditing(null)}
-                  onError={setError}
-                  onSubmit={(body) =>
-                    call(() => api(`/time-entries/${entry.id}`, { method: 'PATCH', body }))
-                  }
-                />
-              </li>
-            ) : (
-              <li key={entry.id} className="space-y-0.5 text-label">
-                <div className="flex items-center gap-2">
-                  <Avatar
-                    name={entry.user?.username ?? '?'}
-                    url={entry.user?.avatarUrl ?? null}
-                    seed={entry.user?.id}
-                    size="xs"
+        // Entries are history: folded, but kept open while one is being edited.
+        <details className="group" open={editing !== null && editing !== 'new' ? true : undefined}>
+          <summary className="flex min-h-8 cursor-pointer list-none items-center gap-1.5 rounded-control text-label text-fg-muted hover:text-fg pointer-coarse:min-h-11 [&::-webkit-details-marker]:hidden">
+            <ChevronRightIcon size={14} className="transition-transform group-open:rotate-90" />
+            {entries.length === 1 ? '1 entry' : `${entries.length} entries`}
+          </summary>
+          <ul className="space-y-2 pt-1">
+            {entries.map((entry) =>
+              editing === entry.id ? (
+                <li key={entry.id}>
+                  <EntryForm
+                    entry={entry}
+                    busy={busy}
+                    onCancel={() => setEditing(null)}
+                    onError={setError}
+                    onSubmit={(body) =>
+                      call(() => api(`/time-entries/${entry.id}`, { method: 'PATCH', body }))
+                    }
                   />
-                  <span className="min-w-0 flex-1 truncate text-fg-secondary">
-                    {entry.user ? `@${entry.user.username}` : 'Deleted user'}
-                    <span className="text-fg-subtle"> · {formatDate(entry.spentOn)}</span>
-                  </span>
-                  <span className="shrink-0 font-medium text-fg tabular-nums">
-                    {formatMinutes(entry.minutes)}
-                  </span>
-                </div>
-                {entry.note ? <p className="break-words text-fg-muted">{entry.note}</p> : null}
-                {readOnly ? null : (
-                  <div className="flex gap-1">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={busy}
-                      aria-label={`Edit the ${formatMinutes(entry.minutes)} entry from ${formatDate(entry.spentOn)}`}
-                      onClick={() => {
-                        setError(null);
-                        setEditing(entry.id);
-                      }}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={busy}
-                      aria-label={`Remove the ${formatMinutes(entry.minutes)} entry from ${formatDate(entry.spentOn)}`}
-                      onClick={() =>
-                        call(() => api(`/time-entries/${entry.id}`, { method: 'DELETE' }))
-                      }
-                    >
-                      Remove
-                    </Button>
+                </li>
+              ) : (
+                <li key={entry.id} className="group/row space-y-0.5 text-label">
+                  <div className="flex items-center gap-2">
+                    <Avatar
+                      name={entry.user?.username ?? '?'}
+                      url={entry.user?.avatarUrl ?? null}
+                      seed={entry.user?.id}
+                      size="xs"
+                    />
+                    <span className="min-w-0 flex-1 truncate text-fg-secondary">
+                      {entry.user ? `@${entry.user.username}` : 'Deleted user'}
+                      <span className="text-fg-subtle"> · {formatDate(entry.spentOn)}</span>
+                    </span>
+                    <span className="shrink-0 font-medium text-fg tabular-nums">
+                      {formatMinutes(entry.minutes)}
+                    </span>
+                    {readOnly ? null : (
+                      <Menu
+                        label={`Time entry from ${formatDate(entry.spentOn)}`}
+                        align="end"
+                        disabled={busy}
+                        triggerProps={{
+                          'aria-label': `Actions for the ${formatMinutes(entry.minutes)} entry from ${formatDate(entry.spentOn)}`,
+                        }}
+                        triggerClassName={rowMenuTrigger}
+                        menuClassName="w-36"
+                        trigger={<MoreIcon size={16} />}
+                      >
+                        <MenuItem
+                          onSelect={() => {
+                            setError(null);
+                            setEditing(entry.id);
+                          }}
+                        >
+                          Edit
+                        </MenuItem>
+                        <MenuItem
+                          onSelect={() =>
+                            call(() => api(`/time-entries/${entry.id}`, { method: 'DELETE' }))
+                          }
+                          className="text-danger! hover:text-danger! focus-visible:text-danger!"
+                        >
+                          Remove
+                        </MenuItem>
+                      </Menu>
+                    )}
                   </div>
-                )}
-              </li>
-            ),
-          )}
-          {entries.length === 0 ? (
-            <li className="text-sm text-fg-subtle">No time logged yet.</li>
-          ) : null}
-        </ul>
+                  {entry.note ? <p className="break-words text-fg-muted">{entry.note}</p> : null}
+                </li>
+              ),
+            )}
+          </ul>
+        </details>
       )}
 
       {error ? (

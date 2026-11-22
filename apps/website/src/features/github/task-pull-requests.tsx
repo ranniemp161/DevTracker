@@ -14,6 +14,9 @@ import { useRealtimeRefresh } from '@/lib/realtime';
 import { ChecksBadge } from './checks-badge';
 import { useApiQuery } from '@/lib/use-api-query';
 import { useProject } from '../projects/project-context';
+import { rowMenuTrigger } from '../projects/property-styles';
+import { ChevronRightIcon, MoreIcon } from '@/components/icons';
+import { Menu, MenuItem } from '@/components/menu';
 
 const STATE: Record<PullRequestState, { label: string; tone: 'green' | 'blue' | 'neutral' }> = {
   open: { label: 'Open', tone: 'green' },
@@ -63,6 +66,9 @@ export function TaskPullRequests({
     }
   }
 
+  const open = linked.data?.filter((pr) => pr.state === 'open') ?? [];
+  const done = linked.data?.filter((pr) => pr.state !== 'open') ?? [];
+
   return (
     <PanelSection title="Pull requests">
       <div className="space-y-3">
@@ -81,46 +87,27 @@ export function TaskPullRequests({
             ) : null}
           </div>
         ) : null}
-        <ul className="divide-y divide-line-subtle">
-          {linked.data?.map((pr) => (
-            <li key={pr.id} className="flex items-start justify-between gap-3 py-2">
-              <div className="min-w-0">
-                <a
-                  href={pr.url}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="block truncate text-sm font-medium hover:underline"
-                >
-                  #{pr.number} {pr.title}
-                </a>
-                <p className="text-xs text-fg-muted">
-                  {pr.repository.fullName} · {pr.headBranch}
-                  {pr.link.source === 'AUTO'
-                    ? ' · linked automatically'
-                    : pr.link.linkedBy
-                      ? ` · linked by @${pr.link.linkedBy.username}`
-                      : ''}
-                </p>
-                {/* CI on the head commit (decision record 0015). */}
-                {pr.checks && pr.state === 'open' ? (
-                  <p className="mt-1 text-xs">
-                    <ChecksBadge state={pr.checks} />
-                  </p>
-                ) : null}
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <Badge tone={STATE[pr.state].tone}>
-                  {pr.isDraft && pr.state === 'open' ? 'Draft' : STATE[pr.state].label}
-                </Badge>
-                {readOnly ? null : (
-                  <Button size="sm" variant="ghost" disabled={busy} onClick={() => unlink(pr)}>
-                    Unlink
-                  </Button>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
+        {open.length ? (
+          <ul className="divide-y divide-line-subtle">
+            {open.map((pr) => (
+              <PrRow key={pr.id} pr={pr} busy={busy} readOnly={readOnly} onUnlink={unlink} />
+            ))}
+          </ul>
+        ) : null}
+        {/* Merged and closed PRs are history: folded so open work stays on top. */}
+        {done.length ? (
+          <details className="group" open={open.length === 0 && done.length <= 2}>
+            <summary className="flex min-h-8 cursor-pointer list-none items-center gap-1.5 rounded-control text-label text-fg-muted hover:text-fg pointer-coarse:min-h-11 [&::-webkit-details-marker]:hidden">
+              <ChevronRightIcon size={14} className="transition-transform group-open:rotate-90" />
+              {done.length} merged or closed
+            </summary>
+            <ul className="divide-y divide-line-subtle">
+              {done.map((pr) => (
+                <PrRow key={pr.id} pr={pr} busy={busy} readOnly={readOnly} onUnlink={unlink} />
+              ))}
+            </ul>
+          </details>
+        ) : null}
         {readOnly ? null : (
           <LinkForm
             task={task}
@@ -133,6 +120,75 @@ export function TaskPullRequests({
         )}
       </div>
     </PanelSection>
+  );
+}
+
+/** One linked PR: number and title, branch and link source, CI badge, ⋯ actions. */
+function PrRow({
+  pr,
+  busy,
+  readOnly,
+  onUnlink,
+}: {
+  pr: LinkedPullRequest;
+  busy: boolean;
+  readOnly: boolean;
+  onUnlink: (pr: LinkedPullRequest) => void;
+}) {
+  const source =
+    pr.link.source === 'AUTO'
+      ? 'linked automatically'
+      : pr.link.linkedBy
+        ? `linked by @${pr.link.linkedBy.username}`
+        : '';
+  return (
+    <li className="group/row flex items-start gap-2 py-2">
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <a
+            href={pr.url}
+            target="_blank"
+            rel="noreferrer noopener"
+            title={`${pr.repository.fullName} #${pr.number}: ${pr.title}`}
+            className="min-w-0 truncate text-sm font-medium hover:underline"
+          >
+            <span className="text-fg-muted">#{pr.number}</span> {pr.title}
+          </a>
+          <span className="shrink-0">
+            <Badge tone={STATE[pr.state].tone}>
+              {pr.isDraft && pr.state === 'open' ? 'Draft' : STATE[pr.state].label}
+            </Badge>
+          </span>
+        </div>
+        <p className="truncate font-mono text-xs text-fg-subtle" title={source}>
+          {pr.headBranch}
+        </p>
+        {/* CI on the head commit (decision record 0015). */}
+        {pr.checks && pr.state === 'open' ? (
+          <p className="mt-1 text-xs">
+            <ChecksBadge state={pr.checks} />
+          </p>
+        ) : null}
+      </div>
+      {readOnly ? null : (
+        <Menu
+          label={`Pull request #${pr.number} actions`}
+          align="end"
+          disabled={busy}
+          triggerProps={{ 'aria-label': `Pull request #${pr.number} actions` }}
+          triggerClassName={rowMenuTrigger}
+          menuClassName="w-44"
+          trigger={<MoreIcon size={16} />}
+        >
+          <MenuItem
+            onSelect={() => onUnlink(pr)}
+            className="text-danger! hover:text-danger! focus-visible:text-danger!"
+          >
+            Unlink from task
+          </MenuItem>
+        </Menu>
+      )}
+    </li>
   );
 }
 
