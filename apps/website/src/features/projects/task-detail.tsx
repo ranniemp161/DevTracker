@@ -16,6 +16,7 @@ import {
   XIcon,
 } from '@/components/icons';
 import { ConfirmDialog } from '@/components/confirm-dialog';
+import { Markdown } from '@/components/markdown';
 import { Menu, MenuItem } from '@/components/menu';
 import { useToast } from '@/components/toaster';
 import {
@@ -25,6 +26,7 @@ import {
   ErrorState,
   IconButton,
   PriorityIcon,
+  SegmentedControl,
   Skeleton,
   StatusDot,
 } from '@/components/ui';
@@ -475,24 +477,11 @@ function TaskEditor({
               </Menu>
               <TaskLabels task={task} onChanged={onSaved} />
             </div>
-            <label htmlFor="task-description" className="sr-only">
-              Description
-            </label>
-            <div className="-mx-2">
-              <textarea
-                id="task-description"
-                rows={3}
-                value={form.description}
-                disabled={readOnly}
-                placeholder={
-                  readOnly
-                    ? 'No description.'
-                    : 'Add a description, acceptance criteria or technical notes…'
-                }
-                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                className="block min-h-20 w-full resize-none rounded-control border border-transparent bg-transparent px-2 py-1.5 field-sizing-content text-base leading-relaxed text-fg-secondary placeholder:text-fg-subtle hover:border-line focus-visible:border-primary lg:text-sm"
-              />
-            </div>
+            <DescriptionField
+              value={form.description}
+              readOnly={readOnly}
+              onChange={(description) => setForm((f) => ({ ...f, description }))}
+            />
           </div>
         </form>
 
@@ -654,6 +643,110 @@ function DetailRow({ label, children }: { label: string; children: ReactNode }) 
     <div className="flex gap-2">
       <dt className="w-24 shrink-0 text-fg-muted">{label}</dt>
       <dd className="min-w-0 flex-1 truncate text-fg-secondary">{children}</dd>
+    </div>
+  );
+}
+
+/**
+ * The task description (decision record 0019): Markdown, shown formatted. Editing has Write
+ * and Preview tabs; the text still saves with the Save changes bar like every other field.
+ */
+function DescriptionField({
+  value,
+  readOnly,
+  onChange,
+}: {
+  value: string;
+  readOnly: boolean;
+  onChange: (value: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [tab, setTab] = useState<'write' | 'preview'>('write');
+  const textarea = useRef<HTMLTextAreaElement>(null);
+  const empty = value.trim() === '';
+
+  if (readOnly) {
+    return empty ? (
+      <p className="text-sm text-fg-subtle">No description.</p>
+    ) : (
+      <Markdown>{value}</Markdown>
+    );
+  }
+
+  if (!editing && !empty) {
+    return (
+      <div className="group/desc relative -mx-2 rounded-control border border-transparent px-2 py-1.5 hover:border-line">
+        {/* Clicking the text edits it, except on links, which open as usual. */}
+        <div
+          onClick={(e) => {
+            if ((e.target as HTMLElement).closest('a')) return;
+            setTab('write');
+            setEditing(true);
+          }}
+          className="cursor-text"
+        >
+          <Markdown>{value}</Markdown>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setTab('write');
+            setEditing(true);
+          }}
+          className="absolute top-1 right-1 rounded-control bg-surface px-2 py-1 text-label font-medium text-fg-muted opacity-0 transition-opacity group-hover/desc:opacity-100 hover:text-fg focus-visible:opacity-100 pointer-coarse:opacity-100"
+        >
+          Edit description
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="-mx-2 rounded-control border border-line focus-within:border-primary">
+      <div className="flex items-center justify-between gap-2 border-b border-line-subtle px-2 py-1.5">
+        <SegmentedControl
+          label="Description view"
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: 'write', label: 'Write' },
+            { value: 'preview', label: 'Preview' },
+          ]}
+        />
+        <div className="flex items-center gap-2">
+          <span className="hidden text-xs text-fg-subtle sm:inline">Markdown supported</span>
+          {!empty ? (
+            <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
+              Done
+            </Button>
+          ) : null}
+        </div>
+      </div>
+      {tab === 'write' ? (
+        <>
+          <label htmlFor="task-description" className="sr-only">
+            Description
+          </label>
+          <textarea
+            ref={textarea}
+            id="task-description"
+            rows={4}
+            value={value}
+            autoFocus={editing}
+            placeholder="Add a description, acceptance criteria or technical notes… Markdown works: **bold**, - lists, `code`, [links](https://…)"
+            onChange={(e) => onChange(e.target.value)}
+            className="block min-h-28 w-full resize-none rounded-b-control bg-transparent px-3 py-2 field-sizing-content text-base leading-relaxed text-fg-secondary placeholder:text-fg-subtle focus-visible:shadow-none! lg:text-sm"
+          />
+        </>
+      ) : (
+        <div className="min-h-28 px-3 py-2">
+          {empty ? (
+            <p className="text-sm text-fg-subtle">Nothing to preview.</p>
+          ) : (
+            <Markdown>{value}</Markdown>
+          )}
+        </div>
+      )}
     </div>
   );
 }
