@@ -2,30 +2,33 @@
 
 import type { TaskAttachment } from '@devtrack/types';
 import { createTaskAttachmentSchema, TASK_MEDIA_TYPES } from '@devtrack/validators';
-import { useId, useState, type FormEvent } from 'react';
-import { Button, PanelSection, Skeleton } from '@/components/ui';
+import { useId, useState, type ChangeEvent } from 'react';
+import { PaperclipIcon, SpinnerIcon } from '@/components/icons';
+import { Skeleton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useApiQuery } from '@/lib/use-api-query';
+import { useProject } from './project-context';
 
 export function TaskAttachments({ taskId }: { taskId: string }) {
   const path = `/tasks/${taskId}/attachments`;
   const query = useApiQuery<{ attachments: TaskAttachment[]; uploadsEnabled: boolean }>(path);
   const inputId = useId();
+  const { readOnly } = useProject();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function upload(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const file = new FormData(form).get('file');
-    if (!(file instanceof File)) return;
+  async function upload(event: ChangeEvent<HTMLInputElement>) {
+    const picker = event.currentTarget;
+    const file = picker.files?.[0];
+    if (!file) return;
     const input = createTaskAttachmentSchema.safeParse({
       name: file.name,
       contentType: file.type,
       size: file.size,
     });
     if (!input.success) {
-      setError('Choose a supported image or video between 1 byte and 50 MiB.');
+      picker.value = '';
+      setError('Choose a PNG, JPEG, GIF, WebP, MP4, WebM or MOV file up to 50 MiB.');
       return;
     }
 
@@ -45,7 +48,6 @@ export function TaskAttachments({ taskId }: { taskId: string }) {
       });
       if (!response.ok) throw new Error('Upload failed.');
       await api(`${path}/${id}/complete`, { method: 'POST' });
-      form.reset();
       query.reload();
     } catch (err) {
       setError(
@@ -54,46 +56,54 @@ export function TaskAttachments({ taskId }: { taskId: string }) {
           : 'Could not upload the file. Try again.',
       );
     } finally {
+      picker.value = '';
       setBusy(false);
     }
   }
 
+  const attachments = query.data?.attachments;
+
   return (
-    <PanelSection title="Attachments">
-      {query.data?.uploadsEnabled ? (
-        <form onSubmit={upload} className="space-y-2" aria-label="Upload attachment">
-          <label htmlFor={inputId} className="block text-sm font-medium text-fg">
-            Choose a media file
-          </label>
-          <p id={`${inputId}-hint`} className="text-xs text-fg-muted">
-            PNG, JPEG, GIF, WebP, MP4, WebM, or MOV. Up to 50 MiB.
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
+    <section aria-labelledby={`${inputId}-heading`} className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <h2 id={`${inputId}-heading`} className="text-md font-semibold">
+          Attachments
+          {attachments?.length ? (
+            <span className="ml-1.5 text-sm font-normal text-fg-muted">{attachments.length}</span>
+          ) : null}
+        </h2>
+        {query.data?.uploadsEnabled && !readOnly ? (
+          <div className="flex items-center">
+            {/* The real file input stays focusable; the label is its visible button. */}
             <input
               id={inputId}
-              name="file"
               type="file"
               accept={TASK_MEDIA_TYPES.join(',')}
               aria-describedby={`${inputId}-hint`}
-              className="max-w-full text-sm"
-              required
+              onChange={upload}
               disabled={busy}
+              className="peer sr-only"
             />
-            <Button type="submit" size="sm" disabled={busy}>
-              Upload
-            </Button>
+            <label
+              htmlFor={inputId}
+              className="inline-flex h-7.5 cursor-pointer items-center gap-1.5 rounded-control border border-line-control bg-surface px-2.5 text-label font-medium text-fg transition-colors hover:bg-surface-sunken peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-disabled:cursor-default peer-disabled:opacity-60 pointer-coarse:h-11"
+            >
+              {busy ? <SpinnerIcon size={14} /> : <PaperclipIcon size={14} />}
+              {busy ? 'Uploading…' : 'Attach file'}
+            </label>
           </div>
-          {busy ? (
-            <p role="status" className="text-sm text-fg-muted">
-              Uploading attachment…
-            </p>
-          ) : null}
-          {error ? (
-            <p role="alert" className="text-sm text-danger">
-              {error}
-            </p>
-          ) : null}
-        </form>
+        ) : null}
+      </div>
+      <p id={`${inputId}-hint`} className="sr-only">
+        PNG, JPEG, GIF, WebP, MP4, WebM or MOV, up to 50 MiB.
+      </p>
+      <p role="status" className="sr-only">
+        {busy ? 'Uploading attachment…' : ''}
+      </p>
+      {error ? (
+        <p role="alert" className="text-sm text-danger">
+          {error}
+        </p>
       ) : null}
 
       {query.error ? (
@@ -103,41 +113,42 @@ export function TaskAttachments({ taskId }: { taskId: string }) {
             Retry
           </button>
         </p>
-      ) : !query.data ? (
-        <Skeleton className="h-10" />
-      ) : query.data.attachments.length ? (
-        <>
-          <ul className="grid gap-3 sm:grid-cols-2">
-            {query.data.attachments.map((attachment) => (
-              <li key={attachment.id} className="min-w-0 rounded-control border border-line p-2">
-                <a
-                  href={attachment.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block text-sm text-primary underline [overflow-wrap:anywhere]"
-                >
-                  {attachment.contentType.startsWith('image/') ? (
-                    // The signed private URL goes directly to the media origin.
-                    <img
-                      src={attachment.url}
-                      alt=""
-                      loading="lazy"
-                      referrerPolicy="no-referrer"
-                      className="mb-2 h-28 w-full rounded-control bg-surface-muted object-contain"
-                    />
-                  ) : null}
+      ) : !attachments ? (
+        <Skeleton className="h-24" />
+      ) : attachments.length ? (
+        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {attachments.map((attachment) => (
+            <li key={attachment.id} className="min-w-0">
+              <a
+                href={attachment.url}
+                target="_blank"
+                rel="noreferrer"
+                className="group block overflow-hidden rounded-card border border-line bg-surface transition-colors hover:border-line-control"
+              >
+                {attachment.contentType.startsWith('image/') ? (
+                  // The signed private URL goes directly to the media origin.
+                  <img
+                    src={attachment.url}
+                    alt=""
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                    className="aspect-video w-full bg-surface-muted object-cover"
+                  />
+                ) : (
+                  <span className="flex aspect-video w-full items-center justify-center bg-surface-muted text-fg-muted">
+                    <PaperclipIcon size={20} />
+                  </span>
+                )}
+                <span className="block truncate px-2.5 py-2 text-label text-fg-secondary group-hover:text-fg">
                   {attachment.name}
-                </a>
-              </li>
-            ))}
-          </ul>
-          <button type="button" className="text-xs text-fg-muted underline" onClick={query.reload}>
-            Refresh attachment links
-          </button>
-        </>
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
       ) : (
-        <p className="text-sm text-fg-muted">No attachments yet.</p>
+        <p className="text-sm text-fg-subtle">No attachments yet.</p>
       )}
-    </PanelSection>
+    </section>
   );
 }

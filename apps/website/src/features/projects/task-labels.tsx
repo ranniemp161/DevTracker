@@ -3,15 +3,16 @@
 import type { Label, Task } from '@devtrack/types';
 import { createLabelSchema } from '@devtrack/validators';
 import { useState, type FormEvent } from 'react';
-import { Button, PanelSection } from '@/components/ui';
+import { Button } from '@/components/ui';
 import { PlusIcon, XIcon } from '@/components/icons';
 import { Menu, MenuItem } from '@/components/menu';
 import { api, ApiError } from '@/lib/api';
 import { useApiQuery } from '@/lib/use-api-query';
 import { LABEL_COLORS, LabelChip } from './label-chip';
 import { useProject } from './project-context';
+import { addChip, pickerTrigger } from './property-styles';
 
-/** Labels card on the task page: attach/detach workspace labels, or create one inline. */
+/** Labels row on the task page: attach/detach workspace labels, or create one inline. */
 export function TaskLabels({ task, onChanged }: { task: Task; onChanged: () => void }) {
   const { project, readOnly } = useProject();
   const all = useApiQuery<Label[]>(`/workspaces/${project.workspaceId}/labels`);
@@ -56,8 +57,8 @@ export function TaskLabels({ task, onChanged }: { task: Task; onChanged: () => v
   const available = (all.data ?? []).filter((l) => !task.labels.some((t) => t.id === l.id));
 
   return (
-    <PanelSection title="Labels">
-      <div className="flex flex-wrap gap-1.5">
+    <div className="py-1">
+      <div className="flex flex-wrap items-center gap-1">
         {task.labels.map((l) => (
           <LabelChip key={l.id} label={l}>
             {readOnly ? null : (
@@ -68,97 +69,96 @@ export function TaskLabels({ task, onChanged }: { task: Task; onChanged: () => v
                 onClick={() =>
                   call(() => api(`/tasks/${task.id}/labels/${l.id}`, { method: 'DELETE' }))
                 }
-                className="-mr-0.5 inline-flex size-4.5 items-center justify-center rounded-xs text-fg-subtle hover:bg-surface-muted hover:text-fg"
+                className="touch-target -mr-0.5 inline-flex size-4.5 items-center justify-center rounded-xs text-fg-subtle hover:bg-surface-muted hover:text-fg"
               >
                 <XIcon size={12} />
               </button>
             )}
           </LabelChip>
         ))}
-        {task.labels.length === 0 ? (
-          <span className="text-sm text-fg-subtle">No labels.</span>
-        ) : null}
-      </div>
-      {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
-      {readOnly ? null : (
-        <div className="mt-3 space-y-2">
-          {available.length > 0 ? (
-            <Menu
-              label="Add a label"
-              disabled={busy}
-              triggerClassName="inline-flex h-8 w-full items-center gap-1.5 rounded-control border border-dashed border-line-control px-2.5 text-label text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg aria-expanded:bg-surface-muted pointer-coarse:h-11"
-              menuClassName="w-60"
-              trigger={
+        {readOnly ? (
+          task.labels.length === 0 ? (
+            <span className="px-2 text-sm text-fg-subtle">None</span>
+          ) : null
+        ) : (
+          <Menu
+            label="Add a label"
+            disabled={busy}
+            triggerProps={{ 'aria-label': 'Add a label' }}
+            triggerClassName={
+              task.labels.length === 0 ? `${pickerTrigger} text-fg-subtle!` : addChip
+            }
+            menuClassName="w-60"
+            trigger={
+              task.labels.length === 0 ? (
                 <>
                   <PlusIcon size={14} />
                   Add a label
                 </>
-              }
-            >
-              {available.map((l) => (
-                <MenuItem
-                  key={l.id}
-                  icon={
-                    <span
-                      aria-hidden="true"
-                      className="size-2 shrink-0 rounded-xs"
-                      style={{ backgroundColor: l.color }}
-                    />
-                  }
-                  onSelect={() =>
-                    call(() => api(`/tasks/${task.id}/labels`, { body: { labelId: l.id } }))
-                  }
-                >
-                  {l.name}
-                </MenuItem>
-              ))}
-            </Menu>
-          ) : null}
-          {creating ? (
-            <form onSubmit={createAndAttach} className="space-y-2">
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Label name"
-                maxLength={40}
-                aria-label="New label name"
-                className="h-8 w-full rounded-control border pointer-coarse:h-11 border-line-control bg-surface px-2.5 text-sm placeholder:text-fg-subtle focus-visible:border-primary"
-              />
-              <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Label color">
-                {LABEL_COLORS.map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    role="radio"
-                    aria-checked={color === c}
-                    aria-label={c}
-                    onClick={() => setColor(c)}
-                    className={`size-6 rounded-full ${color === c ? 'ring-2 ring-fg ring-offset-2' : ''}`}
-                    style={{ backgroundColor: c }}
+              ) : (
+                <PlusIcon size={14} />
+              )
+            }
+          >
+            {available.map((l) => (
+              <MenuItem
+                key={l.id}
+                icon={
+                  <span
+                    aria-hidden="true"
+                    className="size-2 shrink-0 rounded-xs"
+                    style={{ backgroundColor: l.color }}
                   />
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <Button type="submit" size="sm" variant="primary" disabled={busy || !name.trim()}>
-                  Create & add
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setCreating(false)}>
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          ) : (
-            <Button
-              size="sm"
-              variant="ghost"
-              icon={<PlusIcon size={14} />}
-              onClick={() => setCreating(true)}
-            >
-              New label
+                }
+                onSelect={() =>
+                  call(() => api(`/tasks/${task.id}/labels`, { body: { labelId: l.id } }))
+                }
+              >
+                {l.name}
+              </MenuItem>
+            ))}
+            <MenuItem icon={<PlusIcon size={14} />} onSelect={() => setCreating(true)}>
+              New label…
+            </MenuItem>
+          </Menu>
+        )}
+      </div>
+      {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
+      {!readOnly && creating ? (
+        <form onSubmit={createAndAttach} className="mt-2 space-y-2">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Label name"
+            maxLength={40}
+            aria-label="New label name"
+            autoFocus
+            className="h-8 w-full rounded-control border pointer-coarse:h-11 border-line-control bg-surface px-2.5 text-sm placeholder:text-fg-subtle focus-visible:border-primary"
+          />
+          <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Label color">
+            {LABEL_COLORS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                role="radio"
+                aria-checked={color === c}
+                aria-label={c}
+                onClick={() => setColor(c)}
+                className={`size-6 rounded-full ${color === c ? 'ring-2 ring-fg ring-offset-2' : ''}`}
+                style={{ backgroundColor: c }}
+              />
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <Button type="submit" size="sm" variant="primary" disabled={busy || !name.trim()}>
+              Create & add
             </Button>
-          )}
-        </div>
-      )}
-    </PanelSection>
+            <Button size="sm" variant="ghost" onClick={() => setCreating(false)}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      ) : null}
+    </div>
   );
 }
