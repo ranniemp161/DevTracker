@@ -4,13 +4,13 @@ import type { Label, Task } from '@devtrack/types';
 import { createLabelSchema } from '@devtrack/validators';
 import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui';
-import { PlusIcon, XIcon } from '@/components/icons';
+import { PlusIcon, TagIcon, XIcon } from '@/components/icons';
 import { Menu, MenuItem } from '@/components/menu';
 import { api, ApiError } from '@/lib/api';
 import { useApiQuery } from '@/lib/use-api-query';
 import { LABEL_COLORS, LabelChip } from './label-chip';
 import { useProject } from './project-context';
-import { addChip, pickerTrigger } from './property-styles';
+import { chipTrigger } from './property-styles';
 
 /** Labels row on the task page: attach/detach workspace labels, or create one inline. */
 export function TaskLabels({ task, onChanged }: { task: Task; onChanged: () => void }) {
@@ -57,8 +57,8 @@ export function TaskLabels({ task, onChanged }: { task: Task; onChanged: () => v
   const available = (all.data ?? []).filter((l) => !task.labels.some((t) => t.id === l.id));
 
   return (
-    <div className="py-1">
-      <div className="flex flex-wrap items-center gap-1">
+    <>
+      <div className="contents">
         {task.labels.map((l) => (
           <LabelChip key={l.id} label={l}>
             {readOnly ? null : (
@@ -85,19 +85,14 @@ export function TaskLabels({ task, onChanged }: { task: Task; onChanged: () => v
             label="Add a label"
             disabled={busy}
             triggerProps={{ 'aria-label': 'Add a label' }}
-            triggerClassName={
-              task.labels.length === 0 ? `${pickerTrigger} text-fg-subtle!` : addChip
-            }
+            triggerClassName={`${chipTrigger} text-fg-muted!`}
+
             menuClassName="w-60"
             trigger={
-              task.labels.length === 0 ? (
-                <>
-                  <PlusIcon size={14} />
-                  Add a label
-                </>
-              ) : (
-                <PlusIcon size={14} />
-              )
+              <>
+                <TagIcon size={14} />
+                {task.labels.length === 0 ? 'Label' : null}
+              </>
             }
           >
             {available.map((l) => (
@@ -123,9 +118,9 @@ export function TaskLabels({ task, onChanged }: { task: Task; onChanged: () => v
           </Menu>
         )}
       </div>
-      {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
+      {error ? <p className="basis-full text-sm text-danger">{error}</p> : null}
       {!readOnly && creating ? (
-        <form onSubmit={createAndAttach} className="mt-2 space-y-2">
+        <form onSubmit={createAndAttach} className="basis-full space-y-2 pt-1 sm:max-w-sm">
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -159,6 +154,6 @@ export function TaskLabels({ task, onChanged }: { task: Task; onChanged: () => v
           </div>
         </form>
       ) : null}
-    </div>
+    </>
   );
 }

@@ -198,6 +198,7 @@
   --dt-board-column-width: 272px;
   --dt-card-min-width: 320px; /* project cards */
   --dt-task-aside-width: 320px; /* task detail properties panel */
+  --dt-timer-bar-height: 47px; /* sticky running-timer bar (py-2 + 30px row + 1px border) */
   --dt-chat-height: calc(100dvh - 14rem); /* project chat panel: viewport minus shell chrome */
   --dt-chat-min-height: 500px;
   --dt-drawer-max-width: 85vw; /* mobile navigation drawer */
