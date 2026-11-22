@@ -145,7 +145,7 @@ export function SearchDialog({
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKeyDown}
           placeholder="Search tasks and projects"
-          className="h-13 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-fg-subtle focus-visible:shadow-none sm:text-sm"
+          className="h-13 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-fg-subtle focus-visible:shadow-none! sm:text-sm"
         />
         {loading ? <SpinnerIcon size={14} className="shrink-0 text-fg-muted" /> : null}
         <button
