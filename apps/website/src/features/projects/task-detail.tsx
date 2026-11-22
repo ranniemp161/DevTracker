@@ -8,10 +8,10 @@ import {
   CalendarIcon,
   ChatIcon,
   CheckIcon,
-  ChevronDownIcon,
+  FlagIcon,
   LinkIcon,
   MoreIcon,
-  PlusIcon,
+  UserPlusIcon,
   XIcon,
 } from '@/components/icons';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -37,7 +37,7 @@ import { TaskTimeline } from '../collaboration/task-timeline';
 import { TaskPullRequests } from '../github/task-pull-requests';
 import { useProject } from './project-context';
 import { TaskLabels } from './task-labels';
-import { addChip, pickerTrigger } from './property-styles';
+import { chipStatic, chipTrigger } from './property-styles';
 import { TaskTime } from './task-time';
 import { TaskTimeEntries } from './task-time-entries';
 import { TaskAttachments } from './task-attachments';
@@ -108,27 +108,6 @@ function TaskSkeleton() {
   );
 }
 
-function PropertyRow({
-  label,
-  align = 'center',
-  children,
-}: {
-  label: string;
-  align?: 'center' | 'start';
-  children: ReactNode;
-}) {
-  return (
-    <div className={`flex gap-2 ${align === 'start' ? 'items-start' : 'items-center'}`}>
-      <dt
-        className={`w-24 shrink-0 text-label text-fg-muted ${align === 'start' ? 'pt-2 pointer-coarse:pt-3' : ''}`}
-      >
-        {label}
-      </dt>
-      <dd className="relative min-w-0 flex-1">{children}</dd>
-    </div>
-  );
-}
-
 function slugify(title: string) {
   return (
     title
@@ -158,6 +137,8 @@ function TaskEditor({
   const toast = useToast();
   const { user } = useSession();
   const { project, members, readOnly } = useProject();
+  // The rail sticks below the running-timer bar when there is one.
+  const { timer } = useTaskTimer();
   const [form, setForm] = useState({
     title: task.title,
     description: task.description ?? '',
@@ -349,46 +330,23 @@ function TaskEditor({
                 className="block w-full resize-none rounded-control border border-transparent bg-transparent px-2 py-1 text-title font-semibold tracking-tight text-fg field-sizing-content placeholder:text-fg-subtle hover:border-line focus-visible:border-primary"
               />
             </div>
-            <label htmlFor="task-description" className="sr-only">
-              Description
-            </label>
-            <div className="-mx-2">
-              <textarea
-                id="task-description"
-                rows={3}
-                value={form.description}
-                disabled={readOnly}
-                placeholder={
-                  readOnly
-                    ? 'No description.'
-                    : 'Add a description, acceptance criteria or technical notes…'
-                }
-                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                className="block min-h-20 w-full resize-none rounded-control border border-transparent bg-transparent px-2 py-1.5 field-sizing-content text-base leading-relaxed text-fg-secondary placeholder:text-fg-subtle hover:border-line focus-visible:border-primary lg:text-sm"
-              />
-            </div>
-          </div>
-        </form>
-
-        <aside
-          aria-label="Task properties"
-          className="min-w-0 divide-y divide-line border-t border-line bg-surface-sunken px-4 sm:px-6 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:border-t-0 lg:border-l [&>*]:py-5"
-        >
-          <dl className="space-y-1">
-            <PropertyRow label="Status">
+            {/* Property strip (DNA: the facts beside the title, always one glance away). */}
+            <div
+              role="group"
+              aria-label="Properties"
+              className="flex flex-wrap items-center gap-1.5"
+            >
               <Menu
                 label="Status"
                 disabled={readOnly}
                 triggerProps={{ 'aria-label': `Status: ${TASK_STATUS_LABEL[form.status]}` }}
-                triggerClassName={pickerTrigger}
+                triggerClassName={chipTrigger}
                 menuClassName="w-48"
                 trigger={
-                  <PickerValue readOnly={readOnly}>
-                    <span className="inline-flex items-center gap-2">
-                      <StatusDot status={form.status} />
-                      {TASK_STATUS_LABEL[form.status]}
-                    </span>
-                  </PickerValue>
+                  <>
+                    <StatusDot status={form.status} />
+                    {TASK_STATUS_LABEL[form.status]}
+                  </>
                 }
               >
                 {TASK_STATUSES.map((st) => (
@@ -402,19 +360,13 @@ function TaskEditor({
                   </MenuItem>
                 ))}
               </Menu>
-            </PropertyRow>
-            <PropertyRow label="Priority">
               <Menu
                 label="Priority"
                 disabled={readOnly}
                 triggerProps={{ 'aria-label': `Priority: ${PRIORITY_LABEL[form.priority]}` }}
-                triggerClassName={pickerTrigger}
+                triggerClassName={chipTrigger}
                 menuClassName="w-44"
-                trigger={
-                  <PickerValue readOnly={readOnly}>
-                    <PriorityIcon priority={form.priority} />
-                  </PickerValue>
-                }
+                trigger={<PriorityIcon priority={form.priority} />}
               >
                 {TASK_PRIORITIES.map((pr) => (
                   <MenuItem
@@ -426,105 +378,79 @@ function TaskEditor({
                   </MenuItem>
                 ))}
               </Menu>
-            </PropertyRow>
-            <PropertyRow label="Assignees" align="start">
-              <ul className="flex flex-wrap items-center gap-1 py-1">
-                {task.assignees.map((a) => (
-                  <li
-                    key={a.id}
-                    className="inline-flex h-7 max-w-full items-center gap-1.5 rounded-full bg-surface pr-1 pl-0.5 text-label text-fg shadow-card pointer-coarse:h-9"
-                  >
-                    <Avatar name={a.username} url={a.avatarUrl} seed={a.id} size="xs" />
-                    <span className="min-w-0 truncate">{a.username}</span>
-                    {readOnly ? null : (
-                      <button
-                        type="button"
-                        disabled={saving}
-                        aria-label={`Unassign @${a.username}`}
-                        onClick={() =>
-                          call(() =>
-                            api(`/tasks/${task.id}/assignees/${a.id}`, { method: 'DELETE' }),
-                          )
-                        }
-                        className="touch-target inline-flex size-5 shrink-0 items-center justify-center rounded-full text-fg-subtle hover:bg-surface-muted hover:text-fg"
-                      >
-                        <XIcon size={12} />
-                      </button>
-                    )}
-                  </li>
-                ))}
-                {task.assignees.length === 0 && (readOnly || unassigned.length === 0) ? (
-                  <li className="px-2 text-sm text-fg-subtle">Nobody</li>
-                ) : null}
-                {!readOnly && unassigned.length > 0 ? (
-                  <li>
-                    <Menu
-                      label="Assign someone"
+              {task.assignees.map((a) => (
+                <span key={a.id} className={`${chipStatic} pr-1 pl-1`}>
+                  <Avatar name={a.username} url={a.avatarUrl} seed={a.id} size="xs" />
+                  <span className="min-w-0 truncate">{a.username}</span>
+                  {readOnly ? null : (
+                    <button
+                      type="button"
                       disabled={saving}
-                      triggerProps={{ 'aria-label': 'Assign someone' }}
-                      triggerClassName={
-                        task.assignees.length === 0 ? `${pickerTrigger} text-fg-subtle!` : addChip
+                      aria-label={`Unassign @${a.username}`}
+                      onClick={() =>
+                        call(() => api(`/tasks/${task.id}/assignees/${a.id}`, { method: 'DELETE' }))
                       }
-                      menuClassName="w-60"
-                      trigger={
-                        task.assignees.length === 0 ? (
-                          <>
-                            <PlusIcon size={14} />
-                            Assign someone
-                          </>
-                        ) : (
-                          <PlusIcon size={14} />
+                      className="touch-target inline-flex size-5 shrink-0 items-center justify-center rounded-full text-fg-subtle hover:bg-surface-muted hover:text-fg"
+                    >
+                      <XIcon size={12} />
+                    </button>
+                  )}
+                </span>
+              ))}
+              {!readOnly && unassigned.length > 0 ? (
+                <Menu
+                  label="Assign someone"
+                  disabled={saving}
+                  triggerProps={{ 'aria-label': 'Assign someone' }}
+                  triggerClassName={`${chipTrigger} ${task.assignees.length ? '' : 'text-fg-muted!'}`}
+                  menuClassName="w-60"
+                  trigger={
+                    <>
+                      <UserPlusIcon size={14} />
+                      {task.assignees.length ? null : 'Assign'}
+                    </>
+                  }
+                >
+                  {unassigned.map((m) => (
+                    <MenuItem
+                      key={m.user.id}
+                      icon={
+                        <Avatar
+                          name={m.user.username}
+                          url={m.user.avatarUrl}
+                          seed={m.user.id}
+                          size="xs"
+                        />
+                      }
+                      onSelect={() =>
+                        call(() =>
+                          api(`/tasks/${task.id}/assignees`, { body: { userIds: [m.user.id] } }),
                         )
                       }
                     >
-                      {unassigned.map((m) => (
-                        <MenuItem
-                          key={m.user.id}
-                          icon={
-                            <Avatar
-                              name={m.user.username}
-                              url={m.user.avatarUrl}
-                              seed={m.user.id}
-                              size="xs"
-                            />
-                          }
-                          onSelect={() =>
-                            call(() =>
-                              api(`/tasks/${task.id}/assignees`, {
-                                body: { userIds: [m.user.id] },
-                              }),
-                            )
-                          }
-                        >
-                          @{m.user.username}
-                        </MenuItem>
-                      ))}
-                    </Menu>
-                  </li>
-                ) : null}
-              </ul>
-            </PropertyRow>
-            <PropertyRow label="Labels" align="start">
-              <TaskLabels task={task} onChanged={onSaved} />
-            </PropertyRow>
-            <PropertyRow label="Due date">
+                      @{m.user.username}
+                    </MenuItem>
+                  ))}
+                </Menu>
+              ) : task.assignees.length === 0 ? (
+                <span className={`${chipStatic} text-fg-muted`}>Unassigned</span>
+              ) : null}
               <DueDatePicker
                 value={form.dueDate}
                 readOnly={readOnly}
                 onChange={(dueDate) => setForm((f) => ({ ...f, dueDate }))}
               />
-            </PropertyRow>
-            <PropertyRow label="Milestone">
               <Menu
                 label="Milestone"
                 disabled={readOnly}
                 triggerProps={{ 'aria-label': `Milestone: ${milestoneName ?? 'none'}` }}
-                triggerClassName={pickerTrigger}
+                triggerClassName={`${chipTrigger} max-w-60 ${milestoneName ? '' : 'text-fg-muted!'}`}
                 menuClassName="w-60"
                 trigger={
-                  <PickerValue readOnly={readOnly} muted={!milestoneName}>
-                    {milestoneName ?? 'None'}
-                  </PickerValue>
+                  <>
+                    <FlagIcon size={14} className="shrink-0" />
+                    <span className="min-w-0 truncate">{milestoneName ?? 'Milestone'}</span>
+                  </>
                 }
               >
                 <MenuItem
@@ -546,37 +472,64 @@ function TaskEditor({
                   </MenuItem>
                 ))}
               </Menu>
-            </PropertyRow>
-          </dl>
-
-          <div>
-            <TaskPullRequests
-              task={task}
-              branchTip={`${task.key}-${slugify(task.title)}`}
-              onChange={onActivity}
-            />
+              <TaskLabels task={task} onChanged={onSaved} />
+            </div>
+            <label htmlFor="task-description" className="sr-only">
+              Description
+            </label>
+            <div className="-mx-2">
+              <textarea
+                id="task-description"
+                rows={3}
+                value={form.description}
+                disabled={readOnly}
+                placeholder={
+                  readOnly
+                    ? 'No description.'
+                    : 'Add a description, acceptance criteria or technical notes…'
+                }
+                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                className="block min-h-20 w-full resize-none rounded-control border border-transparent bg-transparent px-2 py-1.5 field-sizing-content text-base leading-relaxed text-fg-secondary placeholder:text-fg-subtle hover:border-line focus-visible:border-primary lg:text-sm"
+              />
+            </div>
           </div>
+        </form>
 
-          <div>
-            <TaskTimeEntries task={task} onChanged={onSaved} />
-          </div>
+        {/* The rail's background spans the page; its content sticks and scrolls on its own. */}
+        <div className="min-w-0 border-t border-line bg-surface-sunken max-lg:order-last lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:border-t-0 lg:border-l">
+          <aside
+            aria-label="Task context"
+            className={`divide-y divide-line px-4 sm:px-6 lg:task-rail [&>*]:py-5 ${timer ? 'lg:task-rail-below-timer' : ''}`}
+          >
+            <div>
+              <TaskPullRequests
+                task={task}
+                branchTip={`${task.key}-${slugify(task.title)}`}
+                onChange={onActivity}
+              />
+            </div>
 
-          <div className="space-y-5">
-            <PanelSection title="Details">
-              <dl className="space-y-2 text-label">
-                <DetailRow label="Reporter">
-                  {task.reporter ? `@${task.reporter.username}` : '—'}
-                </DetailRow>
-                <DetailRow label="Created">{formatDate(task.createdAt)}</DetailRow>
-                <DetailRow label="Updated">{formatDate(task.updatedAt)}</DetailRow>
-                {task.completedAt ? (
-                  <DetailRow label="Completed">{formatDate(task.completedAt)}</DetailRow>
-                ) : null}
-              </dl>
-            </PanelSection>
-            <TaskTime taskId={task.id} status={task.status} />
-          </div>
-        </aside>
+            <div>
+              <TaskTimeEntries task={task} onChanged={onSaved} />
+            </div>
+
+            <div className="space-y-5">
+              <PanelSection title="Details">
+                <dl className="space-y-2 text-label">
+                  <DetailRow label="Reporter">
+                    {task.reporter ? `@${task.reporter.username}` : '—'}
+                  </DetailRow>
+                  <DetailRow label="Created">{formatDate(task.createdAt)}</DetailRow>
+                  <DetailRow label="Updated">{formatDate(task.updatedAt)}</DetailRow>
+                  {task.completedAt ? (
+                    <DetailRow label="Completed">{formatDate(task.completedAt)}</DetailRow>
+                  ) : null}
+                </dl>
+              </PanelSection>
+              <TaskTime taskId={task.id} status={task.status} />
+            </div>
+          </aside>
+        </div>
 
         <div className="min-w-0 px-4 pt-8 pb-10 sm:px-7 lg:col-start-1 lg:row-start-2 lg:px-10">
           <div className="mx-auto max-w-3xl space-y-10">
@@ -653,7 +606,7 @@ function DueDatePicker({
     }
   };
   return (
-    <div className="relative flex items-center">
+    <div className="relative inline-flex items-center">
       <input
         ref={input}
         id="task-due"
@@ -670,7 +623,7 @@ function DueDatePicker({
         disabled={readOnly}
         onClick={openPicker}
         aria-label={value ? `Due date: ${formatDate(value)}. Change` : 'Set due date'}
-        className={`${pickerTrigger} ${value ? '' : 'text-fg-subtle!'}`}
+        className={`${chipTrigger} ${value ? '' : 'text-fg-muted!'}`}
       >
         <CalendarIcon size={14} className="shrink-0 text-fg-muted" />
         <span className="min-w-0 flex-1 truncate">
@@ -683,23 +636,6 @@ function DueDatePicker({
         </IconButton>
       ) : null}
     </div>
-  );
-}
-
-function PickerValue({
-  readOnly,
-  muted = false,
-  children,
-}: {
-  readOnly: boolean;
-  muted?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <>
-      <span className={`min-w-0 flex-1 truncate ${muted ? 'text-fg-subtle' : ''}`}>{children}</span>
-      {readOnly ? null : <ChevronDownIcon size={14} className="shrink-0 text-fg-subtle" />}
-    </>
   );
 }
 

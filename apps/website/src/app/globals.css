@@ -48,6 +48,19 @@ body {
 }
 
 /* Task detail: main column + fixed-width properties panel (design/SPEC.md §5). */
+/* Task page context rail: sticks to the top of the scrolling page and scrolls on its own. */
+@utility task-rail {
+  position: sticky;
+  top: 0;
+  max-height: calc(100dvh - var(--dt-space-4));
+  overflow-y: auto;
+}
+/* While a timer runs, its bar is stuck to the top too, so the rail sits below it. */
+@utility task-rail-below-timer {
+  top: var(--dt-timer-bar-height);
+  max-height: calc(100dvh - var(--dt-space-4) - var(--dt-timer-bar-height));
+}
+
 @utility grid-cols-task {
   grid-template-columns: minmax(0, 1fr) var(--dt-task-aside-width);
 }
