@@ -452,3 +452,24 @@ describe('rate limits', () => {
     expect(limited.body.error.code).toBe('RATE_LIMITED');
   });
 });
+
+describe('GET /auth/me workspaces', () => {
+  it('lists a verified user’s workspaces, the same as GET /workspaces', async () => {
+    const owner = await verifiedUser(t, 'owner');
+    await createWorkspace(owner, 'Beta');
+    await createWorkspace(owner, 'Alpha');
+
+    const me = await owner.browser.get('/api/v1/auth/me').expect(200);
+    const list = await owner.browser.get('/api/v1/workspaces').expect(200);
+    expect(me.body.data.workspaces.map((w: { name: string }) => w.name)).toEqual(['Alpha', 'Beta']);
+    expect(me.body.data.workspaces).toEqual(list.body.data);
+  });
+
+  it('leaves workspaces out until the email is verified', async () => {
+    const browser = t.browser();
+    await registerUser(browser);
+    const me = await browser.get('/api/v1/auth/me').expect(200);
+    expect(me.body.data.user.emailVerified).toBe(false);
+    expect(me.body.data).not.toHaveProperty('workspaces');
+  });
+});

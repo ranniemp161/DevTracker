@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { RateLimitModule } from '../rate-limit/rate-limit.module';
 import { UsersModule } from '../users/users.module';
+import { WorkspacesModule } from '../workspaces/workspaces.module';
 import { AuthCookiesService } from './auth-cookies.service';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
@@ -13,7 +14,7 @@ import { PasswordService } from './password.service';
 import { SessionsService } from './sessions.service';
 
 @Module({
-  imports: [UsersModule, RateLimitModule],
+  imports: [UsersModule, RateLimitModule, WorkspacesModule],
   controllers: [AuthController],
   providers: [
     AuthService,
