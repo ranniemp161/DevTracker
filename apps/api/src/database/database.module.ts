@@ -1,5 +1,6 @@
 import { Global, Inject, Logger, Module, type OnApplicationShutdown } from '@nestjs/common';
 import { createDatabase, type Database } from '@devtrack/database';
+import { attachDatabasePool } from '@vercel/functions';
 import { APP_CONFIG, type AppConfig } from '../config/app-config';
 
 /** Drizzle client. Inject with `@Inject(DATABASE) db: Database`. */
@@ -25,6 +26,9 @@ export interface DatabaseConnection {
           // transparently; log them instead of crashing the process.
           onIdleConnectionError: (err) => logger.warn(`Idle connection error: ${err.message}`),
         });
+        // On Vercel, let the runtime close idle connections before a function instance is
+        // suspended, so they aren't leaked. Tests and local dev skip this.
+        if (process.env.VERCEL) attachDatabasePool(pool);
         return { db, close: () => pool.end() };
       },
     },
