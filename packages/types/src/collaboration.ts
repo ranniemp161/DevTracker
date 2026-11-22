@@ -29,6 +29,8 @@ export type ActivityAction =
   | 'task.checklist_item_completed'
   | 'task.checklist_item_reopened'
   | 'task.checklist_item_removed'
+  | 'task.relation_added'
+  | 'task.relation_removed'
   | 'comment.created'
   | 'comment.deleted'
   | 'project.created'

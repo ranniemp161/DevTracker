@@ -7,13 +7,26 @@ import { TaskAttachmentsController } from './task-attachments.controller';
 import { TaskAttachmentsService } from './task-attachments.service';
 import { TaskChecklistController } from './task-checklist.controller';
 import { TaskChecklistService } from './task-checklist.service';
+import { TaskRelationsController } from './task-relations.controller';
+import { TaskRelationsService } from './task-relations.service';
 import { TasksController } from './tasks.controller';
 import { TasksService } from './tasks.service';
 
 @Module({
   imports: [ProjectsModule, RateLimitModule, WorkspacesModule],
-  controllers: [TasksController, TaskAttachmentsController, TaskChecklistController],
-  providers: [TasksService, TaskAccessService, TaskAttachmentsService, TaskChecklistService],
+  controllers: [
+    TasksController,
+    TaskAttachmentsController,
+    TaskChecklistController,
+    TaskRelationsController,
+  ],
+  providers: [
+    TasksService,
+    TaskAccessService,
+    TaskAttachmentsService,
+    TaskChecklistService,
+    TaskRelationsService,
+  ],
   exports: [TaskAccessService],
 })
 export class TasksModule {}

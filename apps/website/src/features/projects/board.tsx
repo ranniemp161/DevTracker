@@ -3,7 +3,7 @@
 import { TASK_STATUSES, type Task, type TaskStatus } from '@devtrack/types';
 import Link from 'next/link';
 import { useEffect, useRef, useState, type DragEvent, type FormEvent, type RefObject } from 'react';
-import { CalendarIcon, ChecklistIcon, PlusIcon } from '@/components/icons';
+import { AlertIcon, CalendarIcon, ChecklistIcon, PlusIcon } from '@/components/icons';
 import { ChecksBadge } from '../github/checks-badge';
 import { HeaderActions } from '@/components/page-header';
 import { useToast } from '@/components/toaster';
@@ -334,6 +334,7 @@ function TaskCard({
   readOnly: boolean;
 }) {
   const { project } = useProject();
+  const blocked = task.blockedByCount > 0 && task.status !== 'DONE';
   const overdue =
     Boolean(task.dueDate) && task.status !== 'DONE' && task.dueDate!.slice(0, 10) < todayIso();
   const shownLabels = task.labels.slice(0, 2);
@@ -394,7 +395,7 @@ function TaskCard({
         ))}
         {extraLabels > 0 ? <span className="text-xs text-fg-muted">+{extraLabels}</span> : null}
       </div>
-      {task.dueDate || task.checks || task.checklist.total > 0 ? (
+      {task.dueDate || task.checks || task.checklist.total > 0 || blocked ? (
         <div className="flex items-center justify-between gap-2 border-t border-line-subtle pt-2 text-xs text-fg-muted">
           <span className="flex min-w-0 items-center gap-3">
             {task.dueDate ? (
@@ -404,6 +405,17 @@ function TaskCard({
                 <CalendarIcon size={14} />
                 {overdue ? 'Overdue · ' : ''}
                 {formatDate(task.dueDate)}
+              </span>
+            ) : null}
+            {/* Open blockers (0020). */}
+            {blocked ? (
+              <span className="inline-flex items-center gap-1 font-medium text-danger">
+                <AlertIcon size={14} />
+                Blocked
+                <span className="sr-only">
+                  {' '}
+                  by {task.blockedByCount} open {task.blockedByCount === 1 ? 'task' : 'tasks'}
+                </span>
               </span>
             ) : null}
             {/* Checklist progress (0018). */}

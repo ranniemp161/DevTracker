@@ -56,6 +56,16 @@ export function describeActivity(entry: ActivityEntry): string {
         ? 'edited a time entry'
         : `changed a time entry from ${formatMinutes(Number(minutes.from))} to ${formatMinutes(Number(minutes.to))}`;
     }
+    case 'task.relation_added': {
+      const other = typeof m.relatedKey === 'string' ? m.relatedKey : 'another task';
+      if (m.relation === 'blocks') return `marked this as blocking ${other}`;
+      if (m.relation === 'blocked_by') return `marked this as blocked by ${other}`;
+      return `linked related task ${other}`;
+    }
+    case 'task.relation_removed': {
+      const other = typeof m.relatedKey === 'string' ? m.relatedKey : 'another task';
+      return `removed the link to ${other}`;
+    }
     case 'task.checklist_item_added':
       return 'added a checklist item';
     case 'task.checklist_item_completed':

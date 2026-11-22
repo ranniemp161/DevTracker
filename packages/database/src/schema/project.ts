@@ -323,6 +323,34 @@ export const taskChecklistItems = pgTable(
   ],
 );
 
+/** 0020: how two tasks relate. `BLOCKS` is directed; `RELATES` is stored once per pair. */
+export const taskRelationType = pgEnum('task_relation_type', ['BLOCKS', 'RELATES']);
+
+/**
+ * 0020: task relations. For `BLOCKS`, `task_id` blocks `related_task_id`. For `RELATES`, the
+ * pair is stored with the smaller id in `task_id`, so it exists once whichever side added it.
+ */
+export const taskRelations = pgTable(
+  'task_relations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    relatedTaskId: uuid('related_task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    type: taskRelationType('type').notNull(),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    unique('task_relations_pair_unique').on(t.taskId, t.relatedTaskId, t.type),
+    index('task_relations_related_idx').on(t.relatedTaskId, t.type),
+    check('task_relations_not_self', sql`${t.taskId} <> ${t.relatedTaskId}`),
+  ],
+);
+
 /**
  * 0016: a submission from a project's public request form. The task it created holds the
  * title and description; reporter contact details live only here and are deleted on schedule.

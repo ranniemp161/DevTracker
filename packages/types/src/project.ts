@@ -89,6 +89,8 @@ export interface Task {
   checks: ChecksState | null;
   /** Checklist progress (decision record 0018); `total` is 0 without a checklist. */
   checklist: { done: number; total: number };
+  /** Open (not Done) tasks that block this one (decision record 0020). */
+  blockedByCount: number;
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
@@ -202,4 +204,22 @@ export interface TaskChecklistItem {
   doneAt: string | null;
   doneBy: UserRef | null;
   createdAt: string;
+}
+
+/** How a task relates to another, from this task's side (decision record 0020). */
+export type TaskRelationKind = 'BLOCKS' | 'BLOCKED_BY' | 'RELATES';
+
+/** A related task as listed on a task page. */
+export interface RelatedTask {
+  /** The relation's id, for removing it. */
+  relationId: string;
+  kind: TaskRelationKind;
+  task: {
+    id: string;
+    key: string;
+    title: string;
+    status: TaskStatus;
+    projectId: string;
+    projectName: string;
+  };
 }
