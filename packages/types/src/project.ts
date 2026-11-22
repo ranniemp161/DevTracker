@@ -1,5 +1,6 @@
 import type { ProjectIntake } from './request.js';
 import type { ChatGithubEvent } from './chat.js';
+import type { ChecksState } from './github.js';
 /** Architecture §7.2 / §7.3 enums. */
 export const ProjectStatus = {
   PLANNING: 'PLANNING',
@@ -82,10 +83,10 @@ export interface Task {
   /** Sum of the task's time entries, in minutes. Real logged time, never an estimate. */
   loggedMinutes: number;
   /**
-   * CI on the task's open linked pull requests (0015): `failing` if any fails, `passing` if
-   * some pass and none fail, null when no open linked PR has finished checks.
+   * CI on the task's open linked pull requests (0015): `failing` if any fails, else `running`
+   * if any is running, else `passing` if some pass; null when no open linked PR has checks.
    */
-  checks: 'passing' | 'failing' | null;
+  checks: ChecksState | null;
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;

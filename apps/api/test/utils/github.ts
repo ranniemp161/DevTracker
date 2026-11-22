@@ -150,7 +150,14 @@ export const SHA_B = 'b'.repeat(40);
 /** A completed check suite (0015). `prIds` are GitHub PR ids; [] mimics a fork. */
 export const checkSuiteEvent = (
   conclusion: string,
-  options: { suiteId?: number; sha?: string; prIds?: number[]; app?: string; action?: string } = {},
+  options: {
+    suiteId?: number;
+    sha?: string;
+    prIds?: number[];
+    app?: string;
+    action?: string;
+    at?: string;
+  } = {},
 ) => ({
   ...repoRef,
   action: options.action ?? 'completed',
@@ -159,8 +166,32 @@ export const checkSuiteEvent = (
     head_sha: options.sha ?? SHA_A,
     status: 'completed',
     conclusion,
-    updated_at: '2026-11-06T12:00:00Z',
+    updated_at: options.at ?? '2026-11-06T12:00:00Z',
     app: { slug: options.app ?? 'github-actions' },
+    pull_requests: (options.prIds ?? [7001]).map((id) => ({ id, number: 12 })),
+  },
+});
+
+/** A check run starting in a suite (0015 §8); by default just before the suite completes. */
+export const checkRunEvent = (
+  options: {
+    suiteId?: number;
+    sha?: string;
+    prIds?: number[];
+    app?: string;
+    action?: string;
+    at?: string;
+  } = {},
+) => ({
+  ...repoRef,
+  action: options.action ?? 'created',
+  check_run: {
+    id: 8001,
+    head_sha: options.sha ?? SHA_A,
+    status: 'queued',
+    started_at: options.at ?? '2026-11-06T11:55:00Z',
+    app: { slug: options.app ?? 'github-actions' },
+    check_suite: { id: options.suiteId ?? 9001 },
     pull_requests: (options.prIds ?? [7001]).map((id) => ({ id, number: 12 })),
   },
 });

@@ -13,6 +13,8 @@ import {
   githubWorkspaceRepositories,
   inArray,
   isNull,
+  lt,
+  lte,
   ne,
   or,
   projectRepositories,
@@ -25,7 +27,7 @@ import {
   workspaceMembers,
   type Transaction,
 } from '@devtrack/database';
-import type { NotificationType } from '@devtrack/types';
+import type { ChecksState, NotificationType } from '@devtrack/types';
 import { extractTaskKeys } from '@devtrack/validators';
 import type { z } from 'zod';
 import { EventRecorder, type Actor } from '../../events/event-recorder.service';
@@ -38,6 +40,7 @@ import {
   pullRequestReviewEventSchema,
   pushEventSchema,
   releaseEventSchema,
+  checkRunEventSchema,
   checkSuiteEventSchema,
   type PullRequestPayload,
   senderSchema,
@@ -124,6 +127,8 @@ export class GithubEventProcessor {
         return this.parse(releaseEventSchema, payload, (p) => this.release(tx, p));
       case 'check_suite':
         return this.parse(checkSuiteEventSchema, payload, (p) => this.checkSuite(tx, p));
+      case 'check_run':
+        return this.parse(checkRunEventSchema, payload, (p) => this.checkRun(tx, p));
       case 'installation':
         return this.parse(installationEventSchema, payload, (p) => this.installation(tx, p));
       case 'installation_repositories':
@@ -394,11 +399,12 @@ export class GithubEventProcessor {
     if (!target) return ignored('repository not connected');
     const suite = p.check_suite;
 
+    const completedAt = date(suite.updated_at) ?? new Date();
     const values = {
       headSha: suite.head_sha,
       appSlug: suite.app?.slug ?? null,
       conclusion: suite.conclusion ?? null,
-      completedAt: date(suite.updated_at) ?? new Date(),
+      completedAt,
     };
     await tx
       .insert(githubCheckSuites)
@@ -406,10 +412,73 @@ export class GithubEventProcessor {
       .onConflictDoUpdate({
         target: [githubCheckSuites.repositoryId, githubCheckSuites.githubSuiteId],
         set: values,
+        // A late result from before a re-run started doesn't end the re-run (§8).
+        setWhere: or(
+          isNull(githubCheckSuites.startedAt),
+          lte(githubCheckSuites.startedAt, completedAt),
+        ),
       });
+    await this.refreshPullRequestsAt(
+      tx,
+      target,
+      suite.head_sha,
+      suite.pull_requests.map((pr) => pr.id),
+      p.sender,
+    );
+    return PROCESSED;
+  }
 
-    // PRs GitHub names (empty for forks), plus open PRs whose head is this commit.
-    const listed = suite.pull_requests.map((pr) => pr.id);
+  /** A check run was created, so its suite is running until the suite completes (0015 §8). */
+  private async checkRun(
+    tx: Transaction,
+    p: z.infer<typeof checkRunEventSchema>,
+  ): Promise<ProcessResult> {
+    if (p.action !== 'created') return ignored(`check_run.${p.action} is not handled`);
+    const target = await this.target(tx, p.installation.id, p.repository.id);
+    if (!target) return ignored('repository not connected');
+    const run = p.check_run;
+    const startedAt = date(run.started_at) ?? new Date();
+
+    await tx
+      .insert(githubCheckSuites)
+      .values({
+        repositoryId: target.repo.id,
+        githubSuiteId: run.check_suite.id,
+        headSha: run.head_sha,
+        appSlug: run.app?.slug ?? null,
+        conclusion: null,
+        startedAt,
+        completedAt: null,
+      })
+      .onConflictDoUpdate({
+        target: [githubCheckSuites.repositoryId, githubCheckSuites.githubSuiteId],
+        set: { conclusion: null, completedAt: null, startedAt },
+        // Only a run newer than the suite's last result (a re-run) reopens it; a late
+        // delivery for a run that already finished changes nothing.
+        setWhere: and(
+          or(isNull(githubCheckSuites.completedAt), lt(githubCheckSuites.completedAt, startedAt)),
+          or(isNull(githubCheckSuites.startedAt), lt(githubCheckSuites.startedAt, startedAt)),
+        ),
+      });
+    await this.refreshPullRequestsAt(
+      tx,
+      target,
+      run.head_sha,
+      run.pull_requests.map((pr) => pr.id),
+      p.sender,
+    );
+    return PROCESSED;
+  }
+
+  /** Refreshes the PRs a suite applies to: the ones GitHub lists, plus open PRs at its commit. */
+  private async refreshPullRequestsAt(
+    tx: Transaction,
+    target: Target,
+    headSha: string,
+    listed: number[],
+    sender: z.infer<typeof senderSchema>,
+  ): Promise<void> {
+    // `listed` is empty for forks; the head SHA still finds those PRs.
     const prs = await tx
       .select()
       .from(githubPullRequests)
@@ -418,10 +487,7 @@ export class GithubEventProcessor {
           eq(githubPullRequests.repositoryId, target.repo.id),
           or(
             listed.length > 0 ? inArray(githubPullRequests.githubPrId, listed) : sql`false`,
-            and(
-              eq(githubPullRequests.headSha, suite.head_sha),
-              eq(githubPullRequests.state, 'open'),
-            ),
+            and(eq(githubPullRequests.headSha, headSha), eq(githubPullRequests.state, 'open')),
           ),
         ),
       );
@@ -432,13 +498,12 @@ export class GithubEventProcessor {
         : (
             await tx
               .update(githubPullRequests)
-              .set({ headSha: suite.head_sha })
+              .set({ headSha })
               .where(eq(githubPullRequests.id, pr.id))
               .returning()
           )[0]!;
-      await this.refreshChecks(tx, target, current, p.sender);
+      await this.refreshChecks(tx, target, current, sender);
     }
-    return PROCESSED;
   }
 
   /**
@@ -453,7 +518,10 @@ export class GithubEventProcessor {
   ): Promise<void> {
     if (!pr.headSha) return;
     const suites = await tx
-      .select({ conclusion: githubCheckSuites.conclusion })
+      .select({
+        conclusion: githubCheckSuites.conclusion,
+        completedAt: githubCheckSuites.completedAt,
+      })
       .from(githubCheckSuites)
       .where(
         and(
@@ -461,7 +529,7 @@ export class GithubEventProcessor {
           eq(githubCheckSuites.headSha, pr.headSha),
         ),
       );
-    const next = checksState(suites.map((s) => s.conclusion));
+    const next = checksState(suites);
     if (next === pr.checksState) return;
     await tx
       .update(githubPullRequests)
@@ -846,11 +914,18 @@ export class GithubEventProcessor {
 const FAILED = new Set(['failure', 'timed_out', 'cancelled', 'action_required']);
 const OK = new Set(['success', 'neutral', 'skipped']);
 
-/** A PR's checks state from the conclusions of the suites on its head commit (0015 §3). */
-export function checksState(conclusions: (string | null)[]): 'passing' | 'failing' | null {
-  if (conclusions.length === 0) return null;
-  if (conclusions.some((c) => c !== null && FAILED.has(c))) return 'failing';
-  return conclusions.every((c) => c !== null && OK.has(c)) ? 'passing' : null;
+/**
+ * A PR's checks state from the suites on its head commit (0015 §3, §8): any failure wins, then
+ * any suite still running, then passing once every suite passed.
+ */
+export function checksState(
+  suites: { conclusion: string | null; completedAt: Date | null }[],
+): ChecksState | null {
+  if (suites.length === 0) return null;
+  const done = suites.filter((s) => s.completedAt !== null);
+  if (done.some((s) => s.conclusion !== null && FAILED.has(s.conclusion))) return 'failing';
+  if (done.length < suites.length) return 'running';
+  return done.every((s) => s.conclusion !== null && OK.has(s.conclusion)) ? 'passing' : null;
 }
 
 export function stateOf(pr: Pick<PrRow, 'state' | 'mergedAt'>): 'open' | 'closed' | 'merged' {

@@ -79,11 +79,19 @@ export interface PullRequest {
   baseBranch: string;
   state: PullRequestState;
   isDraft: boolean;
-  /** CI on the head commit (decision record 0015); null until results arrive. */
-  checks: 'passing' | 'failing' | null;
+  /** CI on the head commit (decision record 0015); null until checks start. */
+  checks: ChecksState | null;
   openedAt: string;
   mergedAt: string | null;
   closedAt: string | null;
+}
+
+/** CI state of a pull request's head commit (0015 §3, §8). */
+export type ChecksState = 'passing' | 'running' | 'failing';
+
+/** Narrows a stored checks state; anything unknown reads as "no checks". */
+export function toChecksState(value: string | null): ChecksState | null {
+  return value === 'passing' || value === 'running' || value === 'failing' ? value : null;
 }
 
 export type TaskLinkSource = 'MANUAL' | 'AUTO';
