@@ -1,6 +1,6 @@
 'use client';
 
-import type { Project, ProjectChatUnreadSummary, PublicUser } from '@devtrack/types';
+import type { MeResponse, Project, ProjectChatUnreadSummary, PublicUser } from '@devtrack/types';
 import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import {
@@ -34,7 +34,7 @@ import { ShortcutsHelp } from '@/components/shortcuts-help';
 import { ToastProvider } from '@/components/toaster';
 import { Alert, Avatar, avatarTone, Button, IconButton, Skeleton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
-import { clearApiCache } from '@/lib/api-cache';
+import { clearApiCache, revalidate } from '@/lib/api-cache';
 import { forgetLastWorkspace, rememberLastWorkspace } from '@/lib/last-workspace';
 import { useFavoriteProjects } from '@/lib/project-prefs';
 import { setSidebarCollapsed, useSidebarCollapsed } from '@/lib/sidebar-collapsed';
@@ -54,19 +54,28 @@ import { Sidebar } from './sidebar';
 export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const me = useApiQuery<{ user: PublicUser }>('/auth/me');
+  const me = useApiQuery<MeResponse>('/auth/me');
   const verified = me.data?.user.emailVerified ?? false;
-  const workspaces = useApiQuery<Session['workspaces']>(verified ? '/workspaces' : null);
+  // `/auth/me` carries the workspaces for verified users. `/workspaces` is only a fallback
+  // for an API that doesn't send them yet.
+  const fallback = useApiQuery<Session['workspaces']>(
+    verified && !me.data?.workspaces ? '/workspaces' : null,
+  );
+  const workspaceList = me.data?.workspaces ?? fallback.data;
+  usePrefetchRoute(pathname);
 
   useEffect(() => {
     if (me.error?.status === 401) router.replace(`/login?next=${encodeURIComponent(pathname)}`);
   }, [me.error, pathname, router]);
 
-  const reloadWorkspaces = workspaces.reload;
+  const reloadMe = me.reload;
+  const reloadFallback = fallback.reload;
+  const usesFallback = verified && !me.data?.workspaces;
+  const reloadWorkspaces = usesFallback ? reloadFallback : reloadMe;
   const session = useMemo<Session | null>(
     () =>
-      me.data ? { user: me.data.user, workspaces: workspaces.data ?? [], reloadWorkspaces } : null,
-    [me.data, workspaces.data, reloadWorkspaces],
+      me.data ? { user: me.data.user, workspaces: workspaceList ?? [], reloadWorkspaces } : null,
+    [me.data, workspaceList, reloadWorkspaces],
   );
 
   if (me.error && me.error.status !== 401) {
@@ -76,7 +85,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
     );
   }
-  if (!session || (verified && workspaces.loading)) {
+  if (!session || (usesFallback && fallback.loading)) {
     return <ShellSkeleton />;
   }
 
@@ -108,6 +117,21 @@ export function AppShell({ children }: { children: ReactNode }) {
       <ToastProvider>{verified ? <RealtimeProvider>{page}</RealtimeProvider> : page}</ToastProvider>
     </SessionContext.Provider>
   );
+}
+
+/**
+ * Starts the requests a page's own layout will make, alongside `/auth/me` instead of after
+ * it: the project and its members, or the workspace. The layouts then read them from the
+ * cache. Runs once per project or workspace, not on every view change inside it.
+ */
+function usePrefetchRoute(pathname: string) {
+  const match = /^\/(projects|workspaces)\/([0-9a-f-]{36})(?:\/|$)/i.exec(pathname);
+  const key = match ? `/${match[1]}/${match[2]}` : null;
+  useEffect(() => {
+    if (!key) return;
+    revalidate(key);
+    if (key.startsWith('/projects/')) revalidate(`${key}/members`);
+  }, [key]);
 }
 
 async function signOut(router: ReturnType<typeof useRouter>) {

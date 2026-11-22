@@ -11,7 +11,7 @@ import {
   Req,
   Res,
 } from '@nestjs/common';
-import { ErrorCode, type PublicUser } from '@devtrack/types';
+import { ErrorCode, type MeResponse, type PublicUser } from '@devtrack/types';
 import {
   forgotPasswordSchema,
   loginSchema,
@@ -33,6 +33,7 @@ import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { APP_CONFIG, type AppConfig } from '../config/app-config';
 import { RATE_LIMITS, RateLimitService } from '../rate-limit/rate-limit.service';
 import { toPublicUser, type User } from '../users/users.service';
+import { WorkspacesService } from '../workspaces/workspaces.service';
 import { AuthCookiesService } from './auth-cookies.service';
 import { AuthService } from './auth.service';
 import { EmailVerificationService } from './email-verification.service';
@@ -57,6 +58,7 @@ export class AuthController {
     private readonly passwordReset: PasswordResetService,
     private readonly github: GithubOAuthService,
     private readonly rateLimit: RateLimitService,
+    private readonly workspaces: WorkspacesService,
   ) {}
 
   @Public()
@@ -101,8 +103,10 @@ export class AuthController {
 
   @AllowUnverified()
   @Get('me')
-  me(@CurrentUser() user: User): UserResponse {
-    return { user: toPublicUser(user) };
+  async me(@CurrentUser() user: User): Promise<MeResponse> {
+    // Verified users get their workspaces too, so the app shell needs one round trip, not two.
+    if (!user.emailVerifiedAt) return { user: toPublicUser(user) };
+    return { user: toPublicUser(user), workspaces: await this.workspaces.listForUser(user.id) };
   }
 
   @Public()

@@ -8,6 +8,6 @@ import { WorkspacesService } from './workspaces.service';
   imports: [RateLimitModule],
   controllers: [WorkspacesController],
   providers: [WorkspacesService, WorkspaceAccessService],
-  exports: [WorkspaceAccessService],
+  exports: [WorkspaceAccessService, WorkspacesService],
 })
 export class WorkspacesModule {}
