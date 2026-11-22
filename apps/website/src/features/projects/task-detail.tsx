@@ -33,6 +33,7 @@ import {
 } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useRealtimeRefresh } from '@/lib/realtime';
+import { clickFirst, useShortcuts } from '@/lib/shortcuts';
 import { useApiQuery } from '@/lib/use-api-query';
 import { useSession } from '../session/session-context';
 import { formatDate, PRIORITY_LABEL, TASK_STATUS_LABEL } from './labels';
@@ -243,6 +244,42 @@ function TaskEditor({
 
   const unassigned = members.filter((m) => !task.assignees.some((a) => a.id === m.user.id));
   const base = `/projects/${project.id}`;
+  const neighbors = useTaskNeighbors(project.id, task.id);
+  // Keyboard shortcuts (`?` lists them). Property keys open the same chips a click would.
+  const chip = (selector: string) => () =>
+    clickFirst(
+      selector
+        .split(',')
+        .map((sel) => `[role="group"][aria-label="Properties"] ${sel.trim()}`)
+        .join(', '),
+    );
+  useShortcuts([
+    { key: 's', run: chip('button[aria-label^="Status:"]') },
+    { key: 'p', run: chip('button[aria-label^="Priority:"]') },
+    { key: 'a', run: chip('button[aria-label="Assign someone"]') },
+    { key: 'l', run: chip('button[aria-label="Add a label"]') },
+    { key: 'd', run: chip('button[aria-label="Set due date"], button[aria-label^="Due date:"]') },
+    { key: 'm', run: chip('button[aria-label^="Milestone:"]') },
+    {
+      key: 'e',
+      run: () =>
+        clickFirst('[data-shortcut="edit-description"]') ||
+        document.getElementById('task-description')?.focus(),
+    },
+    { key: 'c', run: () => document.getElementById('new-comment')?.focus() },
+    { key: 'j', run: () => neighbors.next && router.push(neighbors.next) },
+    { key: 'k', run: () => neighbors.prev && router.push(neighbors.prev) },
+    { key: 'Escape', run: () => router.push(base) },
+    {
+      key: 's',
+      mod: true,
+      run: () => {
+        if (dirty && !saving && !readOnly) {
+          (document.getElementById('task-form') as HTMLFormElement | null)?.requestSubmit();
+        }
+      },
+    },
+  ]);
 
   return (
     <div className="-mx-4 -my-6 sm:-mx-7 lg:-my-8">
@@ -268,6 +305,15 @@ function TaskEditor({
           <span role="status" className="text-label font-medium text-status-done-fg empty:hidden">
             {saved ? 'Saved' : (copied ?? '')}
           </span>
+          {neighbors.total > 1 ? (
+            <nav aria-label="Tasks in this project" className="flex items-center">
+              <TaskStepLink href={neighbors.prev} label="Previous task (K)" flip />
+              <span className="px-1 text-label text-fg-muted tabular-nums max-sm:sr-only">
+                {neighbors.position} of {neighbors.total}
+              </span>
+              <TaskStepLink href={neighbors.next} label="Next task (J)" />
+            </nav>
+          ) : null}
           <Link
             href={`${base}/chat?task=${task.id}`}
             className="inline-flex h-7.5 items-center gap-1.5 rounded-control border border-line-control bg-surface px-2.5 text-label font-medium text-fg transition-colors hover:bg-surface-sunken pointer-coarse:h-11"
@@ -699,6 +745,8 @@ function DescriptionField({
         </div>
         <button
           type="button"
+          data-shortcut="edit-description"
+          aria-keyshortcuts="E"
           onClick={() => {
             setTab('write');
             setEditing(true);
@@ -758,5 +806,52 @@ function DescriptionField({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Previous and next task for J/K and the header arrows, in the List view's order (by status,
+ * then newest). Uses the first 200 tasks, like the board.
+ */
+function useTaskNeighbors(projectId: string, taskId: string) {
+  const query = useApiQuery<Task[] | { items?: Task[] }>(
+    `/projects/${projectId}/tasks?sort=status&limit=200`,
+  );
+  const list = Array.isArray(query.data) ? query.data : (query.data?.items ?? []);
+  const index = list.findIndex((t) => t.id === taskId);
+  const href = (t: Task | undefined) => (t ? `/projects/${projectId}/tasks/${t.id}` : null);
+  return {
+    prev: index > 0 ? href(list[index - 1]) : null,
+    next: index >= 0 ? href(list[index + 1]) : null,
+    position: index + 1,
+    total: index >= 0 ? list.length : 0,
+  };
+}
+
+function TaskStepLink({
+  href,
+  label,
+  flip = false,
+}: {
+  href: string | null;
+  label: string;
+  flip?: boolean;
+}) {
+  const icon = <ChevronRightIcon size={16} className={flip ? 'rotate-180' : ''} />;
+  const cls =
+    'touch-target inline-flex size-8 items-center justify-center rounded-control text-fg-muted transition-colors';
+  return href ? (
+    <Link
+      href={href}
+      aria-label={label}
+      title={label}
+      className={`${cls} hover:bg-surface-muted hover:text-fg`}
+    >
+      {icon}
+    </Link>
+  ) : (
+    <span aria-hidden="true" className={`${cls} opacity-40`}>
+      {icon}
+    </span>
   );
 }

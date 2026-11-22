@@ -30,12 +30,14 @@ import {
   UsersIcon,
   XIcon,
 } from '@/components/icons';
+import { ShortcutsHelp } from '@/components/shortcuts-help';
 import { ToastProvider } from '@/components/toaster';
 import { Alert, Avatar, avatarTone, Button, IconButton, Skeleton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { forgetLastWorkspace, rememberLastWorkspace } from '@/lib/last-workspace';
 import { useFavoriteProjects } from '@/lib/project-prefs';
 import { setSidebarCollapsed, useSidebarCollapsed } from '@/lib/sidebar-collapsed';
+import { useShortcuts } from '@/lib/shortcuts';
 import { RealtimeProvider, useRealtimeRefresh, type RealtimeEvent } from '@/lib/realtime';
 import { useApiQuery } from '@/lib/use-api-query';
 import { NotificationBell } from '../collaboration/notification-bell';
@@ -182,6 +184,9 @@ function VerifiedFrame({ session, children }: { session: Session; children: Reac
 
   // Workspace search (record 0017): Ctrl+K or ⌘K anywhere in a workspace.
   const [searchOpen, setSearchOpen] = useState(false);
+  // `?` lists every keyboard shortcut.
+  const [helpOpen, setHelpOpen] = useState(false);
+  useShortcuts([{ key: '?', run: () => setHelpOpen(true) }]);
   const canSearch = Boolean(activeWorkspace);
   const openSearch = () => {
     closeDrawer();
@@ -370,6 +375,7 @@ function VerifiedFrame({ session, children }: { session: Session; children: Reac
           ) : null}
         </div>
       )}
+      {helpOpen ? <ShortcutsHelp onClose={() => setHelpOpen(false)} /> : null}
       {searchOpen && activeWorkspace ? (
         <SearchDialog workspaceId={activeWorkspace.id} onClose={() => setSearchOpen(false)} />
       ) : null}

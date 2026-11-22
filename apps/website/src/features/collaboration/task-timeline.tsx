@@ -284,6 +284,7 @@ export function TaskTimeline({
             Add a comment
           </label>
           <textarea
+            aria-keyshortcuts="C"
             id="new-comment"
             rows={3}
             value={draft}

@@ -19,6 +19,7 @@ import {
   StatusDot,
 } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
+import { useShortcuts } from '@/lib/shortcuts';
 import { formatDate, PRIORITY_RANK, TASK_STATUS_LABEL } from './labels';
 import { LabelChip } from './label-chip';
 import { useProject } from './project-context';
@@ -74,6 +75,16 @@ export function Board() {
     setAddingIn(status);
     showColumn(status);
   }
+
+  // `N` new task in To do, `/` jumps to the task search (`?` lists all shortcuts).
+  useShortcuts([
+    { key: 'n', run: () => !readOnly && startAdding('TODO') },
+    {
+      key: '/',
+      run: () =>
+        document.querySelector<HTMLInputElement>('input[placeholder="Search tasks"]')?.focus(),
+    },
+  ]);
 
   const toast = useToast();
   // Undo runs after later renders; it must see the board as it is then, not as it was.
