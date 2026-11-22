@@ -41,6 +41,7 @@ import { chipStatic, chipTrigger } from './property-styles';
 import { TaskTime } from './task-time';
 import { TaskTimeEntries } from './task-time-entries';
 import { TaskAttachments } from './task-attachments';
+import { TaskChecklist } from './task-checklist';
 import { useTaskTimer } from './task-timer';
 
 export function TaskDetail() {
@@ -541,6 +542,7 @@ function TaskEditor({
 
         <div className="min-w-0 px-4 pt-8 pb-10 sm:px-7 lg:col-start-1 lg:row-start-2 lg:px-10">
           <div className="mx-auto max-w-3xl space-y-10">
+            <TaskChecklist key={`checklist-${task.id}`} taskId={task.id} onChanged={onSaved} />
             <TaskAttachments key={task.id} taskId={task.id} />
             <TaskTimeline task={task} refreshKey={historyKey} onActivity={onActivity} />
           </div>

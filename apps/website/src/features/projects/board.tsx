@@ -3,7 +3,7 @@
 import { TASK_STATUSES, type Task, type TaskStatus } from '@devtrack/types';
 import Link from 'next/link';
 import { useEffect, useRef, useState, type DragEvent, type FormEvent, type RefObject } from 'react';
-import { CalendarIcon, PlusIcon } from '@/components/icons';
+import { CalendarIcon, ChecklistIcon, PlusIcon } from '@/components/icons';
 import { ChecksBadge } from '../github/checks-badge';
 import { HeaderActions } from '@/components/page-header';
 import { useToast } from '@/components/toaster';
@@ -394,19 +394,29 @@ function TaskCard({
         ))}
         {extraLabels > 0 ? <span className="text-xs text-fg-muted">+{extraLabels}</span> : null}
       </div>
-      {task.dueDate || task.checks ? (
+      {task.dueDate || task.checks || task.checklist.total > 0 ? (
         <div className="flex items-center justify-between gap-2 border-t border-line-subtle pt-2 text-xs text-fg-muted">
-          {task.dueDate ? (
-            <span
-              className={`inline-flex items-center gap-1.5 ${overdue ? 'font-medium text-danger' : ''}`}
-            >
-              <CalendarIcon size={14} />
-              {overdue ? 'Overdue · ' : ''}
-              {formatDate(task.dueDate)}
-            </span>
-          ) : (
-            <span />
-          )}
+          <span className="flex min-w-0 items-center gap-3">
+            {task.dueDate ? (
+              <span
+                className={`inline-flex items-center gap-1.5 ${overdue ? 'font-medium text-danger' : ''}`}
+              >
+                <CalendarIcon size={14} />
+                {overdue ? 'Overdue · ' : ''}
+                {formatDate(task.dueDate)}
+              </span>
+            ) : null}
+            {/* Checklist progress (0018). */}
+            {task.checklist.total > 0 ? (
+              <span
+                className={`inline-flex items-center gap-1 tabular-nums ${task.checklist.done === task.checklist.total ? 'text-status-done-fg' : ''}`}
+              >
+                <ChecklistIcon size={14} />
+                <span className="sr-only">Checklist</span>
+                {task.checklist.done}/{task.checklist.total}
+              </span>
+            ) : null}
+          </span>
           {/* CI on open linked PRs (0015). */}
           {task.checks ? <ChecksBadge state={task.checks} /> : null}
         </div>

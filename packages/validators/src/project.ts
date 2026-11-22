@@ -400,3 +400,41 @@ export const updateTimeEntrySchema = z
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), { error: 'Nothing to update.' });
 export type UpdateTimeEntryInput = z.infer<typeof updateTimeEntrySchema>;
+
+// --- Task checklist (decision record 0018) ---
+
+/** Most items one task's checklist can hold. */
+export const MAX_CHECKLIST_ITEMS = 100;
+
+const checklistBody = z
+  .string({ error: 'Item text is required.' })
+  .trim()
+  .min(1, { error: 'Item text is required.' })
+  .max(500, { error: 'Item text must be at most 500 characters.' });
+
+export const createChecklistItemSchema = z.object({
+  body: checklistBody,
+  assigneeId: z.uuid().nullable().optional(),
+});
+export type CreateChecklistItemInput = z.infer<typeof createChecklistItemSchema>;
+
+export const updateChecklistItemSchema = z
+  .object({
+    body: checklistBody.optional(),
+    done: z.boolean().optional(),
+    assigneeId: z.uuid().nullable().optional(),
+  })
+  .refine((v) => v.body !== undefined || v.done !== undefined || v.assigneeId !== undefined, {
+    error: 'Nothing to change.',
+  });
+export type UpdateChecklistItemInput = z.infer<typeof updateChecklistItemSchema>;
+
+/** The new order: every item id of the task, each exactly once. */
+export const reorderChecklistSchema = z.object({
+  itemIds: z
+    .array(z.uuid())
+    .min(1)
+    .max(MAX_CHECKLIST_ITEMS)
+    .refine((ids) => new Set(ids).size === ids.length, { error: 'Each item must appear once.' }),
+});
+export type ReorderChecklistInput = z.infer<typeof reorderChecklistSchema>;

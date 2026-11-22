@@ -23,7 +23,6 @@ import {
   taskGithubLinks,
   taskLabels,
   tasks,
-  timeEntries,
   users,
   type Database,
   type Executor,
@@ -696,7 +695,7 @@ export class TasksService {
   }
 
   /**
-   * Adds assignees, labels and logged time to task rows, keeping their order. The four lookups
+   * Adds assignees, labels, logged time and checklist counts to task rows, keeping their order. The four lookups
    * only need the ids, so they run in parallel on the pool (4 of its 5 connections); this must
    * stay on `this.db`, never a transaction, which can't run queries concurrently.
    */
@@ -707,7 +706,7 @@ export class TasksService {
     const keyPrefix = typeof projectKey === 'string' ? () => projectKey : projectKey;
     if (rows.length === 0) return [];
     const ids = rows.map((r) => r.task.id);
-    const [assignees, attached, logged, prChecks] = await Promise.all([
+    const [assignees, attached, totals, prChecks] = await Promise.all([
       this.db
         .select({ taskId: taskAssignees.taskId, user: userRef })
         .from(taskAssignees)
@@ -723,14 +722,18 @@ export class TasksService {
         .innerJoin(labels, eq(labels.id, taskLabels.labelId))
         .where(inArray(taskLabels.taskId, ids))
         .orderBy(labels.name),
+      // Per-task totals in one query: logged time (0012) and checklist progress (0018).
       this.db
         .select({
-          taskId: timeEntries.taskId,
-          minutes: sql<number>`sum(${timeEntries.minutes})::int`,
+          taskId: tasks.id,
+          // Explicit aliases: Drizzle leaves columns unqualified inside sql``, which would
+          // make the subqueries compare a table's columns with themselves.
+          minutes: sql<number>`(select coalesce(sum(te.minutes), 0) from time_entries te where te.task_id = "tasks"."id")::int`,
+          checklistTotal: sql<number>`(select count(*) from task_checklist_items ci where ci.task_id = "tasks"."id")::int`,
+          checklistDone: sql<number>`(select count(*) from task_checklist_items ci where ci.task_id = "tasks"."id" and ci.done_at is not null)::int`,
         })
-        .from(timeEntries)
-        .where(inArray(timeEntries.taskId, ids))
-        .groupBy(timeEntries.taskId),
+        .from(tasks)
+        .where(inArray(tasks.id, ids)),
       // CI badge on cards (0015): only open PRs count; merged or closed ones are history.
       this.db
         .select({ taskId: taskGithubLinks.taskId, checks: githubPullRequests.checksState })
@@ -752,7 +755,7 @@ export class TasksService {
       const seen = checksByTask.get(taskId);
       if (state && (!seen || rank[state] > rank[seen])) checksByTask.set(taskId, state);
     }
-    const loggedByTask = new Map(logged.map((l) => [l.taskId, l.minutes]));
+    const totalsByTask = new Map(totals.map((t) => [t.taskId, t]));
 
     const assigneesByTask = new Map<string, UserRef[]>();
     for (const a of assignees) {
@@ -778,8 +781,12 @@ export class TasksService {
         dueDate: task.dueDate,
         milestoneId: task.milestoneId,
         estimateMinutes: task.estimateMinutes,
-        loggedMinutes: loggedByTask.get(task.id) ?? 0,
+        loggedMinutes: totalsByTask.get(task.id)?.minutes ?? 0,
         checks: checksByTask.get(task.id) ?? null,
+        checklist: {
+          done: totalsByTask.get(task.id)?.checklistDone ?? 0,
+          total: totalsByTask.get(task.id)?.checklistTotal ?? 0,
+        },
         createdAt: task.createdAt.toISOString(),
         updatedAt: task.updatedAt.toISOString(),
         completedAt: task.completedAt?.toISOString() ?? null,

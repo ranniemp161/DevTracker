@@ -120,6 +120,15 @@ export const ClockIcon = (p: IconProps) => (
   </Icon>
 );
 
+/** A ticked box with lines: checklists (record 0018). */
+export const ChecklistIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <rect x="3" y="4" width="7" height="7" rx="1.5" />
+    <path d="m4.8 7.6 1.4 1.4 2.4-2.6M14 6.5h7M14 17.5h7" />
+    <rect x="3" y="13" width="7" height="7" rx="1.5" />
+  </Icon>
+);
+
 export const LinkIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />

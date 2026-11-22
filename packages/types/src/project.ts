@@ -87,6 +87,8 @@ export interface Task {
    * if any is running, else `passing` if some pass; null when no open linked PR has checks.
    */
   checks: ChecksState | null;
+  /** Checklist progress (decision record 0018); `total` is 0 without a checklist. */
+  checklist: { done: number; total: number };
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
@@ -187,4 +189,17 @@ export interface MilestoneCriterion {
   done: boolean;
   doneAt: string | null;
   doneBy: UserRef | null;
+}
+
+/** One line of a task's checklist (decision record 0018). */
+export interface TaskChecklistItem {
+  id: string;
+  taskId: string;
+  body: string;
+  position: number;
+  assignee: UserRef | null;
+  done: boolean;
+  doneAt: string | null;
+  doneBy: UserRef | null;
+  createdAt: string;
 }
