@@ -48,6 +48,7 @@ import {
   type ListTasksQuery,
   type UpdateTaskInput,
 } from '@devtrack/validators';
+import { escapeLike } from '../common/escape-like';
 import { AppException } from '../common/errors/app.exception';
 import { decodeCursor, encodeCursor, Paginated } from '../common/http/paginated';
 import { DATABASE } from '../database/database.module';
@@ -75,11 +76,6 @@ const isTaskCursor = (v: unknown): v is TaskCursor =>
   ((v as TaskCursor).s === undefined || isTaskStatus((v as TaskCursor).s));
 
 /** completed_at follows the status (M3 rule 6). */
-/** Escapes LIKE wildcards so a search for `50%` or `a_b` matches those characters literally. */
-function escapeLike(text: string): string {
-  return text.replace(/[\\%_]/g, (c) => `\\${c}`);
-}
-
 function completionFor(next: TaskStatus, current: TaskRow | null): Date | null | undefined {
   if (current && current.status === next) return undefined; // unchanged
   return next === 'DONE' ? new Date() : null;

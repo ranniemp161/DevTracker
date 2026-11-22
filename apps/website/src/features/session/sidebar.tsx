@@ -8,7 +8,7 @@ import type {
 } from '@devtrack/types';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { Suspense, useState, type ReactNode } from 'react';
+import { Suspense, useState, useSyncExternalStore, type ReactNode } from 'react';
 import {
   ActivityIcon,
   BoardIcon,
@@ -23,6 +23,7 @@ import {
   ListIcon,
   MoreIcon,
   PlusIcon,
+  SearchIcon,
   SettingsIcon,
   UsersIcon,
 } from '@/components/icons';
@@ -80,6 +81,8 @@ export interface SidebarProps {
   onNavigate?: () => void;
   /** Desktop shows the bell next to the switcher; the mobile top bar owns it otherwise. */
   showBell: boolean;
+  /** Opens workspace search (record 0017). */
+  onSearch: () => void;
 }
 
 export function Sidebar({
@@ -92,6 +95,7 @@ export function Sidebar({
   onLogout,
   onNavigate,
   showBell,
+  onSearch,
 }: SidebarProps) {
   const pathname = usePathname();
   const active = workspaces.find((w) => w.id === activeWorkspaceId);
@@ -106,7 +110,17 @@ export function Sidebar({
 
       {active ? (
         <div className="relative min-h-0 flex-1 overflow-y-auto">
-          <div className="mb-3">
+          <div className="mb-3 space-y-0.5">
+            <button
+              type="button"
+              onClick={onSearch}
+              aria-keyshortcuts="Control+K Meta+K"
+              className={`${navItemBase} mb-2 h-8.5 w-full border border-line bg-surface text-fg-muted hover:bg-surface-muted pointer-coarse:h-11`}
+            >
+              <SearchIcon size={16} />
+              <span className="flex-1 text-left">Search</span>
+              <ShortcutHint />
+            </button>
             <NavLink
               href={`${base}/my-tasks`}
               active={pathname === `${base}/my-tasks`}
@@ -373,5 +387,23 @@ function UserRow({ user, onLogout }: { user: PublicUser; onLogout: () => void })
         <MenuItem onSelect={onLogout}>Sign out</MenuItem>
       </Menu>
     </div>
+  );
+}
+
+const noSubscribe = () => () => {};
+
+/** "⌘K" on Apple devices, "Ctrl K" elsewhere; hidden on touch screens without a keyboard. */
+function ShortcutHint() {
+  // The platform is unknown while rendering on the server, so the hint appears after hydration.
+  const apple = useSyncExternalStore(
+    noSubscribe,
+    () => /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent),
+    () => null,
+  );
+  if (apple === null) return null;
+  return (
+    <kbd className="rounded-kbd border border-line px-1.5 text-2xs text-fg-muted pointer-coarse:hidden">
+      {apple ? '⌘K' : 'Ctrl K'}
+    </kbd>
   );
 }

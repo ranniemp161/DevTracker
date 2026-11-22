@@ -7,3 +7,4 @@ export * from './task-attachment.js';
 export * from './user.js';
 export * from './workspace.js';
 export * from './request.js';
+export * from './search.js';
