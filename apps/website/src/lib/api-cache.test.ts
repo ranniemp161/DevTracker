@@ -18,7 +18,7 @@ vi.mock('./api', async (importOriginal) => {
 });
 
 const { ApiError } = await import('./api');
-const { clearApiCache, fetchIntoCache, readCache, revalidate, subscribeCache } =
+const { clearApiCache, fetchIntoCache, readCache, revalidate, subscribeCache, writeCache } =
   await import('./api-cache');
 
 /** A request the test answers by hand. */
@@ -137,5 +137,22 @@ describe('api cache', () => {
     expect(readCache('/a')).toBeUndefined();
     expect(onChange).toHaveBeenCalledTimes(2);
     unsubscribe();
+  });
+
+  it('uses a custom loader, e.g. for a list that spans pages', async () => {
+    const load = vi.fn().mockResolvedValue(['t1', 't2']);
+    await fetchIntoCache('/p/tasks#all', false, load);
+    expect(load).toHaveBeenCalledWith('/p/tasks#all');
+    expect(mocks.api).not.toHaveBeenCalled();
+    expect(readCache('/p/tasks#all')?.data).toEqual(['t1', 't2']);
+  });
+
+  it('keeps optimistic writes until the next response replaces them', async () => {
+    const load = vi.fn().mockResolvedValueOnce(['old']).mockResolvedValueOnce(['server']);
+    await fetchIntoCache('/k', false, load);
+    writeCache('/k', ['optimistic']);
+    expect(readCache('/k')?.data).toEqual(['optimistic']);
+    await fetchIntoCache('/k', true, load);
+    expect(readCache('/k')?.data).toEqual(['server']);
   });
 });

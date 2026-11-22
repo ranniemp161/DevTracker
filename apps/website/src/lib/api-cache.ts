@@ -34,6 +34,14 @@ function store(path: string, entry: CacheEntry) {
   notify(path);
 }
 
+/** Loads the data for a cache key. Defaults to `api(path)`; lists that span pages pass their own. */
+export type Loader = (path: string) => Promise<unknown>;
+
+/** Replaces the cached data for `path`, e.g. after an optimistic update on screen. */
+export function writeCache(path: string, data: unknown): void {
+  store(path, { data });
+}
+
 /** The cached entry for `path`, if any. Stable between changes, for `useSyncExternalStore`. */
 export function readCache(path: string): CacheEntry | undefined {
   return entries.get(path);
@@ -54,11 +62,11 @@ export function subscribeCache(path: string, fn: () => void): () => void {
  * Fetches `path` into the cache. Shares a request already in flight unless `force` is set;
  * with `force`, a newer request wins over an older one that answers later.
  */
-export function fetchIntoCache(path: string, force = false): Promise<void> {
+export function fetchIntoCache(path: string, force = false, load: Loader = api): Promise<void> {
   const running = inflight.get(path);
   if (running && !force) return running.promise;
   const id = ++nextRequestId;
-  const promise = api<unknown>(path).then(
+  const promise = load(path).then(
     (data) => {
       if (inflight.get(path)?.id === id) store(path, { data });
     },
@@ -85,7 +93,7 @@ export function fetchIntoCache(path: string, force = false): Promise<void> {
  * background, unless it was fetched a moment ago. A cached failure is not shown again;
  * the screen loads as if nothing were cached.
  */
-export function revalidate(path: string): void {
+export function revalidate(path: string, load?: Loader): void {
   const entry = entries.get(path);
   if (entry?.error) {
     entries.delete(path);
@@ -93,7 +101,7 @@ export function revalidate(path: string): void {
   } else if (entry && Date.now() - entry.at < FRESH_MS) {
     return;
   }
-  void fetchIntoCache(path);
+  void fetchIntoCache(path, false, load);
 }
 
 /** Forgets everything, e.g. on sign-out, so the next session starts empty. */
