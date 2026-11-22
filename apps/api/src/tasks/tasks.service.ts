@@ -31,6 +31,8 @@ import {
 } from '@devtrack/database';
 import {
   ErrorCode,
+  toChecksState,
+  type ChecksState,
   type MyTask,
   type MyTasksResponse,
   type Task,
@@ -746,11 +748,13 @@ export class TasksService {
           ),
         ),
     ]);
-    const checksByTask = new Map<string, Task['checks']>();
+    // The worst state across the task's open PRs: failing, then running, then passing.
+    const rank = { passing: 0, running: 1, failing: 2 } as const;
+    const checksByTask = new Map<string, ChecksState>();
     for (const { taskId, checks } of prChecks) {
-      if (checksByTask.get(taskId) !== 'failing') {
-        checksByTask.set(taskId, checks === 'failing' ? 'failing' : 'passing');
-      }
+      const state = toChecksState(checks);
+      const seen = checksByTask.get(taskId);
+      if (state && (!seen || rank[state] > rank[seen])) checksByTask.set(taskId, state);
     }
     const loggedByTask = new Map(logged.map((l) => [l.taskId, l.minutes]));
 

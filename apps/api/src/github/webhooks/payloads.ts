@@ -133,3 +133,16 @@ export const checkSuiteEventSchema = z.object({
     pull_requests: z.array(z.object({ id, number: z.number().int().positive() })).default([]),
   }),
 });
+
+/** 0015 §8: a check run starting tells us its suite is running. */
+export const checkRunEventSchema = z.object({
+  ...repoEvent,
+  action: z.string(),
+  check_run: z.object({
+    head_sha: z.string().regex(sha),
+    started_at: z.string().nullable().optional(),
+    app: z.object({ slug: z.string().optional() }).nullable().optional(),
+    check_suite: z.object({ id }),
+    pull_requests: z.array(z.object({ id, number: z.number().int().positive() })).default([]),
+  }),
+});

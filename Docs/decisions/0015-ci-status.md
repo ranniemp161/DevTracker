@@ -12,7 +12,7 @@ Pull requests linked to tasks show a **checks** badge ("Checks passing" or "Chec
 ## 2. Source: `check_suite` completed (approved)
 
 - **Subscription:** the GitHub App subscribes to **Check suite**, which needs the **Checks: read** permission. You add this in the app's settings and then accept it on each installation.
-- **Which actions:** DevTrack uses `check_suite.completed` only. GitHub sends `requested` and `rerequested` to the app that runs the suite, not to us, so DevTrack doesn't show a "running" state.
+- **Which actions:** DevTrack uses `check_suite.completed`. GitHub sends `requested` and `rerequested` to the app that runs the suite, not to us. The "running" state comes from `check_run.created` instead (§8).
 - **Why `check_suite`:** each CI provider creates one suite per commit, and the suite completes once all of its runs have finished. That gives one result per provider (GitHub Actions, Vercel and so on) without handling every individual check run.
 - **Assumption to confirm:** GitHub's docs don't say outright that an app receives other apps' completed suites. Merge bots depend on it, so we assume it. After enabling the permission, confirm that **Recent deliveries** in the app's settings show `check_suite` events from your CI. If they don't, the fallback is the `workflow_run` event, which covers GitHub Actions only and needs **Actions: read**.
 
@@ -66,3 +66,27 @@ Retention: suites are kept like other GitHub history (0008).
 - Board cards show it in the footer as an icon and a word ("Checks passing" / "Checks failing"), never color alone.
 - When a PR's checks state changes, every project the repository is connected to gets a `github.pull_request.updated` event (`action: 'checks'`), so open boards and task pages refresh.
 - **Test:** the task list reports `failing`, then `passing`, then `null` once the PR closes; tasks without a linked PR stay `null`.
+
+## 8. Running state (added 2026-11-22)
+
+- **Why:** on PR #76, Vercel and GitGuardian passed within seconds and the badge showed "passing" while GitHub Actions still ran for about two minutes.
+- **Source:** the app also subscribes to **Check run** (same Checks: read permission). On `check_run.created`, the run's suite is stored as running: no conclusion, no `completed_at`, and `started_at` set to the run's start. Other `check_run` actions are ignored; the suite's `completed` event still carries the result.
+- **The rule (replaces §3's list):** on the head commit, `failing` if any finished suite failed; otherwise `running` if any suite is still running; otherwise `passing` if every suite passed; `null` if there are none.
+- **Re-runs and late deliveries:**
+  - a run that starts after the suite's last result (a re-run) reopens the suite;
+  - a `created` delivery for a run older than the suite's last result changes nothing;
+  - a `completed` delivery older than the suite's latest run doesn't end that run.
+- **Board and task pages:** "Checks running" with a clock icon, in the muted text color. On a task, the worst of its open PRs wins: failing, then running, then passing.
+- **Chat:** unchanged. A failure posts when the state becomes `failing`, so a re-run that fails again posts again.
+- **Limit:** if a quick suite finishes before CI even queues its first run, the badge can show "passing" for a few seconds.
+- **Migration:**
+
+```sql
+ALTER TABLE github_pull_requests DROP CONSTRAINT github_pull_requests_checks_state_check;
+ALTER TABLE github_check_suites ALTER COLUMN completed_at DROP NOT NULL;
+ALTER TABLE github_check_suites ADD COLUMN started_at timestamptz;
+ALTER TABLE github_pull_requests ADD CONSTRAINT github_pull_requests_checks_state_check
+  CHECK (checks_state IN ('passing', 'running', 'failing'));
+```
+
+- **Tests:** running until the last started suite finishes (a quicker app passing doesn't turn it green); a late `created` for a finished run is ignored; a re-run goes failing → running → passing and ignores a redelivered older failure; a new commit resets; other `check_run` actions are ignored.

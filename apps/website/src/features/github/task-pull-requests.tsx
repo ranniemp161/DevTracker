@@ -11,7 +11,7 @@ import { useState } from 'react';
 import { Alert, Badge, Button, PanelSection, Select } from '@/components/ui';
 import { api, apiPage, ApiError } from '@/lib/api';
 import { useRealtimeRefresh } from '@/lib/realtime';
-import { AlertIcon, CheckIcon } from '@/components/icons';
+import { ChecksBadge } from './checks-badge';
 import { useApiQuery } from '@/lib/use-api-query';
 import { useProject } from '../projects/project-context';
 
@@ -101,15 +101,10 @@ export function TaskPullRequests({
                       ? ` · linked by @${pr.link.linkedBy.username}`
                       : ''}
                 </p>
-                {/* CI on the head commit (decision record 0015). Never color alone: icon + word. */}
+                {/* CI on the head commit (decision record 0015). */}
                 {pr.checks && pr.state === 'open' ? (
-                  <p
-                    className={`mt-1 inline-flex items-center gap-1 text-xs font-medium ${
-                      pr.checks === 'failing' ? 'text-danger' : 'text-status-done-fg'
-                    }`}
-                  >
-                    {pr.checks === 'failing' ? <AlertIcon size={12} /> : <CheckIcon size={12} />}
-                    {pr.checks === 'failing' ? 'Checks failing' : 'Checks passing'}
+                  <p className="mt-1 text-xs">
+                    <ChecksBadge state={pr.checks} />
                   </p>
                 ) : null}
               </div>

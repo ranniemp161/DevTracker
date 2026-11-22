@@ -3,7 +3,8 @@
 import { TASK_STATUSES, type Task, type TaskStatus } from '@devtrack/types';
 import Link from 'next/link';
 import { useEffect, useRef, useState, type DragEvent, type FormEvent, type RefObject } from 'react';
-import { AlertIcon, CalendarIcon, CheckIcon, PlusIcon } from '@/components/icons';
+import { CalendarIcon, PlusIcon } from '@/components/icons';
+import { ChecksBadge } from '../github/checks-badge';
 import { HeaderActions } from '@/components/page-header';
 import { useToast } from '@/components/toaster';
 import {
@@ -406,17 +407,8 @@ function TaskCard({
           ) : (
             <span />
           )}
-          {/* CI on open linked PRs (0015). Never color alone: icon + word. */}
-          {task.checks ? (
-            <span
-              className={`inline-flex items-center gap-1 font-medium ${
-                task.checks === 'failing' ? 'text-danger' : 'text-status-done-fg'
-              }`}
-            >
-              {task.checks === 'failing' ? <AlertIcon size={12} /> : <CheckIcon size={12} />}
-              {task.checks === 'failing' ? 'Checks failing' : 'Checks passing'}
-            </span>
-          ) : null}
+          {/* CI on open linked PRs (0015). */}
+          {task.checks ? <ChecksBadge state={task.checks} /> : null}
         </div>
       ) : null}
     </li>

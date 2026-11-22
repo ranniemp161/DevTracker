@@ -260,7 +260,7 @@ export const githubPullRequests = pgTable(
     isDraft: boolean('is_draft').notNull().default(false),
     /** 0015: current head commit; null for rows stored before CI status existed. */
     headSha: text('head_sha'),
-    /** 0015: checks on the head commit; null until a suite for it completes. */
+    /** 0015: checks on the head commit; null until a suite for it starts or completes. */
     checksState: text('checks_state'),
     mergedAt: timestamptz('merged_at'),
     closedAt: timestamptz('closed_at'),
@@ -277,13 +277,16 @@ export const githubPullRequests = pgTable(
     unique('github_pull_requests_repo_pr_unique').on(t.repositoryId, t.githubPrId),
     check(
       'github_pull_requests_checks_state_check',
-      sql`${t.checksState} IN ('passing', 'failing')`,
+      sql`${t.checksState} IN ('passing', 'running', 'failing')`,
     ),
     index('github_pull_requests_repo_opened_idx').on(t.repositoryId, t.openedAt, t.id),
   ],
 );
 
-/** 0015: completed check suites (one per CI app per commit), for pull request CI status. */
+/**
+ * 0015: check suites (one per CI app per commit), for pull request CI status. A suite with no
+ * `completed_at` is running (§8): a check run in it was created and the suite hasn't finished.
+ */
 export const githubCheckSuites = pgTable(
   'github_check_suites',
   {
@@ -295,7 +298,9 @@ export const githubCheckSuites = pgTable(
     headSha: text('head_sha').notNull(),
     appSlug: text('app_slug'),
     conclusion: text('conclusion'),
-    completedAt: timestamptz('completed_at').notNull(),
+    /** 0015 §8: when the latest run in the suite started; older completions don't apply. */
+    startedAt: timestamptz('started_at'),
+    completedAt: timestamptz('completed_at'),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
   },
   (t) => [

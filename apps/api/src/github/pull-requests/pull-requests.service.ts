@@ -13,7 +13,12 @@ import {
   users,
   type Database,
 } from '@devtrack/database';
-import { ErrorCode, type LinkedPullRequest, type PullRequest } from '@devtrack/types';
+import {
+  ErrorCode,
+  toChecksState,
+  type LinkedPullRequest,
+  type PullRequest,
+} from '@devtrack/types';
 import type { ListPullRequestsQuery } from '@devtrack/validators';
 import { AppException } from '../../common/errors/app.exception';
 import { decodeCursor, encodeCursor, isTimeCursor, Paginated } from '../../common/http/paginated';
@@ -40,7 +45,7 @@ export const toPullRequest = (pr: PrRow, repo: { id: string; fullName: string })
   baseBranch: pr.baseBranch,
   state: stateOf(pr),
   isDraft: pr.isDraft,
-  checks: pr.checksState === 'passing' || pr.checksState === 'failing' ? pr.checksState : null,
+  checks: toChecksState(pr.checksState),
   openedAt: pr.openedAt.toISOString(),
   mergedAt: pr.mergedAt?.toISOString() ?? null,
   closedAt: pr.closedAt?.toISOString() ?? null,

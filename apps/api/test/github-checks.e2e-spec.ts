@@ -1,6 +1,7 @@
 import { githubPullRequests, projectMessages } from '@devtrack/database';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  checkRunEvent,
   checkSuiteEvent,
   deliver,
   githubFixture,
@@ -129,6 +130,58 @@ describe('CI status on pull requests (0015)', () => {
       }),
     ).expect(202);
     expect(await boardChecks()).toEqual({ linked: null, unlinked: null });
+  });
+
+  it('shows checks as running until every started suite finishes (§8)', async () => {
+    const f = await githubFixture(t);
+    const taskId = await linkedTask(f);
+    await deliver(t, 'pull_request', openPr()).expect(202);
+
+    await deliver(t, 'check_run', checkRunEvent()).expect(202);
+    expect(await state()).toBe('running');
+    const board = await f.dev.browser.get(`/api/v1/projects/${f.project}/tasks`).expect(200);
+    expect(board.body.data.find((i: { id: string }) => i.id === taskId).checks).toBe('running');
+    const prs = await f.dev.browser.get(`/api/v1/tasks/${taskId}/pull-requests`).expect(200);
+    expect(prs.body.data[0].checks).toBe('running');
+
+    // A quicker app passing doesn't turn the PR green while CI still runs.
+    await deliver(t, 'check_suite', checkSuiteEvent('success', { suiteId: 9002, app: 'vercel' }));
+    expect(await state()).toBe('running');
+
+    await deliver(t, 'check_suite', checkSuiteEvent('success')).expect(202);
+    expect(await state()).toBe('passing');
+
+    // A late "created" for a run that already finished changes nothing.
+    await deliver(t, 'check_run', checkRunEvent({ at: '2026-11-06T11:58:00Z' })).expect(202);
+    expect(await state()).toBe('passing');
+  });
+
+  it('reopens a suite on a re-run and ignores results from before it', async () => {
+    const f = await githubFixture(t);
+    await linkedTask(f);
+    await deliver(t, 'pull_request', openPr()).expect(202);
+    await deliver(t, 'check_suite', checkSuiteEvent('failure')).expect(202);
+    expect(await state()).toBe('failing');
+
+    await deliver(t, 'check_run', checkRunEvent({ at: '2026-11-06T12:05:00Z' })).expect(202);
+    expect(await state()).toBe('running');
+
+    // A redelivered result from before the re-run doesn't end it.
+    await deliver(t, 'check_suite', checkSuiteEvent('failure')).expect(202);
+    expect(await state()).toBe('running');
+
+    await deliver(t, 'check_suite', checkSuiteEvent('success', { at: '2026-11-06T12:10:00Z' }));
+    expect(await state()).toBe('passing');
+    expect(await failurePosts()).toHaveLength(1);
+
+    // A new commit starts over; other check_run actions are ignored.
+    await deliver(t, 'pull_request', openPr(SHA_B, 'synchronize')).expect(202);
+    expect(await state()).toBeNull();
+    const done = await deliver(t, 'check_run', checkRunEvent({ action: 'completed', sha: SHA_B }));
+    expect(done.body.data.status).toBe('IGNORED');
+    expect(await state()).toBeNull();
+    await deliver(t, 'check_run', checkRunEvent({ suiteId: 9020, sha: SHA_B, prIds: [] }));
+    expect(await state()).toBe('running');
   });
 
   it("respects the project's chat setting and ignores other actions and repositories", async () => {
