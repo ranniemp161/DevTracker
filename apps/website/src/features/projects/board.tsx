@@ -2,6 +2,7 @@
 
 import { TASK_STATUSES, type Task, type TaskStatus } from '@devtrack/types';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState, type DragEvent, type FormEvent, type RefObject } from 'react';
 import { AlertIcon, CalendarIcon, ChecklistIcon, PlusIcon } from '@/components/icons';
 import { ChecksBadge } from '../github/checks-badge';
@@ -42,7 +43,20 @@ export function Board() {
   const { filters } = useTaskFilters();
   const [dropError, setDropError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<TaskStatus | null>(null);
-  const [addingIn, setAddingIn] = useState<TaskStatus | null>(null);
+  const [chosenColumn, setAddingIn] = useState<TaskStatus | null>(null);
+  // "New task" from the sidebar opens the board with ?new=1: quick add in To do.
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const wantsNew = searchParams.get('new') === '1' && !readOnly;
+  const addingIn = chosenColumn ?? (wantsNew ? 'TODO' : null);
+  function stopAdding() {
+    setAddingIn(null);
+    if (wantsNew) {
+      const rest = new URLSearchParams(searchParams.toString());
+      rest.delete('new');
+      router.replace(rest.size ? `?${rest}` : `/projects/${project.id}`, { scroll: false });
+    }
+  }
   const columnRefs = useRef(new Map<TaskStatus, HTMLElement>());
   const visibleColumn = useVisibleColumn(columnRefs, tasks !== null);
 
@@ -218,10 +232,10 @@ export function Board() {
                   {addingIn === status && !readOnly ? (
                     <ColumnQuickAdd
                       status={status}
-                      onCancel={() => setAddingIn(null)}
+                      onCancel={stopAdding}
                       onCreated={(t) => {
                         setTasks((c) => [t, ...(c ?? [])]);
-                        setAddingIn(null);
+                        stopAdding();
                       }}
                     />
                   ) : null}

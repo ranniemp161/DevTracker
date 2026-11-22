@@ -7,18 +7,20 @@ import type {
   WorkspaceSummary,
 } from '@devtrack/types';
 import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
-import { Suspense, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useId, useState, useSyncExternalStore, type ReactNode } from 'react';
 import {
   ActivityIcon,
   BoardIcon,
   CalendarIcon,
   ChatIcon,
+  ChevronRightIcon,
   ChevronUpDownIcon,
   DevtrackMark,
   FlagIcon,
   FolderIcon,
   InboxIcon,
+  LinkIcon,
   MyTasksIcon,
   ListIcon,
   MoreIcon,
@@ -26,11 +28,18 @@ import {
   SearchIcon,
   SettingsIcon,
   SidebarIcon,
+  StarIcon,
   UsersIcon,
 } from '@/components/icons';
 import { Menu, MenuGroup, MenuItem, MenuLink, MenuSeparator } from '@/components/menu';
 import { Avatar, avatarTone } from '@/components/ui';
 import { CHOOSE_WORKSPACE_PARAM } from '@/lib/last-workspace';
+import {
+  setProjectExpanded,
+  toggleFavoriteProject,
+  useExpandedProjects,
+  useFavoriteProjects,
+} from '@/lib/project-prefs';
 import { applyThemeChoice, readThemeChoice, THEME_CHOICES, type ThemeChoice } from '@/lib/theme';
 import { NotificationBell } from '../collaboration/notification-bell';
 import { isAdmin, ROLE_LABEL } from '../workspaces/permissions';
@@ -158,43 +167,13 @@ export function Sidebar({
               </Link>
             ) : null}
           </div>
-          <ul className="mt-1 space-y-0.5">
-            {projects.map((p) => {
-              const isCurrent = p.id === currentProjectId;
-              return (
-                <li key={p.id}>
-                  <NavLink
-                    href={`/projects/${p.id}`}
-                    active={isCurrent && pathname === `/projects/${p.id}`}
-                    onNavigate={onNavigate}
-                    icon={
-                      <span
-                        aria-hidden="true"
-                        className={`flex size-4 shrink-0 items-center justify-center rounded-chip text-2xs font-semibold uppercase ${avatarTone(p.id)}`}
-                      >
-                        {p.name.slice(0, 1)}
-                      </span>
-                    }
-                    trailing={
-                      <span className="font-mono text-xs font-normal text-fg-subtle">{p.key}</span>
-                    }
-                  >
-                    {p.name}
-                  </NavLink>
-                  {isCurrent ? (
-                    <Suspense fallback={null}>
-                      <ProjectSubNav
-                        project={p}
-                        pathname={pathname}
-                        unread={chatUnread.find((u) => u.projectId === p.id)?.unreadCount ?? 0}
-                        onNavigate={onNavigate}
-                      />
-                    </Suspense>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
+          <ProjectList
+            projects={projects}
+            chatUnread={chatUnread}
+            currentProjectId={currentProjectId}
+            pathname={pathname}
+            onNavigate={onNavigate}
+          />
         </div>
       ) : (
         <div className="flex-1" />
@@ -299,11 +278,13 @@ function WorkspaceSwitcher({
 }
 
 function ProjectSubNav({
+  id,
   project,
   pathname,
   unread,
   onNavigate,
 }: {
+  id: string;
   project: Project;
   pathname: string;
   unread: number;
@@ -335,36 +316,245 @@ function ProjectSubNav({
       : [{ href: `${base}/members`, label: 'Members', icon: <UsersIcon size={16} /> }]),
   ];
 
+  const isActive = (href: string) =>
+    href === base ? pathname === base : pathname.startsWith(href);
+  // Board, List and Chat stay in view; Triage joins them while requests wait.
+  const primary = items.filter(
+    (i) =>
+      i.label === 'Board' ||
+      i.label === 'List' ||
+      i.label === 'Chat' ||
+      (i.label === 'Triage' && (i.count ?? 0) > 0),
+  );
+  const more = items.filter((i) => !primary.includes(i));
+  const moreActive = more.some((i) => isActive(i.href));
+  const link = (item: (typeof items)[number]) => {
+    const href = item.filtered && searchStr ? `${item.href}?${searchStr}` : item.href;
+    return (
+      <li key={item.href}>
+        <NavLink
+          href={href}
+          active={isActive(item.href)}
+          icon={item.icon}
+          compact
+          onNavigate={onNavigate}
+          trailing={
+            item.count && item.count > 0 ? (
+              <span className="min-w-4.5 rounded-full bg-primary px-1.5 text-center text-pill leading-4.5 font-semibold text-fg-on-inverse">
+                {item.count > 99 ? '99+' : item.count}
+              </span>
+            ) : null
+          }
+        >
+          {item.label}
+        </NavLink>
+      </li>
+    );
+  };
+
   return (
     <ul
+      id={id}
       aria-label={`${project.name} navigation`}
       className="mt-0.5 mb-1 ml-4 space-y-0.5 border-l border-line pl-2"
     >
-      {items.map((item) => {
-        const isActive = item.href === base ? pathname === base : pathname.startsWith(item.href);
-        const href = item.filtered && searchStr ? `${item.href}?${searchStr}` : item.href;
-        return (
-          <li key={item.href}>
-            <NavLink
-              href={href}
-              active={isActive}
-              icon={item.icon}
-              compact
-              onNavigate={onNavigate}
-              trailing={
-                item.count && item.count > 0 ? (
-                  <span className="min-w-4.5 rounded-full bg-primary px-1.5 text-center text-pill leading-4.5 font-semibold text-fg-on-inverse">
-                    {item.count > 99 ? '99+' : item.count}
-                  </span>
-                ) : null
-              }
-            >
-              {item.label}
-            </NavLink>
-          </li>
-        );
-      })}
+      {primary.map(link)}
+      <li>
+        {/* The rest of the project's pages; open while one of them is the current page. */}
+        <details className="group" open={moreActive || undefined}>
+          <summary
+            className={`${navItemBase} ${navItemIdle} h-8 cursor-pointer list-none text-fg-muted pointer-coarse:h-11 [&::-webkit-details-marker]:hidden`}
+          >
+            <ChevronRightIcon size={16} className="transition-transform group-open:rotate-90" />
+            <span className="flex-1">More</span>
+          </summary>
+          <ul className="mt-0.5 space-y-0.5">{more.map(link)}</ul>
+        </details>
+      </li>
     </ul>
+  );
+}
+
+/** Favourites first, then the rest; each project can be folded, with a ⋯ menu. */
+function ProjectList({
+  projects,
+  chatUnread,
+  currentProjectId,
+  pathname,
+  onNavigate,
+}: {
+  projects: Project[];
+  chatUnread: ProjectChatUnreadSummary[];
+  currentProjectId: string | null;
+  pathname: string;
+  onNavigate?: () => void;
+}) {
+  const favoriteIds = useFavoriteProjects();
+  const favorites = favoriteIds
+    .map((id) => projects.find((p) => p.id === id))
+    .filter((p): p is Project => Boolean(p));
+  const others = projects.filter((p) => !favoriteIds.includes(p.id));
+  const row = (p: Project) => (
+    <ProjectRow
+      key={p.id}
+      project={p}
+      favorite={favoriteIds.includes(p.id)}
+      current={p.id === currentProjectId}
+      pathname={pathname}
+      unread={chatUnread.find((u) => u.projectId === p.id)?.unreadCount ?? 0}
+      onNavigate={onNavigate}
+    />
+  );
+  return (
+    <>
+      {favorites.length > 0 ? (
+        <>
+          <h3 className="mt-1 px-2.5 py-1 text-2xs font-medium tracking-wide text-fg-subtle uppercase">
+            Favourites
+          </h3>
+          <ul className="space-y-0.5">{favorites.map(row)}</ul>
+          {others.length > 0 ? (
+            <h3 className="mt-2 px-2.5 py-1 text-2xs font-medium tracking-wide text-fg-subtle uppercase">
+              All projects
+            </h3>
+          ) : null}
+        </>
+      ) : null}
+      <ul className="mt-1 space-y-0.5">{others.map(row)}</ul>
+    </>
+  );
+}
+
+function ProjectRow({
+  project,
+  favorite,
+  current,
+  pathname,
+  unread,
+  onNavigate,
+}: {
+  project: Project;
+  favorite: boolean;
+  current: boolean;
+  pathname: string;
+  unread: number;
+  onNavigate?: () => void;
+}) {
+  const router = useRouter();
+  const choices = useExpandedProjects();
+  const subNavId = useId();
+  // The open project starts expanded; any project can be folded or unfolded and is remembered.
+  const expanded = choices[project.id] ?? current;
+  const attention = unread + (project.status === 'ARCHIVED' ? 0 : project.newRequestCount);
+  const base = `/projects/${project.id}`;
+  const [copied, setCopied] = useState(false);
+
+  return (
+    <li>
+      <div className="group/row relative flex items-center">
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-controls={subNavId}
+          aria-label={`${expanded ? 'Collapse' : 'Expand'} ${project.name}`}
+          onClick={() => setProjectExpanded(project.id, !expanded)}
+          className="touch-target absolute left-0.5 z-10 inline-flex size-5 items-center justify-center rounded-chip text-fg-subtle opacity-0 transition-opacity group-hover/row:opacity-100 hover:text-fg focus-visible:opacity-100 pointer-coarse:opacity-100"
+        >
+          <ChevronRightIcon size={12} className={expanded ? 'rotate-90' : ''} />
+        </button>
+        <div className="min-w-0 flex-1">
+          <NavLink
+            href={base}
+            active={current && pathname === base}
+            onNavigate={onNavigate}
+            icon={
+              <span
+                aria-hidden="true"
+                className={`flex size-4 shrink-0 items-center justify-center rounded-chip text-2xs font-semibold uppercase ${avatarTone(project.id)}`}
+              >
+                {project.name.slice(0, 1)}
+              </span>
+            }
+            trailing={
+              !expanded && attention > 0 ? (
+                <span className="min-w-4.5 rounded-full bg-primary px-1.5 text-center text-pill leading-4.5 font-semibold text-fg-on-inverse">
+                  <span className="sr-only">Needs attention: </span>
+                  {attention > 99 ? '99+' : attention}
+                </span>
+              ) : (
+                <span className="font-mono text-xs font-normal text-fg-subtle group-hover/row:invisible pointer-coarse:invisible">
+                  {project.key}
+                </span>
+              )
+            }
+          >
+            {project.name}
+          </NavLink>
+        </div>
+        <Menu
+          label={`${project.name} actions`}
+          align="end"
+          triggerProps={{ 'aria-label': `${project.name} actions` }}
+          triggerClassName="touch-target absolute right-1 inline-flex size-6.5 items-center justify-center rounded-chip text-fg-muted opacity-0 transition-opacity group-hover/row:opacity-100 hover:bg-surface-muted hover:text-fg focus-visible:opacity-100 aria-expanded:opacity-100 pointer-coarse:opacity-100"
+          menuClassName="w-48"
+          trigger={<MoreIcon size={14} />}
+        >
+          {project.status === 'ARCHIVED' ? null : (
+            <MenuItem
+              icon={<PlusIcon size={14} />}
+              onSelect={() => {
+                onNavigate?.();
+                router.push(`${base}?new=1`);
+              }}
+            >
+              New task
+            </MenuItem>
+          )}
+          <MenuItem
+            icon={<StarIcon size={14} filled={favorite} />}
+            onSelect={() => toggleFavoriteProject(project.id)}
+          >
+            {favorite ? 'Remove from favourites' : 'Add to favourites'}
+          </MenuItem>
+          <MenuItem
+            icon={<LinkIcon size={14} />}
+            onSelect={() => {
+              void navigator.clipboard
+                ?.writeText(new URL(base, window.location.origin).toString())
+                .then(() => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                });
+            }}
+          >
+            Copy link
+          </MenuItem>
+          {project.viewerCanManage ? (
+            <MenuLink
+              href={`${base}/settings`}
+              icon={<SettingsIcon size={14} />}
+              onNavigate={onNavigate}
+            >
+              Settings
+            </MenuLink>
+          ) : null}
+        </Menu>
+        <span role="status" className="sr-only">
+          {copied ? 'Link copied' : ''}
+        </span>
+      </div>
+      {expanded ? (
+        <Suspense fallback={null}>
+          <ProjectSubNav
+            id={subNavId}
+            project={project}
+            pathname={pathname}
+            unread={unread}
+            onNavigate={onNavigate}
+          />
+        </Suspense>
+      ) : null}
+    </li>
   );
 }
 

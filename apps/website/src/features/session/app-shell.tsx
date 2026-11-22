@@ -31,9 +31,10 @@ import {
   XIcon,
 } from '@/components/icons';
 import { ToastProvider } from '@/components/toaster';
-import { Alert, Avatar, Button, IconButton, Skeleton } from '@/components/ui';
+import { Alert, Avatar, avatarTone, Button, IconButton, Skeleton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { forgetLastWorkspace, rememberLastWorkspace } from '@/lib/last-workspace';
+import { useFavoriteProjects } from '@/lib/project-prefs';
 import { setSidebarCollapsed, useSidebarCollapsed } from '@/lib/sidebar-collapsed';
 import { RealtimeProvider, useRealtimeRefresh, type RealtimeEvent } from '@/lib/realtime';
 import { useApiQuery } from '@/lib/use-api-query';
@@ -296,6 +297,10 @@ function VerifiedFrame({ session, children }: { session: Session; children: Reac
                 </IconButton>
               ) : null}
               <NotificationBell />
+              <RailProjects
+                projects={projects.data ?? []}
+                currentProjectId={isProjectRoute ? (params.id ?? null) : null}
+              />
             </nav>
           ) : (
             <aside className="w-62 shrink-0">{sidebar(true)}</aside>
@@ -686,5 +691,48 @@ function ShellSkeleton() {
         </div>
       </div>
     </div>
+  );
+}
+
+/** Folded sidebar: projects as letter icons (favourites first) so switching stays one click. */
+function RailProjects({
+  projects,
+  currentProjectId,
+}: {
+  projects: Project[];
+  currentProjectId: string | null;
+}) {
+  const favorites = useFavoriteProjects();
+  if (projects.length === 0) return null;
+  const ordered = [
+    ...favorites.map((id) => projects.find((p) => p.id === id)).filter((p): p is Project => !!p),
+    ...projects.filter((p) => !favorites.includes(p.id)),
+  ];
+  return (
+    <ul
+      aria-label="Projects"
+      className="mt-2 flex min-h-0 flex-col items-center gap-1 overflow-y-auto border-t border-line pt-2 scrollbar-none"
+    >
+      {ordered.map((p) => (
+        <li key={p.id}>
+          <Link
+            href={`/projects/${p.id}`}
+            title={p.name}
+            aria-label={p.name}
+            aria-current={p.id === currentProjectId ? 'page' : undefined}
+            className={`touch-target flex size-8 items-center justify-center rounded-control transition-colors hover:bg-surface-muted ${
+              p.id === currentProjectId ? 'bg-primary-soft' : ''
+            }`}
+          >
+            <span
+              aria-hidden="true"
+              className={`flex size-5 items-center justify-center rounded-chip text-xs font-semibold uppercase ${avatarTone(p.id)}`}
+            >
+              {p.name.slice(0, 1)}
+            </span>
+          </Link>
+        </li>
+      ))}
+    </ul>
   );
 }
