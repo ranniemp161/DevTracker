@@ -33,6 +33,14 @@ function networkError(err: unknown) {
   );
 }
 
+const writeListeners = new Set<() => void>();
+
+/** Calls `fn` after every successful write (any method but GET). Returns the unsubscribe. */
+export function onApiWrite(fn: () => void): () => void {
+  writeListeners.add(fn);
+  return () => writeListeners.delete(fn);
+}
+
 /**
  * Calls the DevTrack API through the same-origin `/api/v1` proxy and unwraps
  * `{ data }`. Throws `ApiError` for error envelopes, network failures and timeouts.
@@ -41,10 +49,11 @@ export async function api<T>(
   path: string,
   init: { method?: string; body?: unknown } = {},
 ): Promise<T> {
+  const method = init.method ?? (init.body === undefined ? 'GET' : 'POST');
   let res: Response;
   try {
     res = await fetch(`/api/v1${path}`, {
-      method: init.method ?? (init.body === undefined ? 'GET' : 'POST'),
+      method,
       credentials: 'same-origin',
       headers: init.body === undefined ? undefined : { 'Content-Type': 'application/json' },
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
@@ -55,6 +64,7 @@ export async function api<T>(
     throw networkError(err);
   }
 
+  if (res.ok && method !== 'GET') writeListeners.forEach((fn) => fn());
   if (res.status === 204) return undefined as T;
 
   const json: unknown = await res.json().catch(() => null);
