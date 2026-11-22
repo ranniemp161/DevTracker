@@ -4,6 +4,9 @@ import type { Comment, Task, TimelineItem } from '@devtrack/types';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Alert, Avatar, Button, SegmentedControl } from '@/components/ui';
+import { MoreIcon } from '@/components/icons';
+import { Menu, MenuItem } from '@/components/menu';
+import { rowMenuTrigger } from '../projects/property-styles';
 import { api, apiPage, ApiError } from '@/lib/api';
 import { useRealtimeRefresh } from '@/lib/realtime';
 import { useProject } from '../projects/project-context';
@@ -196,15 +199,48 @@ export function TaskTimeline({
                 seed={c.author?.id}
                 size="sm"
               />
-              <div className="min-w-0 flex-1 rounded-card border border-line bg-surface px-3.5 py-2.5">
-                <p className="text-xs text-fg-muted">
-                  <span className="text-label font-semibold text-fg">
-                    @{c.author?.username ?? 'deleted user'}
-                  </span>{' '}
-                  ·{' '}
-                  <span title={new Date(c.createdAt).toLocaleString()}>{timeAgo(c.createdAt)}</span>
-                  {c.edited && !c.deleted ? ' · edited' : ''}
-                </p>
+              <div className="group/row min-w-0 flex-1 rounded-card border border-line bg-surface px-3.5 py-2.5">
+                <div className="flex items-start gap-2">
+                  <p className="min-w-0 flex-1 text-xs text-fg-muted">
+                    <span className="text-label font-semibold text-fg">
+                      @{c.author?.username ?? 'deleted user'}
+                    </span>{' '}
+                    ·{' '}
+                    <span title={new Date(c.createdAt).toLocaleString()}>
+                      {timeAgo(c.createdAt)}
+                    </span>
+                    {c.edited && !c.deleted ? ' · edited' : ''}
+                  </p>
+                  {!c.deleted && editing?.id !== c.id && (mine || canDelete) && !readOnly ? (
+                    <Menu
+                      label="Comment actions"
+                      align="end"
+                      triggerProps={{ 'aria-label': 'Comment actions' }}
+                      triggerClassName={`${rowMenuTrigger} -mt-1 -mr-1.5`}
+                      menuClassName="w-36"
+                      trigger={<MoreIcon size={16} />}
+                    >
+                      {mine ? (
+                        <MenuItem onSelect={() => setEditing({ id: c.id, body: c.body ?? '' })}>
+                          Edit
+                        </MenuItem>
+                      ) : null}
+                      {canDelete ? (
+                        <MenuItem
+                          onSelect={() =>
+                            run(async () => {
+                              await api(`/comments/${c.id}`, { method: 'DELETE' });
+                              replace({ ...c, body: null, deleted: true, mentions: [] });
+                            })
+                          }
+                          className="text-danger! hover:text-danger! focus-visible:text-danger!"
+                        >
+                          Delete
+                        </MenuItem>
+                      ) : null}
+                    </Menu>
+                  ) : null}
+                </div>
                 {c.deleted ? (
                   <p className="mt-1 text-sm text-fg-subtle italic">This comment was deleted.</p>
                 ) : editing?.id === c.id ? (
@@ -249,33 +285,6 @@ export function TaskTimeline({
                     <CommentBody comment={c} />
                   </div>
                 )}
-                {!c.deleted && editing?.id !== c.id && (mine || canDelete) && !readOnly ? (
-                  <div className="mt-1 flex gap-1">
-                    {mine ? (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setEditing({ id: c.id, body: c.body ?? '' })}
-                      >
-                        Edit
-                      </Button>
-                    ) : null}
-                    {canDelete ? (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() =>
-                          run(async () => {
-                            await api(`/comments/${c.id}`, { method: 'DELETE' });
-                            replace({ ...c, body: null, deleted: true, mentions: [] });
-                          })
-                        }
-                      >
-                        Delete
-                      </Button>
-                    ) : null}
-                  </div>
-                ) : null}
               </div>
             </li>
           );

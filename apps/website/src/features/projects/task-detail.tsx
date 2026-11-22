@@ -8,6 +8,7 @@ import {
   CalendarIcon,
   ChatIcon,
   CheckIcon,
+  ChevronRightIcon,
   FlagIcon,
   LinkIcon,
   MoreIcon,
@@ -23,7 +24,6 @@ import {
   Button,
   ErrorState,
   IconButton,
-  PanelSection,
   PriorityIcon,
   Skeleton,
   StatusDot,
@@ -513,8 +513,16 @@ function TaskEditor({
               <TaskTimeEntries task={task} onChanged={onSaved} />
             </div>
 
-            <div className="space-y-5">
-              <PanelSection title="Details">
+            {/* Reference facts: folded so the rail stays short. */}
+            <details className="group">
+              <summary className="flex min-h-8 cursor-pointer list-none items-center justify-between gap-2 rounded-control text-label font-semibold text-fg pointer-coarse:min-h-11 [&::-webkit-details-marker]:hidden">
+                Details
+                <ChevronRightIcon
+                  size={14}
+                  className="text-fg-muted transition-transform group-open:rotate-90"
+                />
+              </summary>
+              <div className="space-y-5 pt-3">
                 <dl className="space-y-2 text-label">
                   <DetailRow label="Reporter">
                     {task.reporter ? `@${task.reporter.username}` : '—'}
@@ -525,9 +533,9 @@ function TaskEditor({
                     <DetailRow label="Completed">{formatDate(task.completedAt)}</DetailRow>
                   ) : null}
                 </dl>
-              </PanelSection>
-              <TaskTime taskId={task.id} status={task.status} />
-            </div>
+                <TaskTime taskId={task.id} status={task.status} />
+              </div>
+            </details>
           </aside>
         </div>
 

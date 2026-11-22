@@ -13,3 +13,10 @@ export const chipTrigger =
 /** Same look for chips that aren't buttons (assignees, with their own remove button). */
 export const chipStatic =
   'inline-flex h-7.5 max-w-full min-w-0 items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 text-label font-medium text-fg pointer-coarse:h-10';
+
+/**
+ * ⋯ button for a row's actions (edit, remove, unlink). Shown on hover or focus of the row
+ * (a `group/row` ancestor) with a mouse; always shown on touch screens.
+ */
+export const rowMenuTrigger =
+  'touch-target inline-flex size-7 shrink-0 items-center justify-center rounded-control text-fg-muted opacity-0 transition-opacity hover:bg-surface-muted hover:text-fg focus-visible:opacity-100 group-hover/row:opacity-100 group-focus-within/row:opacity-100 aria-expanded:bg-surface-muted aria-expanded:opacity-100 pointer-coarse:opacity-100';
