@@ -8,5 +8,11 @@
     "api/v1/realtime/socket.mjs": {
       "maxDuration": 300
     }
+  },
+  "git": {
+    "deploymentEnabled": {
+      "**": false,
+      "main": true
+    }
   }
 }
