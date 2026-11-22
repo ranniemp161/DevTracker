@@ -3,8 +3,18 @@
 import { TASK_PRIORITIES, TASK_STATUSES, type Milestone, type Task } from '@devtrack/types';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { CheckIcon, ChevronDownIcon, PlusIcon } from '@/components/icons';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  CalendarIcon,
+  ChatIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  LinkIcon,
+  MoreIcon,
+  PlusIcon,
+  XIcon,
+} from '@/components/icons';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Menu, MenuItem } from '@/components/menu';
 import { useToast } from '@/components/toaster';
 import {
@@ -27,6 +37,7 @@ import { TaskTimeline } from '../collaboration/task-timeline';
 import { TaskPullRequests } from '../github/task-pull-requests';
 import { useProject } from './project-context';
 import { TaskLabels } from './task-labels';
+import { addChip, pickerTrigger } from './property-styles';
 import { TaskTime } from './task-time';
 import { TaskTimeEntries } from './task-time-entries';
 import { TaskAttachments } from './task-attachments';
@@ -97,29 +108,23 @@ function TaskSkeleton() {
   );
 }
 
-/** Ghost-style native control used for values in the properties panel. */
-const valueControl =
-  'h-8 w-full cursor-pointer appearance-none rounded-control bg-transparent pr-7 text-sm text-fg transition-colors hover:bg-surface-muted disabled:cursor-default disabled:hover:bg-transparent';
-
 function PropertyRow({
   label,
-  htmlFor,
+  align = 'center',
   children,
 }: {
   label: string;
-  htmlFor?: string;
+  align?: 'center' | 'start';
   children: ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-2">
-      {htmlFor ? (
-        <label htmlFor={htmlFor} className="w-24 shrink-0 text-label text-fg-muted">
-          {label}
-        </label>
-      ) : (
-        <span className="w-24 shrink-0 text-label text-fg-muted">{label}</span>
-      )}
-      <div className="relative min-w-0 flex-1">{children}</div>
+    <div className={`flex gap-2 ${align === 'start' ? 'items-start' : 'items-center'}`}>
+      <dt
+        className={`w-24 shrink-0 text-label text-fg-muted ${align === 'start' ? 'pt-2 pointer-coarse:pt-3' : ''}`}
+      >
+        {label}
+      </dt>
+      <dd className="relative min-w-0 flex-1">{children}</dd>
     </div>
   );
 }
@@ -164,7 +169,7 @@ function TaskEditor({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
 
   const canDelete = !readOnly && (task.reporter?.id === user.id || project.viewerCanManage);
   const dirty =
@@ -240,13 +245,13 @@ function TaskEditor({
     });
   }
 
-  async function copyLink() {
+  async function copy(text: string, message: string) {
     try {
-      await navigator.clipboard.writeText(window.location.href);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      await navigator.clipboard.writeText(text);
+      setCopied(message);
+      setTimeout(() => setCopied(null), 2000);
     } catch {
-      setError('Could not copy the link.');
+      setError('Could not copy to the clipboard.');
     }
   }
 
@@ -272,32 +277,42 @@ function TaskEditor({
             {task.key}
           </span>
         </nav>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          {/* Before the buttons so they never shift; empty most of the time. */}
+          <span role="status" className="text-label font-medium text-status-done-fg empty:hidden">
+            {saved ? 'Saved' : (copied ?? '')}
+          </span>
           <Link
             href={`${base}/chat?task=${task.id}`}
-            className="inline-flex h-7.5 items-center rounded-control border border-line-control bg-surface px-2.5 text-label font-medium text-fg transition-colors hover:bg-surface-sunken"
+            className="inline-flex h-7.5 items-center gap-1.5 rounded-control border border-line-control bg-surface px-2.5 text-label font-medium text-fg transition-colors hover:bg-surface-sunken pointer-coarse:h-11"
           >
-            Discuss in chat
+            <ChatIcon size={14} />
+            <span className="max-sm:sr-only">Discuss in chat</span>
           </Link>
-          <IconButton aria-label="Copy link to task" onClick={copyLink}>
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
-            </svg>
+          <IconButton
+            aria-label="Copy link to task"
+            onClick={() => copy(window.location.href, 'Link copied')}
+          >
+            <LinkIcon size={16} />
           </IconButton>
-          {/* Last in the row so the empty live region never offsets the buttons. */}
-          <span role="status" className="text-label font-medium text-status-done-fg">
-            {saved ? 'Saved' : copied ? 'Link copied' : ''}
-          </span>
+          <Menu
+            label="Task actions"
+            align="end"
+            triggerProps={{ 'aria-label': 'Task actions' }}
+            triggerClassName="touch-target inline-flex size-8 items-center justify-center rounded-control text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg aria-expanded:bg-surface-muted"
+            menuClassName="w-44"
+            trigger={<MoreIcon size={16} />}
+          >
+            <MenuItem onSelect={() => copy(task.key, 'Key copied')}>Copy key</MenuItem>
+            {canDelete ? (
+              <MenuItem
+                onSelect={() => setConfirmDelete(true)}
+                className="text-danger! hover:text-danger! focus-visible:text-danger!"
+              >
+                Delete task
+              </MenuItem>
+            ) : null}
+          </Menu>
         </div>
       </header>
 
@@ -305,10 +320,10 @@ function TaskEditor({
         <form
           id="task-form"
           onSubmit={save}
-          className="min-w-0 space-y-5 px-4 py-6 sm:px-7 lg:col-start-1 lg:row-start-1 lg:px-10 lg:pt-8"
+          className="min-w-0 px-4 pt-6 sm:px-7 lg:col-start-1 lg:row-start-1 lg:px-10 lg:pt-10"
         >
-          {error ? <Alert>{error}</Alert> : null}
-          <div className="space-y-3">
+          <div className="mx-auto max-w-3xl space-y-3">
+            {error ? <Alert>{error}</Alert> : null}
             <label htmlFor="task-title" className="sr-only">
               Title
             </label>
@@ -334,57 +349,60 @@ function TaskEditor({
                 className="block w-full resize-none rounded-control border border-transparent bg-transparent px-2 py-1 text-title font-semibold tracking-tight text-fg field-sizing-content placeholder:text-fg-subtle hover:border-line focus-visible:border-primary"
               />
             </div>
-            <Menu
-              label="Status"
-              disabled={readOnly}
-              triggerProps={{ 'aria-label': `Status: ${TASK_STATUS_LABEL[form.status]}` }}
-              triggerClassName="inline-flex min-h-11 items-center gap-2 rounded-control border border-line-control bg-surface-sunken px-2.5 text-sm font-medium text-fg transition-colors hover:bg-surface-muted aria-expanded:bg-surface-muted disabled:cursor-default disabled:hover:bg-surface-sunken lg:min-h-9"
-              menuClassName="w-48"
-              trigger={
-                <>
-                  <StatusDot status={form.status} />
-                  {TASK_STATUS_LABEL[form.status]}
-                  {readOnly ? null : <ChevronDownIcon size={14} className="text-fg-subtle" />}
-                </>
-              }
-            >
-              {TASK_STATUSES.map((st) => (
-                <MenuItem
-                  key={st}
-                  checked={form.status === st}
-                  icon={<StatusDot status={st} />}
-                  onSelect={() => setForm((f) => ({ ...f, status: st }))}
-                >
-                  {TASK_STATUS_LABEL[st]}
-                </MenuItem>
-              ))}
-            </Menu>
-          </div>
-          <div className="space-y-2">
-            <label htmlFor="task-description" className="block text-label font-semibold text-fg">
+            <label htmlFor="task-description" className="sr-only">
               Description
             </label>
-            <textarea
-              id="task-description"
-              rows={4}
-              value={form.description}
-              disabled={readOnly}
-              placeholder="Add a description"
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              className="block min-h-24 w-full rounded-control border border-line bg-surface px-3 py-2 field-sizing-content text-base leading-relaxed text-fg-secondary placeholder:text-fg-subtle hover:border-line-control focus-visible:border-primary lg:text-sm"
-            />
+            <div className="-mx-2">
+              <textarea
+                id="task-description"
+                rows={3}
+                value={form.description}
+                disabled={readOnly}
+                placeholder={
+                  readOnly
+                    ? 'No description.'
+                    : 'Add a description, acceptance criteria or technical notes…'
+                }
+                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                className="block min-h-20 w-full resize-none rounded-control border border-transparent bg-transparent px-2 py-1.5 field-sizing-content text-base leading-relaxed text-fg-secondary placeholder:text-fg-subtle hover:border-line focus-visible:border-primary lg:text-sm"
+              />
+            </div>
           </div>
         </form>
 
         <aside
           aria-label="Task properties"
-          className="min-w-0 space-y-6 border-t border-line bg-surface-sunken p-4 sm:p-6 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:border-t-0 lg:border-l"
+          className="min-w-0 divide-y divide-line border-t border-line bg-surface-sunken px-4 sm:px-6 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:border-t-0 lg:border-l [&>*]:py-5"
         >
-          <div className="rounded-panel border border-line bg-surface p-4">
-            <TaskTimeEntries task={task} onChanged={onSaved} />
-          </div>
-
-          <PanelSection title="Properties">
+          <dl className="space-y-1">
+            <PropertyRow label="Status">
+              <Menu
+                label="Status"
+                disabled={readOnly}
+                triggerProps={{ 'aria-label': `Status: ${TASK_STATUS_LABEL[form.status]}` }}
+                triggerClassName={pickerTrigger}
+                menuClassName="w-48"
+                trigger={
+                  <PickerValue readOnly={readOnly}>
+                    <span className="inline-flex items-center gap-2">
+                      <StatusDot status={form.status} />
+                      {TASK_STATUS_LABEL[form.status]}
+                    </span>
+                  </PickerValue>
+                }
+              >
+                {TASK_STATUSES.map((st) => (
+                  <MenuItem
+                    key={st}
+                    checked={form.status === st}
+                    icon={<StatusDot status={st} />}
+                    onSelect={() => setForm((f) => ({ ...f, status: st }))}
+                  >
+                    {TASK_STATUS_LABEL[st]}
+                  </MenuItem>
+                ))}
+              </Menu>
+            </PropertyRow>
             <PropertyRow label="Priority">
               <Menu
                 label="Priority"
@@ -409,14 +427,91 @@ function TaskEditor({
                 ))}
               </Menu>
             </PropertyRow>
-            <PropertyRow label="Due date" htmlFor="task-due">
-              <input
-                id="task-due"
-                type="date"
+            <PropertyRow label="Assignees" align="start">
+              <ul className="flex flex-wrap items-center gap-1 py-1">
+                {task.assignees.map((a) => (
+                  <li
+                    key={a.id}
+                    className="inline-flex h-7 max-w-full items-center gap-1.5 rounded-full bg-surface pr-1 pl-0.5 text-label text-fg shadow-card pointer-coarse:h-9"
+                  >
+                    <Avatar name={a.username} url={a.avatarUrl} seed={a.id} size="xs" />
+                    <span className="min-w-0 truncate">{a.username}</span>
+                    {readOnly ? null : (
+                      <button
+                        type="button"
+                        disabled={saving}
+                        aria-label={`Unassign @${a.username}`}
+                        onClick={() =>
+                          call(() =>
+                            api(`/tasks/${task.id}/assignees/${a.id}`, { method: 'DELETE' }),
+                          )
+                        }
+                        className="touch-target inline-flex size-5 shrink-0 items-center justify-center rounded-full text-fg-subtle hover:bg-surface-muted hover:text-fg"
+                      >
+                        <XIcon size={12} />
+                      </button>
+                    )}
+                  </li>
+                ))}
+                {task.assignees.length === 0 && (readOnly || unassigned.length === 0) ? (
+                  <li className="px-2 text-sm text-fg-subtle">Nobody</li>
+                ) : null}
+                {!readOnly && unassigned.length > 0 ? (
+                  <li>
+                    <Menu
+                      label="Assign someone"
+                      disabled={saving}
+                      triggerProps={{ 'aria-label': 'Assign someone' }}
+                      triggerClassName={
+                        task.assignees.length === 0 ? `${pickerTrigger} text-fg-subtle!` : addChip
+                      }
+                      menuClassName="w-60"
+                      trigger={
+                        task.assignees.length === 0 ? (
+                          <>
+                            <PlusIcon size={14} />
+                            Assign someone
+                          </>
+                        ) : (
+                          <PlusIcon size={14} />
+                        )
+                      }
+                    >
+                      {unassigned.map((m) => (
+                        <MenuItem
+                          key={m.user.id}
+                          icon={
+                            <Avatar
+                              name={m.user.username}
+                              url={m.user.avatarUrl}
+                              seed={m.user.id}
+                              size="xs"
+                            />
+                          }
+                          onSelect={() =>
+                            call(() =>
+                              api(`/tasks/${task.id}/assignees`, {
+                                body: { userIds: [m.user.id] },
+                              }),
+                            )
+                          }
+                        >
+                          @{m.user.username}
+                        </MenuItem>
+                      ))}
+                    </Menu>
+                  </li>
+                ) : null}
+              </ul>
+            </PropertyRow>
+            <PropertyRow label="Labels" align="start">
+              <TaskLabels task={task} onChanged={onSaved} />
+            </PropertyRow>
+            <PropertyRow label="Due date">
+              <DueDatePicker
                 value={form.dueDate}
-                disabled={readOnly}
-                onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))}
-                className={`${valueControl} px-2 ${form.dueDate ? '' : 'text-fg-subtle'}`}
+                readOnly={readOnly}
+                onChange={(dueDate) => setForm((f) => ({ ...f, dueDate }))}
               />
             </PropertyRow>
             <PropertyRow label="Milestone">
@@ -452,87 +547,22 @@ function TaskEditor({
                 ))}
               </Menu>
             </PropertyRow>
-          </PanelSection>
+          </dl>
 
-          <PanelSection title="Assignees">
-            <ul className="space-y-1.5">
-              {task.assignees.map((a) => (
-                <li key={a.id} className="flex items-center gap-2 text-sm">
-                  <Avatar name={a.username} url={a.avatarUrl} seed={a.id} size="xs" />
-                  <span className="min-w-0 flex-1 truncate">@{a.username}</span>
-                  {readOnly ? null : (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={saving}
-                      aria-label={`Unassign @${a.username}`}
-                      onClick={() =>
-                        call(() => api(`/tasks/${task.id}/assignees/${a.id}`, { method: 'DELETE' }))
-                      }
-                    >
-                      Remove
-                    </Button>
-                  )}
-                </li>
-              ))}
-              {task.assignees.length === 0 ? (
-                <li className="text-sm text-fg-subtle">Nobody yet.</li>
-              ) : null}
-            </ul>
-            {!readOnly && unassigned.length > 0 ? (
-              <div className="mt-2">
-                <Menu
-                  label="Assign someone"
-                  disabled={saving}
-                  triggerClassName="inline-flex h-8 w-full items-center gap-1.5 rounded-control border border-dashed border-line-control px-2.5 text-label text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg aria-expanded:bg-surface-muted pointer-coarse:h-11"
-                  menuClassName="w-60"
-                  trigger={
-                    <>
-                      <PlusIcon size={14} />
-                      Assign someone
-                    </>
-                  }
-                >
-                  {unassigned.map((m) => (
-                    <MenuItem
-                      key={m.user.id}
-                      icon={
-                        <Avatar
-                          name={m.user.username}
-                          url={m.user.avatarUrl}
-                          seed={m.user.id}
-                          size="xs"
-                        />
-                      }
-                      onSelect={() =>
-                        call(() =>
-                          api(`/tasks/${task.id}/assignees`, { body: { userIds: [m.user.id] } }),
-                        )
-                      }
-                    >
-                      @{m.user.username}
-                    </MenuItem>
-                  ))}
-                </Menu>
-              </div>
-            ) : null}
-          </PanelSection>
+          <div>
+            <TaskPullRequests
+              task={task}
+              branchTip={`${task.key}-${slugify(task.title)}`}
+              onChange={onActivity}
+            />
+          </div>
 
-          <TaskLabels task={task} onChanged={onSaved} />
+          <div>
+            <TaskTimeEntries task={task} onChanged={onSaved} />
+          </div>
 
-          <TaskPullRequests
-            task={task}
-            branchTip={`${task.key}-${slugify(task.title)}`}
-            onChange={onActivity}
-          />
-
-          <details className="group border-t border-line pt-3">
-            <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-2 rounded-control py-2 text-label font-semibold text-fg [&::-webkit-details-marker]:hidden">
-              Task history details
-              <ChevronDownIcon size={14} className="text-fg-muted group-open:rotate-180" />
-            </summary>
-            <div className="space-y-4 pt-2">
-              <TaskTime taskId={task.id} status={task.status} />
+          <div className="space-y-5">
+            <PanelSection title="Details">
               <dl className="space-y-2 text-label">
                 <DetailRow label="Reporter">
                   {task.reporter ? `@${task.reporter.username}` : '—'}
@@ -543,57 +573,37 @@ function TaskEditor({
                   <DetailRow label="Completed">{formatDate(task.completedAt)}</DetailRow>
                 ) : null}
               </dl>
-            </div>
-          </details>
-
-          {canDelete ? (
-            confirmDelete ? (
-              <div className="space-y-2">
-                <p className="text-label text-danger">
-                  Delete this task? This can&apos;t be undone.
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    disabled={saving}
-                    onClick={() =>
-                      call(
-                        () => api(`/tasks/${task.id}`, { method: 'DELETE' }),
-                        () => {
-                          toast.show(`Deleted ${task.key}`);
-                          router.push(base);
-                        },
-                      )
-                    }
-                  >
-                    Confirm delete
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)}>
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-danger hover:bg-danger-soft hover:text-danger"
-                onClick={() => setConfirmDelete(true)}
-              >
-                Delete task
-              </Button>
-            )
-          ) : null}
+            </PanelSection>
+            <TaskTime taskId={task.id} status={task.status} />
+          </div>
         </aside>
 
-        <div className="min-w-0 px-4 pt-4 pb-8 sm:px-7 lg:col-start-1 lg:row-start-2 lg:px-10 lg:pt-0">
-          <div className="space-y-8 border-t border-line pt-6">
+        <div className="min-w-0 px-4 pt-8 pb-10 sm:px-7 lg:col-start-1 lg:row-start-2 lg:px-10">
+          <div className="mx-auto max-w-3xl space-y-10">
             <TaskAttachments key={task.id} taskId={task.id} />
             <TaskTimeline task={task} refreshKey={historyKey} onActivity={onActivity} />
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title={`Delete ${task.key}?`}
+        confirmLabel="Delete task"
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={() => {
+          setConfirmDelete(false);
+          void call(
+            () => api(`/tasks/${task.id}`, { method: 'DELETE' }),
+            () => {
+              toast.show(`Deleted ${task.key}`);
+              router.push(base);
+            },
+          );
+        }}
+      >
+        Its comments, time entries and attachments go with it. This can&apos;t be undone.
+      </ConfirmDialog>
 
       {readOnly || !(dirty || saving) ? null : (
         <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-line bg-surface px-4 py-3 sm:px-7 lg:px-10">
@@ -619,9 +629,62 @@ function TaskEditor({
   );
 }
 
-/** Ghost button showing a property's value and a chevron (SPEC §5 properties panel). */
-const pickerTrigger =
-  'flex h-8 w-full min-w-0 items-center gap-2 rounded-control px-2 text-left text-sm text-fg transition-colors hover:bg-surface-muted aria-expanded:bg-surface-muted disabled:cursor-default disabled:hover:bg-transparent pointer-coarse:min-h-11';
+/**
+ * "Set due date" or the date, opening the browser's own date picker. The native input stays
+ * in the page (invisible) so keyboards, screen readers and form semantics keep working.
+ */
+function DueDatePicker({
+  value,
+  readOnly,
+  onChange,
+}: {
+  value: string;
+  readOnly: boolean;
+  onChange: (value: string) => void;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  const openPicker = () => {
+    const el = input.current;
+    if (!el) return;
+    try {
+      el.showPicker();
+    } catch {
+      el.focus();
+    }
+  };
+  return (
+    <div className="relative flex items-center">
+      <input
+        ref={input}
+        id="task-due"
+        type="date"
+        value={value}
+        disabled={readOnly}
+        onChange={(e) => onChange(e.target.value)}
+        className="pointer-events-none absolute inset-0 opacity-0"
+        tabIndex={-1}
+        aria-hidden="true"
+      />
+      <button
+        type="button"
+        disabled={readOnly}
+        onClick={openPicker}
+        aria-label={value ? `Due date: ${formatDate(value)}. Change` : 'Set due date'}
+        className={`${pickerTrigger} ${value ? '' : 'text-fg-subtle!'}`}
+      >
+        <CalendarIcon size={14} className="shrink-0 text-fg-muted" />
+        <span className="min-w-0 flex-1 truncate">
+          {value ? formatDate(value) : 'Set due date'}
+        </span>
+      </button>
+      {value && !readOnly ? (
+        <IconButton size="sm" aria-label="Clear due date" onClick={() => onChange('')}>
+          <XIcon size={12} />
+        </IconButton>
+      ) : null}
+    </div>
+  );
+}
 
 function PickerValue({
   readOnly,

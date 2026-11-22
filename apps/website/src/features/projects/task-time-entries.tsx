@@ -58,9 +58,12 @@ export function TaskTimeEntries({ task, onChanged }: { task: Task; onChanged: ()
   const entries = query.data?.entries;
 
   return (
-    <PanelSection title="Logged time">
-      <p className="text-2xl font-semibold tracking-tight tabular-nums text-fg">
-        {formatMinutes(task.loggedMinutes)}
+    <PanelSection title="Time">
+      <p className="text-sm text-fg-secondary">
+        <span className="font-semibold text-fg tabular-nums">
+          {formatMinutes(task.loggedMinutes)}
+        </span>{' '}
+        logged
       </p>
       {!readOnly ? (
         <div className="flex flex-wrap items-center gap-2">
