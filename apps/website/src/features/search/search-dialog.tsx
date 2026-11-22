@@ -123,7 +123,7 @@ export function SearchDialog({
       aria-labelledby={titleId}
       onClose={onClose}
       onClick={(e) => e.target === e.currentTarget && close()}
-      className="m-0 h-dvh max-h-none w-full max-w-none flex-col border-0 bg-surface p-0 text-fg open:flex backdrop:bg-fg/40 sm:mx-auto sm:mt-24 sm:mb-auto sm:h-auto sm:max-w-xl sm:rounded-panel sm:border sm:border-line sm:shadow-overlay"
+      className="m-0 h-dvh max-h-none w-full max-w-none flex-col border-0 bg-surface p-0 text-fg open:flex backdrop:bg-fg/40 sm:mx-auto sm:mt-24 sm:mb-auto sm:h-fit sm:max-w-xl sm:rounded-panel sm:border sm:border-line sm:shadow-overlay"
     >
       <h2 id={titleId} className="sr-only">
         Search this workspace
@@ -145,7 +145,7 @@ export function SearchDialog({
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKeyDown}
           placeholder="Search tasks and projects"
-          className="h-13 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-fg-subtle sm:text-sm"
+          className="h-13 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-fg-subtle focus-visible:shadow-none sm:text-sm"
         />
         {loading ? <SpinnerIcon size={14} className="shrink-0 text-fg-muted" /> : null}
         <button
