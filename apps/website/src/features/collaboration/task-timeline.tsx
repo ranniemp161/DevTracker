@@ -2,9 +2,10 @@
 
 import type { Comment, Task, TimelineItem } from '@devtrack/types';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Alert, Avatar, Button, SegmentedControl } from '@/components/ui';
 import { MoreIcon } from '@/components/icons';
+import { Markdown } from '@/components/markdown';
 import { Menu, MenuItem } from '@/components/menu';
 import { rowMenuTrigger } from '../projects/property-styles';
 import { api, apiPage, ApiError } from '@/lib/api';
@@ -19,30 +20,12 @@ const textareaClass =
   'block w-full rounded-control border border-line-control bg-surface px-3 py-2 text-sm placeholder:text-fg-subtle focus-visible:border-primary';
 
 /**
- * Renders plain text (never HTML) and highlights `@mentions` that resolved to real people.
- * React escapes all text, so comment bodies cannot inject markup (M4 rule 1).
+ * A comment as Markdown (decision record 0019), highlighting `@mentions` that resolved to real
+ * people. Raw HTML is never rendered, so comment bodies cannot inject markup (M4 rule 1).
  */
 function CommentBody({ comment }: { comment: Comment }) {
-  const known = new Set(comment.mentions.map((m) => m.username));
-  const parts: ReactNode[] = [];
-  let last = 0;
-  for (const match of (comment.body ?? '').matchAll(/@([A-Za-z0-9][A-Za-z0-9_-]*[A-Za-z0-9])/g)) {
-    const username = match[1]!.toLowerCase();
-    if (!known.has(username)) continue;
-    parts.push(comment.body!.slice(last, match.index));
-    parts.push(
-      <span key={match.index} className="font-medium text-primary">
-        {match[0]}
-      </span>,
-    );
-    last = match.index! + match[0].length;
-  }
-  parts.push((comment.body ?? '').slice(last));
-  return (
-    <p className="text-sm leading-relaxed break-words whitespace-pre-wrap text-fg-secondary">
-      {parts}
-    </p>
-  );
+  const known = new Set(comment.mentions.map((m) => m.username.toLowerCase()));
+  return <Markdown mentions={known}>{comment.body ?? ''}</Markdown>;
 }
 
 /**
@@ -318,7 +301,7 @@ export function TaskTimeline({
           />
           <div className="flex items-center justify-between gap-3">
             <p id="new-comment-hint" className="text-xs text-fg-subtle">
-              Ctrl/⌘ + Enter to send
+              Ctrl/⌘ + Enter to send · Markdown supported
             </p>
             <Button type="submit" variant="primary" disabled={posting || !draft.trim()}>
               {posting ? 'Posting…' : 'Comment'}
