@@ -21,6 +21,7 @@ import {
   projects,
   sql,
   taskAssignees,
+  taskDonePrompts,
   taskGithubLinks,
   tasks,
   users,
@@ -310,7 +311,8 @@ export class GithubEventProcessor {
     if (action === 'opened') {
       await this.notifyLinkedTasks(tx, target, pr, p.sender, 'PULL_REQUEST_OPENED', 'opened');
     } else if (action === 'merged') {
-      await this.notifyLinkedTasks(tx, target, pr, p.sender, 'PULL_REQUEST_MERGED', 'merged');
+      // Asks whether linked tasks are done; never marks them Done itself (0021 §4).
+      await this.promptDone(tx, target, pr);
     }
     return PROCESSED;
   }
@@ -855,6 +857,82 @@ export class GithubEventProcessor {
           metadata: { ...prMetadata(pr, target.repo), auto: true, github: githubUser(sender) },
         });
       }
+    }
+  }
+
+  /**
+   * Opens a "Mark done?" prompt on every linked task that isn't Done, and asks its assignees (or
+   * the reporter when nobody is assigned) in the bell. One prompt per task and pull request, so
+   * a retried delivery asks nothing twice. The person who merged is asked too: it's a to-do, not
+   * news about their own action.
+   */
+  private async promptDone(tx: Transaction, target: Target, pr: PrRow): Promise<void> {
+    const linked = await tx
+      .select({
+        id: tasks.id,
+        projectId: tasks.projectId,
+        number: tasks.taskNumber,
+        reporterId: tasks.reporterId,
+      })
+      .from(taskGithubLinks)
+      .innerJoin(tasks, eq(tasks.id, taskGithubLinks.taskId))
+      .where(
+        and(
+          eq(taskGithubLinks.pullRequestId, pr.id),
+          isNull(tasks.deletedAt),
+          ne(tasks.status, 'DONE'),
+          inArray(
+            tasks.projectId,
+            target.projects.map((p) => p.id),
+          ),
+        ),
+      );
+    for (const task of linked) {
+      const [prompt] = await tx
+        .insert(taskDonePrompts)
+        .values({ taskId: task.id, pullRequestId: pr.id })
+        .onConflictDoNothing()
+        .returning({ id: taskDonePrompts.id });
+      if (!prompt) continue;
+      const project = target.projects.find((p) => p.id === task.projectId)!;
+      await this.events.event(
+        tx,
+        'task.updated',
+        {
+          workspaceId: project.workspaceId,
+          projectId: project.id,
+          actor: null,
+          entity: { type: 'task', id: task.id },
+        },
+        { taskId: task.id, donePrompt: true },
+      );
+
+      const assignees = await tx
+        .select({ id: taskAssignees.userId })
+        .from(taskAssignees)
+        .where(eq(taskAssignees.taskId, task.id));
+      const wanted = new Set(
+        assignees.length > 0 ? assignees.map((a) => a.id) : [task.reporterId].filter(Boolean),
+      );
+      if (wanted.size === 0) continue;
+      const audience = await this.projectAccess.audience(project, {}, tx);
+      const key = `${project.key}-${task.number}`;
+      await this.events.notify(
+        tx,
+        null,
+        audience
+          .filter((u) => wanted.has(u.id))
+          .map((u) => ({
+            userId: u.id,
+            workspaceId: project.workspaceId,
+            projectId: project.id,
+            type: 'TASK_DONE_PROMPT' as const,
+            title: `Pull request #${pr.number} merged. Mark ${key} done?`,
+            body: pr.title,
+            resourceType: 'task',
+            resourceId: task.id,
+          })),
+      );
     }
   }
 

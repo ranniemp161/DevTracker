@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { placeBelow, supportsAnchoring, supportsInvokers } from '@/components/menu';
 import { Button } from '@/components/ui';
-import { api, apiPage } from '@/lib/api';
+import { api, ApiError, apiPage } from '@/lib/api';
 import { useRealtimeRefresh } from '@/lib/realtime';
 import { timeAgo } from './describe-activity';
 
@@ -78,6 +78,29 @@ export function NotificationBell({ align = 'start' }: { align?: 'start' | 'end' 
     trigger.current?.focus({ focusVisible: false } as FocusOptions);
     panel.current?.hidePopover();
     if (n.link) router.push(n.link);
+  }
+
+  /** "Mark done" on a merge prompt (0021 §4): the API closes the prompt and reads the notice. */
+  const [marking, setMarking] = useState<string | null>(null);
+  async function markDone(n: Notification) {
+    setMarking(n.id);
+    let message: string | null = null;
+    try {
+      await api(`/tasks/${n.resourceId}/done-prompts/accept`, { method: 'POST' });
+    } catch (err) {
+      message = err instanceof ApiError ? err.message : 'Could not mark the task done.';
+      await api(`/notifications/${n.id}/read`, { method: 'PATCH' }).catch(() => undefined);
+    }
+    setItems(
+      (list) =>
+        list?.map((item) =>
+          item.id === n.id
+            ? { ...item, readAt: new Date().toISOString(), body: message ?? 'Marked done.' }
+            : item,
+        ) ?? null,
+    );
+    setMarking(null);
+    refreshCount();
   }
 
   async function markAll() {
@@ -161,6 +184,18 @@ export function NotificationBell({ align = 'start' }: { align?: 'start' | 'end' 
                   </span>
                 </span>
               </button>
+              {n.type === 'TASK_DONE_PROMPT' && !n.readAt ? (
+                <div className="bg-status-progress-bg px-3 pb-2.5 pl-7">
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    loading={marking === n.id}
+                    onClick={() => markDone(n)}
+                  >
+                    Mark done
+                  </Button>
+                </div>
+              ) : null}
             </li>
           ))}
         </ul>

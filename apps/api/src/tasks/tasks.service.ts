@@ -55,6 +55,7 @@ import { EventRecorder, type Actor } from '../events/event-recorder.service';
 import { ProjectAccessService, type ProjectRow } from '../projects/project-access.service';
 import { WorkspaceAccessService } from '../workspaces/workspace-access.service';
 import { TaskAccessService, type TaskRow } from './task-access.service';
+import { TaskDonePrompts, type PromptResolution } from './task-done-prompts.service';
 import { isTaskStatus, timeInStatus, type StatusChange } from './time-in-status';
 
 const userRef = { id: users.id, username: users.username, avatarUrl: users.avatarUrl };
@@ -91,6 +92,7 @@ export class TasksService {
     private readonly taskAccess: TaskAccessService,
     private readonly events: EventRecorder,
     private readonly workspaceAccess: WorkspaceAccessService,
+    private readonly donePrompts: TaskDonePrompts,
   ) {}
 
   /**
@@ -339,7 +341,16 @@ export class TasksService {
     };
   }
 
-  async update(actor: Actor, taskId: string, input: UpdateTaskInput): Promise<Task> {
+  /**
+   * `promptResolution` records how open "Mark done?" prompts close when this moves the task to
+   * Done (decision record 0021 §4): `done` from the prompt itself, `status_done` otherwise.
+   */
+  async update(
+    actor: Actor,
+    taskId: string,
+    input: UpdateTaskInput,
+    promptResolution: PromptResolution = 'status_done',
+  ): Promise<Task> {
     const { task, access } = await this.taskAccess.require(actor.id, taskId, { write: true });
     const changes = describeChanges(task, input);
     const nextMilestone =
@@ -380,6 +391,14 @@ export class TasksService {
           metadata: { key: taskKey(access.project, task), changes },
           event: { type: 'task.updated', payload: { taskId: task.id, changes } },
         });
+        if (input.status === 'DONE' && task.status !== 'DONE') {
+          await this.donePrompts.closeForDone(
+            tx,
+            [{ id: task.id, projectId: task.projectId, workspaceId: access.project.workspaceId }],
+            actor,
+            promptResolution,
+          );
+        }
       });
     }
     return (await this.load([task.id], access.project.key))[0]!;
@@ -442,6 +461,13 @@ export class TasksService {
             metadata: { key: taskKey(project, task), changes },
             event: { type: 'task.updated', payload: { taskId: task.id, changes } },
           });
+          if (input.status === 'DONE' && task.status !== 'DONE') {
+            await this.donePrompts.closeForDone(
+              tx,
+              [{ id: task.id, projectId: task.projectId, workspaceId: project.workspaceId }],
+              actor,
+            );
+          }
         }
 
         if (assigneeIds.length > 0) {

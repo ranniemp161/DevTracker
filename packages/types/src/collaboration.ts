@@ -76,6 +76,7 @@ export const NOTIFICATION_TYPES = [
   'PULL_REQUEST_REVIEWED',
   'MILESTONE_COMPLETED',
   'REQUEST_SUBMITTED',
+  'TASK_DONE_PROMPT',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -100,3 +101,10 @@ export interface Notification {
  */
 export type TimelineItem =
   { kind: 'comment'; comment: Comment } | { kind: 'activity'; entry: ActivityEntry };
+
+/** An open "Mark done?" prompt on a task (decision record 0021 §4). */
+export interface TaskDonePrompt {
+  id: string;
+  pullRequest: { number: number; title: string; url: string; repository: string };
+  createdAt: string;
+}

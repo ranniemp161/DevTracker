@@ -297,10 +297,16 @@ describe('pull requests', () => {
     const [stored] = await t.db.select().from(githubPullRequests);
     expect(stored!.mergedAt).toBeInstanceOf(Date);
     expect(await activityOf('merged')).toHaveLength(1);
+    // The merge notification is replaced by a "Mark done?" prompt (0021 §4).
     const merged = (await notificationsOf(f.dev.id)).filter(
       (n) => n.type === 'PULL_REQUEST_MERGED',
     );
-    expect(merged).toHaveLength(1);
+    expect(merged).toHaveLength(0);
+    const prompts = await t.db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.userId, f.dev.id));
+    expect(prompts.filter((n) => n.type === 'TASK_DONE_PROMPT')).toHaveLength(1);
 
     // Opening moved it to In review (0021); merging never moves it to Done.
     const after = await f.dev.browser.get(`/api/v1/tasks/${task.id}`);
