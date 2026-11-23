@@ -279,7 +279,7 @@ describe('pull requests', () => {
     );
   });
 
-  it('records merges without ever changing task status', async () => {
+  it('records merges without ever marking the task Done (0021)', async () => {
     const f = await githubFixture(t);
     const task = await devTask(f);
     await deliver(t, 'pull_request', pullRequestEvent('opened')).expect(202);
@@ -302,8 +302,9 @@ describe('pull requests', () => {
     );
     expect(merged).toHaveLength(1);
 
+    // Opening moved it to In review (0021); merging never moves it to Done.
     const after = await f.dev.browser.get(`/api/v1/tasks/${task.id}`);
-    expect(after.body.data.task.status).toBe(task.status);
+    expect(after.body.data.task.status).toBe('IN_REVIEW');
   });
 
   it('distinguishes closed from merged, and records updates without feed noise', async () => {

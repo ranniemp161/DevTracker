@@ -9,6 +9,7 @@ import { TaskChecklistController } from './task-checklist.controller';
 import { TaskChecklistService } from './task-checklist.service';
 import { TaskRelationsController } from './task-relations.controller';
 import { TaskRelationsService } from './task-relations.service';
+import { TaskStatusAutomation } from './task-status-automation.service';
 import { TasksController } from './tasks.controller';
 import { TasksService } from './tasks.service';
 
@@ -26,7 +27,8 @@ import { TasksService } from './tasks.service';
     TaskAttachmentsService,
     TaskChecklistService,
     TaskRelationsService,
+    TaskStatusAutomation,
   ],
-  exports: [TaskAccessService],
+  exports: [TaskAccessService, TaskStatusAutomation],
 })
 export class TasksModule {}

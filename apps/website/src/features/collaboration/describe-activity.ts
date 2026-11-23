@@ -21,6 +21,15 @@ function value(field: string, v: unknown): string {
   return String(v);
 }
 
+/** Why an automatic status move happened (decision record 0021), e.g. " · PR #42". */
+function automationCause(a: unknown): string {
+  const cause = a as { trigger?: string; prNumber?: number; sha?: string } | null | undefined;
+  if (cause?.trigger === 'pull_request' && cause.prNumber) return ` · PR #${cause.prNumber}`;
+  if (cause?.trigger === 'commit' && cause.sha) return ` · commit ${cause.sha.slice(0, 7)}`;
+  if (cause?.trigger === 'request') return ' · request accepted';
+  return '';
+}
+
 /** Human-readable sentence for an activity entry (without the actor or the task key). */
 export function describeActivity(entry: ActivityEntry): string {
   const m = entry.metadata as Record<string, unknown>;
@@ -36,7 +45,7 @@ export function describeActivity(entry: ActivityEntry): string {
             ? `edited the ${FIELD_LABEL[field] ?? field}`
             : `changed ${FIELD_LABEL[field] ?? field} from ${value(field, c.from)} to ${value(field, c.to)}`,
       );
-      return changes.join(', ') || 'updated the task';
+      return (changes.join(', ') || 'updated the task') + automationCause(m.automation);
     }
     case 'task.deleted':
       return 'deleted the task';
@@ -151,4 +160,15 @@ export function timeAgo(iso: string, now = Date.now()): string {
   if (seconds < 86400) return rtf.format(-Math.round(seconds / 3600), 'hour');
   if (seconds < 604800) return rtf.format(-Math.round(seconds / 86400), 'day');
   return new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium' });
+}
+
+/**
+ * DevTrack user, else "DevTrack automation" for automatic status moves (0021), else the GitHub
+ * login for GitHub events, else "System".
+ */
+export function actorLabel(e: ActivityEntry): string {
+  if (e.actor) return `@${e.actor.username}`;
+  if ((e.metadata as { automation?: unknown }).automation) return 'DevTrack automation';
+  const github = (e.metadata as { github?: { login?: string } | null }).github;
+  return github?.login ? `${github.login} (GitHub)` : 'System';
 }

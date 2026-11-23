@@ -33,6 +33,7 @@ import { DATABASE } from '../database/database.module';
 import { EventRecorder, type Actor } from '../events/event-recorder.service';
 import { ProjectAccessService } from '../projects/project-access.service';
 import { RATE_LIMITS, RateLimitService } from '../rate-limit/rate-limit.service';
+import { TaskStatusAutomation } from '../tasks/task-status-automation.service';
 import { TurnstileVerifier } from './turnstile.service';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -59,6 +60,7 @@ export class RequestsService {
     private readonly events: EventRecorder,
     private readonly rateLimit: RateLimitService,
     private readonly turnstile: TurnstileVerifier,
+    private readonly automation: TaskStatusAutomation,
   ) {}
 
   // ------------------------------------------------------------ public form
@@ -200,12 +202,18 @@ export class RequestsService {
     }));
   }
 
+  /** Accepting moves a still-Backlog task to To do (decision record 0021). */
   async accept(actor: Actor, requestId: string): Promise<void> {
-    const { request } = await this.requireNew(actor.id, requestId);
-    await this.db
-      .update(taskRequests)
-      .set({ status: 'accepted', triagedBy: actor.id, triagedAt: new Date() })
-      .where(eq(taskRequests.id, request.id));
+    const { request, project } = await this.requireNew(actor.id, requestId);
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(taskRequests)
+        .set({ status: 'accepted', triagedBy: actor.id, triagedAt: new Date() })
+        .where(eq(taskRequests.id, request.id));
+      await this.automation.advanceByIds(tx, project, [request.taskId], 'TODO', {
+        trigger: 'request',
+      });
+    });
   }
 
   /** Declining soft-deletes the task (0003); the request row stays for the form's history. */

@@ -18,7 +18,7 @@ import { Alert, Button } from '@/components/ui';
 import { apiPage, ApiError } from '@/lib/api';
 import { useRealtimeRefresh } from '@/lib/realtime';
 import { activityKind, type ActivityKind } from './activity-kind';
-import { describeActivity, timeAgo } from './describe-activity';
+import { actorLabel, describeActivity, timeAgo } from './describe-activity';
 
 /** Newest-first activity list with "Load more". Pass `taskId` for a single task's history. */
 export function ActivityFeed({
@@ -144,13 +144,6 @@ export function ActivityFeed({
       ) : null}
     </div>
   );
-}
-
-/** DevTrack user, else the GitHub login for GitHub events, else "System". */
-export function actorLabel(e: ActivityEntry): string {
-  if (e.actor) return `@${e.actor.username}`;
-  const github = (e.metadata as { github?: { login?: string } | null }).github;
-  return github?.login ? `${github.login} (GitHub)` : 'System';
 }
 
 function dayLabel(iso: string): string {
