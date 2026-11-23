@@ -32,6 +32,10 @@ import { extractTaskKeys } from '@devtrack/validators';
 import type { z } from 'zod';
 import { EventRecorder, type Actor } from '../../events/event-recorder.service';
 import { ProjectAccessService } from '../../projects/project-access.service';
+import {
+  numbersForProject,
+  TaskStatusAutomation,
+} from '../../tasks/task-status-automation.service';
 import { GithubChatFeed } from './github-chat-feed.service';
 import {
   installationEventSchema,
@@ -84,7 +88,7 @@ const date = (v: string | null | undefined) => (v ? new Date(v) : null);
  * the caller marks the delivery processed in the same transaction, so a retried delivery never
  * duplicates activity, links or notifications.
  *
- * GitHub events never change task status (§7.5).
+ * GitHub events move linked tasks forward but never to Done (decision record 0021).
  */
 @Injectable()
 export class GithubEventProcessor {
@@ -92,6 +96,7 @@ export class GithubEventProcessor {
     private readonly events: EventRecorder,
     private readonly projectAccess: ProjectAccessService,
     private readonly chat: GithubChatFeed,
+    private readonly automation: TaskStatusAutomation,
   ) {}
 
   /**
@@ -210,6 +215,22 @@ export class GithubEventProcessor {
         },
       });
     }
+
+    // A task key in the branch name or a new commit message starts the task (0021). Only newly
+    // stored commits count, so a retried delivery or a re-push moves nothing twice.
+    for (const commit of p.commits.filter((c) => newShas.has(c.id))) {
+      const keys = extractTaskKeys(branch, commit.message);
+      if (keys.length === 0) continue;
+      for (const project of target.projects) {
+        await this.automation.advanceByNumbers(
+          tx,
+          project,
+          numbersForProject(project.key, keys),
+          'IN_PROGRESS',
+          { trigger: 'commit', repository: target.repo.fullName, sha: commit.id, url: commit.url },
+        );
+      }
+    }
     return PROCESSED;
   }
 
@@ -275,6 +296,13 @@ export class GithubEventProcessor {
         await this.events.event(tx, event.type, scope, event.payload);
       }
     }
+
+    // A linked PR that is ready for review moves its tasks to In review (0021). Drafts wait
+    // until they are marked ready.
+    const readyForReview =
+      p.action === 'ready_for_review' ||
+      ((p.action === 'opened' || p.action === 'reopened') && !p.pull_request.draft);
+    if (readyForReview) await this.moveLinkedToReview(tx, target, pr);
 
     // A new head commit has its own checks (0015).
     await this.refreshChecks(tx, target, pr, p.sender);
@@ -827,6 +855,23 @@ export class GithubEventProcessor {
           metadata: { ...prMetadata(pr, target.repo), auto: true, github: githubUser(sender) },
         });
       }
+    }
+  }
+
+  private async moveLinkedToReview(tx: Transaction, target: Target, pr: PrRow): Promise<void> {
+    const linked = await tx
+      .select({ id: tasks.id, projectId: tasks.projectId })
+      .from(taskGithubLinks)
+      .innerJoin(tasks, eq(tasks.id, taskGithubLinks.taskId))
+      .where(eq(taskGithubLinks.pullRequestId, pr.id));
+    for (const project of target.projects) {
+      const ids = linked.filter((t) => t.projectId === project.id).map((t) => t.id);
+      await this.automation.advanceByIds(tx, project, ids, 'IN_REVIEW', {
+        trigger: 'pull_request',
+        repository: target.repo.fullName,
+        prNumber: pr.number,
+        url: pr.url,
+      });
     }
   }
 

@@ -12,8 +12,7 @@ import { api, apiPage, ApiError } from '@/lib/api';
 import { useRealtimeRefresh } from '@/lib/realtime';
 import { useProject } from '../projects/project-context';
 import { useSession } from '../session/session-context';
-import { actorLabel } from './activity-feed';
-import { describeActivity, timeAgo } from './describe-activity';
+import { actorLabel, describeActivity, timeAgo } from './describe-activity';
 import { appendTimeline, parseTimelineFilter, type TimelineFilter } from './timeline-items';
 
 const textareaClass =
