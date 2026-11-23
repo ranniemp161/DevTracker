@@ -38,14 +38,14 @@ An automatic move is recorded exactly like a manual one, so the board, activity 
 - `tasks.status` changes; `completed_at` follows the same rule as manual changes (automation never sets Done, so it only ever stays or becomes null).
 - Activity `task.updated` with `changes.status = { from, to }`, `actor = null`, and `metadata.automation = { trigger: 'request' | 'commit' | 'pull_request', repository?, sha?, prNumber?, url? }`.
 - The outbox event `task.updated` with `{ taskId, changes }`, so open boards update live.
-- **Shown as:** "DevTrack automation moved this to In review · PR #42", with the PR or commit linked.
+- **Shown as:** "DevTrack automation changed status from To do to In review · PR #42". The cause is text: the PR number, the short commit SHA, or "request accepted".
 - No new notifications for automatic moves.
 
 ## 4. The "Mark done?" prompt
 
 When a linked pull request merges and the task isn't `DONE`:
 
-- **Who is asked:** the task's assignees, or the reporter if it has none. Only people who can still edit the task.
+- **Who is asked:** the task's assignees, or the reporter if it has none. Only people who can still see the project. The person who merged is asked too: it's a to-do, not news about their own action.
 - **Where:** a bell notification with a **Mark done** button, and a banner on the task page: "PR #42 was merged. Mark FF01-104 done?" with **Mark done** and **Dismiss**.
 - **Replaces** today's "pull request merged" notification. Reporters and assignees no longer get that notification; only the prompt is sent.
 - **Every merge asks.** A task with several linked PRs gets a prompt for each merge.
@@ -75,11 +75,11 @@ CREATE INDEX task_done_prompts_open_idx ON task_done_prompts (task_id) WHERE res
 
 ### API
 
-| Method | Path                                        | Notes                                                                              |
-| ------ | ------------------------------------------- | ---------------------------------------------------------------------------------- |
-| GET    | `/tasks/:id/done-prompts`                   | Open prompts for the task, each with its PR number, title and URL.                 |
-| POST   | `/tasks/:id/done-prompts/:promptId/accept`  | Moves the task to `DONE` as the caller and resolves every open prompt on the task. |
-| POST   | `/tasks/:id/done-prompts/:promptId/dismiss` | Resolves that prompt as dismissed.                                                 |
+| Method | Path                                        | Notes                                                                                                     |
+| ------ | ------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| GET    | `/tasks/:id/done-prompts`                   | Open prompts for the task, each with its PR number, title and URL.                                        |
+| POST   | `/tasks/:id/done-prompts/accept`            | Moves the task to `DONE` as the caller and resolves every open prompt on the task. 409 when none is open. |
+| POST   | `/tasks/:id/done-prompts/:promptId/dismiss` | Resolves that prompt as dismissed for everyone. 409 when already handled.                                 |
 
 - **Who:** edit rights on the task. Others get the usual 404/403.
 - **Any move to `DONE`** (board, task page, bulk edit) resolves every open prompt on the task as `status_done`.
@@ -88,8 +88,8 @@ CREATE INDEX task_done_prompts_open_idx ON task_done_prompts (task_id) WHERE res
 ## 5. Website
 
 - **Task page:** the banner above the property strip while a prompt is open, following the design kit (SPEC §3: explicit actions, respect permissions; no banner for people who can't edit).
-- **Bell:** `TASK_DONE_PROMPT` notifications show the **Mark done** button inline; the button disappears once the prompt is resolved.
-- **Activity feed:** automatic moves read "DevTrack automation moved this to …" with the trigger linked.
+- **Bell:** `TASK_DONE_PROMPT` notifications show the **Mark done** button inline; when the task's last open prompt closes, its prompt notifications are marked read, which removes the button.
+- **Activity feed:** automatic moves read "DevTrack automation changed status from … to … · PR #42".
 
 ## 6. Delivery
 
