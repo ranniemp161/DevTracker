@@ -1,15 +1,15 @@
 # DevTrack — MVP Architecture & Engineering Overview
 
 **Document status:** Architecture baseline for MVP implementation  
-**Version:** 1.8 (M1–M8 decisions recorded; see `Docs/decisions/`)  
-**Last updated:** 2026-11-06  
+**Version:** 1.9 (M1–M8 decisions recorded; see `Docs/decisions/`)  
+**Last updated:** 2026-11-23  
 **Purpose:** Give Claude and other engineering agents a self-contained overview of the DevTrack product, architecture, constraints, and implementation plan.
 
 ---
 
 ## 1. Product overview
 
-DevTrack is an internal engineering project management platform with first-class GitHub integration.
+DevTrack is an engineering project management platform with first-class GitHub integration, built for agency and freelance development teams and the clients they work for.
 
 Its purpose is to help software teams plan and assign work, collaborate around tasks, and automatically surface development activity from GitHub. The platform should reduce manual status reporting by connecting project tasks to actual commits, pull requests, reviews, and releases.
 
@@ -18,21 +18,20 @@ Its purpose is to help software teams plan and assign work, collaborate around t
 - Workspace owners
 - Workspace administrators
 - Engineering team members / developers
+- Clients, who only submit work through a project's public request form (no account)
 
-This is an **internal team product**, not a general-purpose client portal in the MVP.
+Clients never log in and see nothing after submitting. DevTrack is **not a client portal** in the MVP.
 
 ### Core workflow
 
-1. An administrator creates a workspace.
-2. The administrator invites team members by email.
-3. The team creates a project and adds project members.
-4. The team creates tasks and assigns developers.
-5. An administrator installs the DevTrack GitHub App and selects repositories.
-6. Selected repositories are connected to projects.
-7. Developers push commits and open pull requests in GitHub.
-8. DevTrack receives GitHub webhooks and records relevant activity.
-9. Pull requests can be linked to tasks.
-10. Team members see project, task, comment, and GitHub activity updates.
+1. A person signs up (email or GitHub). They either create a workspace, which makes them its Owner, or accept an invitation.
+2. Owners/Admins set up the workspace in any order: invite people by email, create projects and add project members, install the DevTrack GitHub App and select repositories.
+3. Selected repositories are connected to projects (the project must exist first).
+4. Any project member creates tasks and assigns developers. Client requests from the public form arrive as `BACKLOG` tasks for the team to triage.
+5. Developers push commits and open pull requests in GitHub.
+6. DevTrack receives GitHub webhooks and records relevant activity.
+7. Pull requests can be linked to tasks.
+8. Team members see project, task, comment, and GitHub activity updates, and move task status by hand (see §7.5 for planned automation).
 
 ### Product principles
 
@@ -431,6 +430,13 @@ Out of scope:
 - Preserve historical records when a repository is disconnected, subject to retention policy.
 
 GitHub events must not automatically mark tasks as `DONE`. GitHub activity updates development metadata and activity; task workflow remains explicitly controlled by the team.
+
+**Planned (not built; product decision 2026-11-23, needs a decision record before coding):** forward-only status automation.
+- Request accepted in triage → `TODO`.
+- Task key (e.g. `DEV-104`) in a branch name or commit message → `IN_PROGRESS`.
+- Linked PR opened → `IN_REVIEW`.
+- Linked PR merged → prompt the person to mark the task `DONE`; never automatic.
+- Automation only moves a task forward, never moves it out of `BLOCKED` or `DONE`, and manual changes always win.
 
 ### 7.6 Activity feed
 
