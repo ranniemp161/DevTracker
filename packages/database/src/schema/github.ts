@@ -372,3 +372,36 @@ export const taskGithubLinks = pgTable(
     index('task_github_links_pull_request_idx').on(t.pullRequestId),
   ],
 );
+
+/**
+ * "Mark done?" prompts (decision record 0021 §4): one per linked pull request merge while the
+ * task isn't Done. Open until someone marks the task done, dismisses it, or the task reaches
+ * Done another way.
+ */
+export const taskDonePrompts = pgTable(
+  'task_done_prompts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    pullRequestId: uuid('pull_request_id')
+      .notNull()
+      .references(() => githubPullRequests.id, { onDelete: 'cascade' }),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+    resolvedAt: timestamptz('resolved_at'),
+    resolvedBy: uuid('resolved_by').references(() => users.id, { onDelete: 'set null' }),
+    /** done: marked done from the prompt; dismissed; status_done: moved to Done another way. */
+    resolution: text('resolution'),
+  },
+  (t) => [
+    unique('task_done_prompts_task_pr_unique').on(t.taskId, t.pullRequestId),
+    index('task_done_prompts_open_idx')
+      .on(t.taskId)
+      .where(sql`${t.resolvedAt} IS NULL`),
+    check(
+      'task_done_prompts_resolution_check',
+      sql`${t.resolution} IS NULL OR ${t.resolution} IN ('done', 'dismissed', 'status_done')`,
+    ),
+  ],
+);

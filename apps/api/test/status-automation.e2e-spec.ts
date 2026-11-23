@@ -3,7 +3,9 @@ import {
   and,
   eq,
   githubPullRequests,
+  notifications,
   outboxEvents,
+  taskDonePrompts,
   taskRequests,
 } from '@devtrack/database';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -233,5 +235,124 @@ describe('triage moves accepted requests to To do (0021)', () => {
     await setStatus(f, second.taskId, 'IN_PROGRESS');
     await f.dev.browser.post(`/api/v1/requests/${second.id}/accept`).expect(204);
     expect(await statusOf(f, second.taskId)).toBe('IN_PROGRESS');
+  });
+});
+
+describe('"Mark done?" prompts on merge (0021 §4)', () => {
+  const merged = (at: string, overrides: Record<string, unknown> = {}) =>
+    pullRequestEvent('closed', { state: 'closed', merged_at: at, updated_at: at, ...overrides });
+
+  const promptNotifications = async (userId: string) =>
+    (await t.db.select().from(notifications).where(eq(notifications.userId, userId))).filter(
+      (n) => n.type === 'TASK_DONE_PROMPT' || n.type === 'PULL_REQUEST_MERGED',
+    );
+
+  async function assignedTask(f: Fixture) {
+    const res = await f.owner.browser
+      .post(`/api/v1/projects/${f.project}/tasks`)
+      .send({ title: 'Login is broken', assigneeIds: [f.dev.id] })
+      .expect(201);
+    return res.body.data.task as { id: string };
+  }
+
+  it('asks assignees once per merge, and Mark done closes it as the person', async () => {
+    const f = await githubFixture(t);
+    const task = await assignedTask(f); // DEV-1, reported by owner, assigned to dev
+    await deliver(t, 'pull_request', pullRequestEvent('opened')).expect(202);
+    const event = merged('2026-11-06T12:00:00Z');
+    await deliver(t, 'pull_request', event, { deliveryId: 'merge-1' }).expect(202);
+    await deliver(t, 'pull_request', event, { deliveryId: 'merge-2' }).expect(202);
+
+    expect(await statusOf(f, task.id)).toBe('IN_REVIEW'); // never Done on its own
+    const prompts = await f.dev.browser.get(`/api/v1/tasks/${task.id}/done-prompts`).expect(200);
+    expect(prompts.body.data.prompts).toEqual([
+      {
+        id: expect.any(String),
+        pullRequest: {
+          number: 12,
+          title: 'Fix login',
+          url: 'https://github.com/acme-org/api/pull/12',
+          repository: 'acme-org/api',
+        },
+        createdAt: expect.any(String),
+      },
+    ]);
+    // Only the prompt is sent: the assignee gets it, the reporter gets nothing.
+    expect((await promptNotifications(f.dev.id)).map((n) => [n.type, n.title])).toEqual([
+      ['TASK_DONE_PROMPT', 'Pull request #12 merged. Mark DEV-1 done?'],
+    ]);
+    expect(await promptNotifications(f.owner.id)).toEqual([]);
+
+    // Outsiders can't see or act.
+    await f.bystander.browser.get(`/api/v1/tasks/${task.id}/done-prompts`).expect(404);
+    await f.bystander.browser.post(`/api/v1/tasks/${task.id}/done-prompts/accept`).expect(404);
+
+    const done = await f.dev.browser
+      .post(`/api/v1/tasks/${task.id}/done-prompts/accept`)
+      .expect(201);
+    expect(done.body.data.task.status).toBe('DONE');
+    const [row] = await t.db.select().from(taskDonePrompts);
+    expect(row).toMatchObject({ resolution: 'done', resolvedBy: f.dev.id });
+    expect((await promptNotifications(f.dev.id))[0]!.readAt).toBeInstanceOf(Date);
+    const last = (await statusChanges(task.id)).at(-1)!;
+    expect(last).toMatchObject({ actorId: f.dev.id, status: { from: 'IN_REVIEW', to: 'DONE' } });
+
+    await f.dev.browser.post(`/api/v1/tasks/${task.id}/done-prompts/accept`).expect(409);
+  });
+
+  it('falls back to the reporter, skips Done tasks, and asks again for each merged PR', async () => {
+    const f = await githubFixture(t);
+    const task = await newTask(f); // DEV-1, reported by owner, nobody assigned
+    const done = await newTask(f, 'DONE'); // DEV-2
+    await deliver(
+      t,
+      'pull_request',
+      pullRequestEvent('opened', { head: { ref: 'dev-1-dev-2' } }),
+    ).expect(202);
+    await deliver(
+      t,
+      'pull_request',
+      merged('2026-11-06T12:00:00Z', { head: { ref: 'dev-1-dev-2' } }),
+    );
+    expect(await promptNotifications(f.owner.id)).toHaveLength(1);
+    expect(
+      (await f.owner.browser.get(`/api/v1/tasks/${done.id}/done-prompts`)).body.data.prompts,
+    ).toEqual([]);
+
+    // A second PR for the same task asks again.
+    const second = { id: 7002, number: 13, html_url: 'https://github.com/acme-org/api/pull/13' };
+    await deliver(t, 'pull_request', pullRequestEvent('opened', second)).expect(202);
+    await deliver(t, 'pull_request', merged('2026-11-06T14:00:00Z', second)).expect(202);
+    const open = await f.owner.browser.get(`/api/v1/tasks/${task.id}/done-prompts`).expect(200);
+    expect(
+      open.body.data.prompts.map((p: { pullRequest: { number: number } }) => p.pullRequest.number),
+    ).toEqual([12, 13]);
+
+    // Dismissing one leaves the other; moving the task to Done closes the rest.
+    await f.owner.browser
+      .post(`/api/v1/tasks/${task.id}/done-prompts/${open.body.data.prompts[0].id}/dismiss`)
+      .expect(204);
+    await f.owner.browser
+      .post(`/api/v1/tasks/${task.id}/done-prompts/${open.body.data.prompts[0].id}/dismiss`)
+      .expect(409);
+    expect((await promptNotifications(f.owner.id)).every((n) => n.readAt === null)).toBe(true);
+    await setStatus(f, task.id, 'DONE');
+    const rows = await t.db.select().from(taskDonePrompts).orderBy(taskDonePrompts.createdAt);
+    expect(rows.map((r) => r.resolution)).toEqual(['dismissed', 'status_done']);
+    expect((await promptNotifications(f.owner.id)).every((n) => n.readAt !== null)).toBe(true);
+    await f.owner.browser.post(`/api/v1/tasks/${task.id}/done-prompts/accept`).expect(409);
+  });
+
+  it('closes prompts when tasks are moved to Done in bulk', async () => {
+    const f = await githubFixture(t);
+    const task = await newTask(f);
+    await deliver(t, 'pull_request', pullRequestEvent('opened')).expect(202);
+    await deliver(t, 'pull_request', merged('2026-11-06T12:00:00Z')).expect(202);
+    await f.owner.browser
+      .patch(`/api/v1/projects/${f.project}/tasks/bulk`)
+      .send({ taskIds: [task.id], status: 'DONE' })
+      .expect(200);
+    const [row] = await t.db.select().from(taskDonePrompts);
+    expect(row).toMatchObject({ resolution: 'status_done', resolvedBy: f.owner.id });
   });
 });

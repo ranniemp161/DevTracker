@@ -47,6 +47,7 @@ import { TaskTimeEntries } from './task-time-entries';
 import { TaskAttachments } from './task-attachments';
 import { TaskChecklist } from './task-checklist';
 import { TaskRelations } from './task-relations';
+import { TaskDonePromptBanner } from './task-done-prompt';
 import { useTaskTimer } from './task-timer';
 
 export function TaskDetail() {
@@ -356,6 +357,7 @@ function TaskEditor({
         >
           <div className="mx-auto max-w-3xl space-y-3">
             {error ? <Alert>{error}</Alert> : null}
+            <TaskDonePromptBanner taskId={task.id} taskKey={task.key} onChanged={onSaved} />
             <label htmlFor="task-title" className="sr-only">
               Title
             </label>

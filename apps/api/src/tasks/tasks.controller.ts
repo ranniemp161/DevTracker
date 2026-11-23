@@ -10,7 +10,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import type { MyTasksResponse, Task, TaskTimeInStatus } from '@devtrack/types';
+import type { MyTasksResponse, Task, TaskDonePrompt, TaskTimeInStatus } from '@devtrack/types';
 import {
   addAssigneesSchema,
   attachLabelSchema,
@@ -33,6 +33,7 @@ import { UuidParamPipe } from '../common/pipes/uuid-param.pipe';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { RATE_LIMITS, RateLimitService } from '../rate-limit/rate-limit.service';
 import type { User } from '../users/users.service';
+import { TaskDonePrompts } from './task-done-prompts.service';
 import { TasksService } from './tasks.service';
 
 /** Architecture §9 — tasks. */
@@ -41,6 +42,7 @@ export class TasksController {
   constructor(
     private readonly tasks: TasksService,
     private readonly rateLimit: RateLimitService,
+    private readonly prompts: TaskDonePrompts,
   ) {}
 
   @Post('projects/:id/tasks')
@@ -113,6 +115,35 @@ export class TasksController {
     @Body(new ZodValidationPipe(changeTaskStatusSchema)) body: ChangeTaskStatusInput,
   ): Promise<{ task: Task }> {
     return { task: await this.tasks.update(user, id, { status: body.status }) };
+  }
+
+  /** Open "Mark done?" prompts on the task (decision record 0021 §4). */
+  @Get('tasks/:id/done-prompts')
+  async donePrompts(
+    @CurrentUser() user: User,
+    @Param('id', UuidParamPipe) id: string,
+  ): Promise<{ prompts: TaskDonePrompt[] }> {
+    return { prompts: await this.prompts.listOpen(user.id, id) };
+  }
+
+  /** "Mark done" from a prompt: moves the task to Done as the caller and closes its prompts. */
+  @Post('tasks/:id/done-prompts/accept')
+  async acceptDonePrompt(
+    @CurrentUser() user: User,
+    @Param('id', UuidParamPipe) id: string,
+  ): Promise<{ task: Task }> {
+    await this.prompts.requireOpen(user.id, id);
+    return { task: await this.tasks.update(user, id, { status: 'DONE' }, 'done') };
+  }
+
+  @Post('tasks/:id/done-prompts/:promptId/dismiss')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async dismissDonePrompt(
+    @CurrentUser() user: User,
+    @Param('id', UuidParamPipe) id: string,
+    @Param('promptId', UuidParamPipe) promptId: string,
+  ): Promise<void> {
+    await this.prompts.dismiss(user, id, promptId);
   }
 
   @Delete('tasks/:id')
