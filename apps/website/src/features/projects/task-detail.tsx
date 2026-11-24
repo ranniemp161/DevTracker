@@ -171,12 +171,18 @@ function TaskEditor({
   const milestones = milestonesQuery.data ?? [];
   const milestoneName = milestones.find((m) => m.id === form.milestoneId)?.name;
 
-  async function call(fn: () => Promise<unknown>, after: () => void = onSaved) {
+  async function call(fn: () => Promise<unknown>, after?: () => void) {
     setSaving(true);
     setError(null);
     try {
       await fn();
-      after();
+      if (after) {
+        after();
+      } else {
+        // Assignee changes can refresh the same editor without changing task.updatedAt.
+        setSaving(false);
+        onSaved();
+      }
     } catch (err) {
       // Keep everything the person typed; they can fix it and save again.
       setError(
