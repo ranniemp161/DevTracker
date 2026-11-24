@@ -442,7 +442,7 @@ function ChatThread({ targetMessageId }: { targetMessageId?: string }) {
   }
 
   return (
-    <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col rounded-panel border border-line bg-surface lg:h-chat">
+    <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col rounded-panel border border-line bg-surface lg:h-chat">
       <ChatPhoneNotifications key={project.id} projectId={project.id} />
       {/* Header bar / connection warning */}
       {!isConnected ? (

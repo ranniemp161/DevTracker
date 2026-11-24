@@ -62,53 +62,71 @@ export function ChatPhoneNotifications({ projectId }: { projectId: string }) {
     return { ...current, deviceEnabled: false };
   }
 
-  if (!current?.publicKey) return null;
   return (
-    <details className="shrink-0 border-b border-line px-4 py-2">
-      <summary className="w-fit cursor-pointer text-sm font-medium text-fg-secondary">
+    <details className="shrink-0 px-3 py-1 open:border-b open:border-line">
+      <summary className="ml-auto w-fit cursor-pointer rounded-control px-2 py-1 text-label font-medium text-fg-secondary hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-primary pointer-coarse:py-3">
         Phone notifications
       </summary>
-      <div className="mt-2 flex flex-wrap items-end gap-3 pb-1">
-        <label className="grid min-w-36 gap-1 text-label text-fg-secondary">
-          <span>For this project</span>
-          <select
-            className="h-8 rounded-control border border-line-control bg-surface px-2 text-sm text-fg"
-            value={current.mode}
-            disabled={busy}
-            onChange={(event) => {
-              const mode = event.target.value as Mode;
-              void save(async () => {
-                await api(path, { method: 'PUT', body: { mode } });
-                return { ...current, mode };
-              });
-            }}
-          >
-            <option value="off">Off</option>
-            <option value="mentions">Mentions only</option>
-            <option value="all">All new messages</option>
-          </select>
-        </label>
-        <Button
-          size="sm"
-          variant="secondary"
-          disabled={busy}
-          onClick={() =>
-            void save(() => (current.deviceEnabled ? disable(current) : enable(current)))
-          }
-        >
-          {current.deviceEnabled ? 'Disable on this device' : 'Enable on this device'}
-        </Button>
-      </div>
-      {!current.deviceEnabled ? (
-        <p className="mt-1 text-label text-fg-subtle">
-          On iPhone, add DevTrack to your Home Screen and open it there first.
-        </p>
-      ) : null}
-      {error ? (
-        <p role="alert" className="mt-1 text-label text-danger">
-          {error}
-        </p>
-      ) : null}
+      {!current?.publicKey ? (
+        <div className="pb-2 text-right text-label text-fg-secondary" role="status">
+          {settings.error ? (
+            <>
+              Could not load notification settings.{' '}
+              <Button size="sm" variant="ghost" onClick={settings.reload}>
+                Retry
+              </Button>
+            </>
+          ) : current ? (
+            'Phone notifications have not been configured on this server.'
+          ) : (
+            'Loading notification settings…'
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="mt-2 flex flex-wrap items-end justify-end gap-3 pb-1">
+            <label className="grid min-w-36 gap-1 text-label text-fg-secondary">
+              <span>For this project</span>
+              <select
+                className="h-8 rounded-control border border-line-control bg-surface px-2 text-sm text-fg"
+                value={current.mode}
+                disabled={busy}
+                onChange={(event) => {
+                  const mode = event.target.value as Mode;
+                  void save(async () => {
+                    await api(path, { method: 'PUT', body: { mode } });
+                    return { ...current, mode };
+                  });
+                }}
+              >
+                <option value="off">Off</option>
+                <option value="mentions">Mentions only</option>
+                <option value="all">All new messages</option>
+              </select>
+            </label>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={busy}
+              onClick={() =>
+                void save(() => (current.deviceEnabled ? disable(current) : enable(current)))
+              }
+            >
+              {current.deviceEnabled ? 'Disable on this device' : 'Enable on this device'}
+            </Button>
+          </div>
+          {!current.deviceEnabled ? (
+            <p className="mt-1 text-right text-label text-fg-subtle">
+              On iPhone, add DevTrack to your Home Screen and open it there first.
+            </p>
+          ) : null}
+          {error ? (
+            <p role="alert" className="mt-1 text-right text-label text-danger">
+              {error}
+            </p>
+          ) : null}
+        </>
+      )}
     </details>
   );
 }
