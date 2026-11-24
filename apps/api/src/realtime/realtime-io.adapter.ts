@@ -16,6 +16,8 @@ export const REALTIME_PATH = '/api/v1/realtime/socket';
 export const REDIS_STARTUP_RETRIES = 5;
 const REDIS_CONNECT_TIMEOUT_MS = 5_000;
 const REDIS_MAX_BACKOFF_MS = 2_000;
+/** PING both clients so a connection that died without closing is noticed and replaced. */
+const REDIS_PING_INTERVAL_MS = 60_000;
 
 /** Only the error code, never the message: provider messages can contain the Redis URL. */
 function redisErrorCode(err: unknown): string {
@@ -64,6 +66,7 @@ export class RealtimeIoAdapter extends IoAdapter {
     let initialized = false;
     const pub = createClient({
       url,
+      pingInterval: REDIS_PING_INTERVAL_MS,
       socket: {
         connectTimeout: REDIS_CONNECT_TIMEOUT_MS,
         reconnectStrategy: (retries) =>
