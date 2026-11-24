@@ -3,6 +3,7 @@ dist/
 .next/
 out/
 coverage/
+/apps/website/test-results/
 .turbo/
 *.tsbuildinfo
 next-env.d.ts

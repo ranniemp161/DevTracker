@@ -64,6 +64,20 @@ const createTask = (u: U, project: string, body: Record<string, unknown> = {}) =
   u.browser.post(`/api/v1/projects/${project}/tasks`).send({ title: 'A task', ...body });
 
 describe('projects', () => {
+  it('suggests the first free key including archived reservations and handles competing creates', async () => {
+    const { owner, dev, ws, project } = await setup();
+    const path = `/api/v1/workspaces/${ws}/projects`;
+    await owner.browser.delete(`/api/v1/projects/${project}`).expect(204);
+    const suggestion = () => owner.browser.get(`${path}/key-suggestion?base=DEV`).expect(200);
+    expect((await suggestion()).body.data.key).toBe('DEV2');
+    await dev.browser.get(`${path}/key-suggestion?base=DEV`).expect(403);
+    const create = () => owner.browser.post(path).send({ name: 'Second', key: 'DEV2' });
+    const responses = await Promise.all([create(), create()]);
+    expect(responses.map((r) => r.status).sort()).toEqual([201, 409]);
+    expect(responses.find((r) => r.status === 409)?.body.error.code).toBe('PROJECT_KEY_TAKEN');
+    expect((await owner.browser.get(path).expect(200)).body.data).toMatchObject([{ key: 'DEV2' }]);
+    expect((await suggestion()).body.data.key).toBe('DEV3');
+  });
   it('creates a project with an upper-cased key; the creator becomes a member', async () => {
     const { owner, project } = await setup();
     const res = await owner.browser.get(`/api/v1/projects/${project}`).expect(200);

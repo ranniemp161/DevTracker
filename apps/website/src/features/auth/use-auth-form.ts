@@ -40,10 +40,10 @@ export function useAuthForm<S extends z.ZodType, V extends Record<string, string
     });
   }
 
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
+  async function onSubmit(e: FormEvent<HTMLFormElement>, submittedValues = values) {
     e.preventDefault();
     setFormError(null);
-    const parsed = schema.safeParse(values);
+    const parsed = schema.safeParse(submittedValues);
     if (!parsed.success) {
       const errs: Record<string, string> = {};
       for (const issue of parsed.error.issues) errs[issue.path.join('.')] ??= issue.message;

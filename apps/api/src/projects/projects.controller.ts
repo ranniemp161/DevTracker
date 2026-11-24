@@ -15,6 +15,7 @@ import {
   addProjectMemberSchema,
   createProjectSchema,
   listProjectsQuerySchema,
+  projectKeySchema,
   updateProjectSchema,
   type AddProjectMemberInput,
   type CreateProjectInput,
@@ -48,6 +49,15 @@ export class ProjectsController {
     @Query(new ZodValidationPipe(listProjectsQuerySchema)) query: { includeArchived: boolean },
   ): Promise<Project[]> {
     return this.projects.list(user.id, workspaceId, query.includeArchived);
+  }
+
+  @Get('workspaces/:id/projects/key-suggestion')
+  suggestKey(
+    @CurrentUser() user: User,
+    @Param('id', UuidParamPipe) workspaceId: string,
+    @Query('base', new ZodValidationPipe(projectKeySchema)) base: string,
+  ) {
+    return this.projects.suggestKey(user.id, workspaceId, base);
   }
 
   @Get('projects/:id')

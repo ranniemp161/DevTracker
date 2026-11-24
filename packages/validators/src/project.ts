@@ -5,13 +5,16 @@ const uuid = z.uuid({ error: 'Invalid id.' });
 /** YYYY-MM-DD calendar date; `null` clears the value. */
 const optionalDate = z.iso.date({ error: 'Use the format YYYY-MM-DD.' }).nullable().optional();
 
+export const PROJECT_KEY_MAX_LENGTH = 10;
+const projectKeyPattern = new RegExp(`^[A-Z][A-Z0-9]{1,${PROJECT_KEY_MAX_LENGTH - 1}}$`);
+
 /** 2–10 characters, upper-case letters and digits, starting with a letter (e.g. `DEV`). */
 export const projectKeySchema = z
   .string({ error: 'Project key is required.' })
   .trim()
   .toUpperCase()
   .pipe(
-    z.string().regex(/^[A-Z][A-Z0-9]{1,9}$/, {
+    z.string().regex(projectKeyPattern, {
       error: 'Use 2–10 letters or digits, starting with a letter (e.g. DEV).',
     }),
   );

@@ -17,7 +17,11 @@ import {
   type SQL,
 } from '@devtrack/database';
 import { ErrorCode, type Project, type ProjectMember } from '@devtrack/types';
-import type { CreateProjectInput, UpdateProjectInput } from '@devtrack/validators';
+import {
+  PROJECT_KEY_MAX_LENGTH,
+  type CreateProjectInput,
+  type UpdateProjectInput,
+} from '@devtrack/validators';
 import { AppException } from '../common/errors/app.exception';
 import { DATABASE } from '../database/database.module';
 import { EventRecorder, type Actor } from '../events/event-recorder.service';
@@ -83,6 +87,21 @@ export class ProjectsService {
       throw err;
     }
     return this.load(created.id, true);
+  }
+
+  async suggestKey(userId: string, workspaceId: string, base: string) {
+    await this.workspaceAccess.require(userId, workspaceId, 'ADMIN');
+    const rows = await this.db
+      .select({ key: projects.key })
+      .from(projects)
+      .where(eq(projects.workspaceId, workspaceId));
+    const reserved = new Set(rows.map((row) => row.key));
+    let key = base;
+    for (let number = 2; reserved.has(key); number++) {
+      const suffix = String(number);
+      key = base.slice(0, PROJECT_KEY_MAX_LENGTH - suffix.length) + suffix;
+    }
+    return { key };
   }
 
   /** Admins see every project; Members see the projects they belong to (M3 rule 1). */
