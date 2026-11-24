@@ -25,6 +25,8 @@ import { HIDDEN_GRACE_MS, pauseWhileHidden } from './page-visibility';
  *   Duplicates (at-least-once delivery) are dropped by envelope `id`.
  * - A tab hidden for a minute disconnects and stops reconnecting, because every connection
  *   costs server CPU. Showing the tab again reconnects, which also triggers the reconcile.
+ * - `realtime.resync` from the server (its Redis link dropped and recovered) also reconciles:
+ *   Redis Pub/Sub is at-most-once, so events may have been lost while this socket stayed up.
  */
 
 export interface RealtimeEvent {
@@ -91,6 +93,11 @@ class RealtimeClient {
       for (const room of this.rooms.keys()) socket.emit('subscribe', { room });
       if (this.everReady) for (const fn of this.reconnectListeners) fn();
       this.everReady = true;
+    });
+    // The server's Redis subscriber reconnected: broadcasts may have been lost even though this
+    // socket stayed up, so reconcile exactly as after a reconnect.
+    socket.on('realtime.resync', () => {
+      if (this.everReady) for (const fn of this.reconnectListeners) fn();
     });
     socket.on('disconnect', () => {
       this.setConnected(false);

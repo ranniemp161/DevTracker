@@ -16,7 +16,8 @@ import { Server } from 'socket.io';
 import { io, type Socket } from 'socket.io-client';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createRealtimeServer, REALTIME_PATH } from '../src/server.js';
-import { connectRedis } from '../src/redis.js';
+import { createClient } from 'redis';
+import { connectRedis, REDIS_CLIENT_NAME, RESYNC_EVENT } from '../src/redis.js';
 
 const secret = 'test-only-realtime-secret-at-least-32-characters';
 let database: Awaited<ReturnType<typeof createTestDatabase>>;
@@ -314,6 +315,32 @@ it.skipIf(!process.env.TEST_REDIS_URL)(
     } finally {
       await new Promise<void>((resolve) => publisher.close(() => resolve()));
       await redis.close();
+    }
+  },
+);
+
+it.skipIf(!process.env.TEST_REDIS_URL)(
+  'asks connected clients to resync after the Redis subscriber reconnects',
+  async () => {
+    const instance = await start({ redisUrl: process.env.TEST_REDIS_URL });
+    const { socket, ready } = await open(instance.url);
+    expect(ready).toBeDefined();
+    const admin = createClient({ url: process.env.TEST_REDIS_URL });
+    await admin.connect();
+    try {
+      const resync = next(socket, RESYNC_EVENT);
+      // Drop only this server's subscriber; other suites may share the Redis instance.
+      const list = await admin.sendCommand<string>(['CLIENT', 'LIST', 'TYPE', 'pubsub']);
+      const ids = list
+        .split('\n')
+        .filter((line) => line.includes(` name=${REDIS_CLIENT_NAME} `))
+        .map((line) => /\bid=(\d+)/.exec(line)?.[1])
+        .filter((id): id is string => Boolean(id));
+      expect(ids.length).toBeGreaterThan(0);
+      for (const id of ids) await admin.sendCommand(['CLIENT', 'KILL', 'ID', id]);
+      await expect(resync).resolves.toBeUndefined();
+    } finally {
+      await admin.quit();
     }
   },
 );
