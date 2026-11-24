@@ -43,6 +43,11 @@ describe('task attachments', () => {
       .send({ ...image, contentType: 'image/svg+xml' })
       .expect(400);
     const prepared = await dev.browser.post(path).send(image).expect(201);
+    const markdown = await dev.browser
+      .post(path)
+      .send({ name: 'notes.md', size: 42, contentType: 'text/markdown' })
+      .expect(201);
+    expect(markdown.body.data.headers['Content-Type']).toBe('text/markdown');
     const { id, url, headers } = prepared.body.data;
     expect(headers).toEqual({ 'Content-Type': 'image/png', 'If-None-Match': '*' });
     expect(new URL(url).searchParams.get('X-Amz-SignedHeaders')).toContain(

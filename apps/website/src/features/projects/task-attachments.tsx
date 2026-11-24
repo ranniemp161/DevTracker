@@ -23,12 +23,13 @@ export function TaskAttachments({ taskId }: { taskId: string }) {
     if (!file) return;
     const input = createTaskAttachmentSchema.safeParse({
       name: file.name,
-      contentType: file.type,
+      // Browsers can report Markdown as plain text or omit its MIME type.
+      contentType: /\.(md|markdown)$/i.test(file.name) ? 'text/markdown' : file.type,
       size: file.size,
     });
     if (!input.success) {
       picker.value = '';
-      setError('Choose a PNG, JPEG, GIF, WebP, MP4, WebM or MOV file up to 50 MiB.');
+      setError('Choose a PNG, JPEG, GIF, WebP, MP4, WebM, MOV or Markdown file up to 50 MiB.');
       return;
     }
 
@@ -78,7 +79,7 @@ export function TaskAttachments({ taskId }: { taskId: string }) {
             <input
               id={inputId}
               type="file"
-              accept={TASK_MEDIA_TYPES.join(',')}
+              accept={[...TASK_MEDIA_TYPES, '.md', '.markdown'].join(',')}
               aria-describedby={`${inputId}-hint`}
               onChange={upload}
               disabled={busy}
@@ -95,7 +96,7 @@ export function TaskAttachments({ taskId }: { taskId: string }) {
         ) : null}
       </div>
       <p id={`${inputId}-hint`} className="sr-only">
-        PNG, JPEG, GIF, WebP, MP4, WebM or MOV, up to 50 MiB.
+        PNG, JPEG, GIF, WebP, MP4, WebM, MOV or Markdown (.md, .markdown), up to 50 MiB.
       </p>
       <p role="status" className="sr-only">
         {busy ? 'Uploading attachment…' : ''}
