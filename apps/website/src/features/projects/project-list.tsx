@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { CalendarIcon, PlusIcon, UsersIcon } from '@/components/icons';
 import { HeaderActions } from '@/components/page-header';
 import { avatarTone, Badge, ErrorState, Skeleton } from '@/components/ui';
+import { usePageVisible } from '@/lib/page-visibility';
 import { useApiQuery } from '@/lib/use-api-query';
 import { isAdmin } from '../workspaces/permissions';
 import { useWorkspace } from '../workspaces/workspace-context';
@@ -24,17 +25,19 @@ export function ProjectList() {
   const canCreate = isAdmin(workspace.role);
   const newProjectHref = `/workspaces/${workspace.id}/projects/new`;
 
+  const reloadUnread = unreadQuery.reload;
+  const visible = usePageVisible();
+
+  // Poll only while the tab is visible; returning to the tab fires `focus`, which catches up.
   useEffect(() => {
-    const interval = setInterval(() => {
-      unreadQuery.reload();
-    }, 30_000);
-    const onFocus = () => unreadQuery.reload();
-    window.addEventListener('focus', onFocus);
+    window.addEventListener('focus', reloadUnread);
+    if (!visible) return () => window.removeEventListener('focus', reloadUnread);
+    const interval = setInterval(reloadUnread, 30_000);
     return () => {
       clearInterval(interval);
-      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('focus', reloadUnread);
     };
-  }, [unreadQuery]);
+  }, [reloadUnread, visible]);
 
   return (
     <div className="space-y-4">

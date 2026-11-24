@@ -8,6 +8,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { ChevronDownIcon } from '@/components/icons';
 import { Button, Divider, ErrorState } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
+import { usePageVisible } from '@/lib/page-visibility';
 import { useRealtimeConnected, useRealtimeRefresh, useRealtimeRoom } from '@/lib/realtime';
 import { useProject } from '../projects/project-context';
 import { useSession } from '../session/session-context';
@@ -241,14 +242,16 @@ function ChatThread({ targetMessageId }: { targetMessageId?: string }) {
     return () => window.removeEventListener('focus', onFocus);
   }, [reconcileMessages]);
 
-  // Polling every 15 seconds while disconnected
+  // Polling every 15 seconds while disconnected, only in a visible tab (hidden tabs disconnect
+  // on purpose; showing the tab reconnects and reconciles).
+  const visible = usePageVisible();
   useEffect(() => {
-    if (isConnected) return;
+    if (isConnected || !visible) return;
     const interval = setInterval(() => {
       reconcileMessages();
     }, 15_000);
     return () => clearInterval(interval);
-  }, [isConnected, reconcileMessages]);
+  }, [isConnected, visible, reconcileMessages]);
 
   // Send message with optimistic update
   const handleSend = async (body: string, taskId?: string, file?: File) => {

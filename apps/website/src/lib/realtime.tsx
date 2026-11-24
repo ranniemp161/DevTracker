@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { api } from './api';
+import { HIDDEN_GRACE_MS, pauseWhileHidden } from './page-visibility';
 
 /**
  * Real-time client (architecture §10, decision record 0007).
@@ -22,6 +23,8 @@ import { api } from './api';
  *   backoff (1 s doubling to 30 s), rejoins its rooms and asks components to reconcile.
  * - Events are hints: components refetch from the API, which stays the source of truth.
  *   Duplicates (at-least-once delivery) are dropped by envelope `id`.
+ * - A tab hidden for a minute disconnects and stops reconnecting, because every connection
+ *   costs server CPU. Showing the tab again reconnects, which also triggers the reconcile.
  */
 
 export interface RealtimeEvent {
@@ -52,6 +55,7 @@ class RealtimeClient {
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private everReady = false;
   private stopped = false;
+  private paused = false;
   private connected = false;
 
   isConnected(): boolean {
@@ -114,13 +118,32 @@ class RealtimeClient {
     this.socket = null;
   }
 
+  /** Disconnects without scheduling a reconnect (hidden tab). Rooms are kept for `resume`. */
+  pause(): void {
+    if (this.paused) return;
+    this.paused = true;
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+    this.backoff = MIN_BACKOFF_MS;
+    this.socket?.disconnect();
+  }
+
+  /** Reconnects after `pause`; `realtime.ready` then rejoins rooms and reconciles. */
+  resume(): void {
+    if (!this.paused) return;
+    this.paused = false;
+    if (!this.stopped && this.socket && !this.socket.connected) this.socket.connect();
+  }
+
   private scheduleReconnect(): void {
-    if (this.stopped || this.retryTimer) return;
+    if (this.stopped || this.paused || this.retryTimer) return;
     const delay = this.backoff;
     this.backoff = Math.min(this.backoff * 2, MAX_BACKOFF_MS);
     this.retryTimer = setTimeout(() => {
       this.retryTimer = null;
-      if (!this.stopped && this.socket && !this.socket.connected) this.socket.connect();
+      if (!this.stopped && !this.paused && this.socket && !this.socket.connected) {
+        this.socket.connect();
+      }
     }, delay);
   }
 
@@ -163,7 +186,16 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   const client = useMemo(() => new RealtimeClient(), []);
   useEffect(() => {
     client.start();
-    return () => client.stop();
+    const stopWatching = pauseWhileHidden(
+      document,
+      HIDDEN_GRACE_MS,
+      () => client.pause(),
+      () => client.resume(),
+    );
+    return () => {
+      stopWatching();
+      client.stop();
+    };
   }, [client]);
   return <RealtimeContext.Provider value={client}>{children}</RealtimeContext.Provider>;
 }
