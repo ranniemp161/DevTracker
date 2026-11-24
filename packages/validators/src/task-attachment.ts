@@ -8,6 +8,7 @@ export const TASK_MEDIA_TYPES = [
   'video/mp4',
   'video/webm',
   'video/quicktime',
+  'text/markdown',
 ] as const;
 export const MAX_TASK_MEDIA_BYTES = 50 * 1024 * 1024;
 
