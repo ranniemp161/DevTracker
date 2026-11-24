@@ -9,7 +9,8 @@
     "start": "next start --port 3000",
     "typecheck": "next typegen && tsc --noEmit",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:browser": "playwright test"
   },
   "dependencies": {
     "@devtrack/types": "workspace:*",
@@ -26,6 +27,7 @@
   "devDependencies": {
     "@devtrack/config": "workspace:*",
     "@devtrack/eslint-config": "workspace:*",
+    "@playwright/test": "^1.65.1",
     "@tailwindcss/postcss": "^4.3.4",
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
