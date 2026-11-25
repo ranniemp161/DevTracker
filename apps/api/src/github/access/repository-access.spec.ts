@@ -478,17 +478,19 @@ describe('repository grants and workspace disconnect', () => {
   it('refuses a grant outside what the user may grant', async () => {
     const { admin, connection, acme } = await authorized();
     await expect(
-      db.transaction((tx) => access.setGrants(tx, connection, [1001, 1002], admin)),
+      db.transaction((tx) => access.setGrants(tx, connection, [1001, 1002], admin.id, admin)),
     ).rejects.toMatchObject({ status: 403, code: 'GITHUB_INSTALL_NOT_AUTHORIZED' });
     await expect(
-      db.transaction((tx) => access.setGrants(tx, connection, [9999], acme.owner)),
+      db.transaction((tx) => access.setGrants(tx, connection, [9999], acme.owner.id, acme.owner)),
     ).rejects.toMatchObject({ status: 403 });
     expect(await grants(connection.id)).toEqual([1001]);
   });
 
   it('saves grants and records the change', async () => {
     const { acme, connection } = await authorized();
-    await db.transaction((tx) => access.setGrants(tx, connection, [1001, 1002], acme.owner));
+    await db.transaction((tx) =>
+      access.setGrants(tx, connection, [1001, 1002], acme.owner.id, acme.owner),
+    );
     expect(await grants(connection.id)).toEqual([1001, 1002]);
     const [activity] = await db
       .select()
@@ -513,7 +515,7 @@ describe('repository grants and workspace disconnect', () => {
     await link(client.project.id, repo.id);
 
     // Another admin may still remove grants.
-    await db.transaction((tx) => access.setGrants(tx, connection, [], admin));
+    await db.transaction((tx) => access.setGrants(tx, connection, [], admin.id, admin));
 
     expect(await targetIds()).toEqual([client.project.id]);
     expect(await grants(client.connection!.id)).toEqual([1001]);

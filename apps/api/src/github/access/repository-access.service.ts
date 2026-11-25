@@ -19,7 +19,7 @@ import {
 import { ErrorCode } from '@devtrack/types';
 import { AppException } from '../../common/errors/app.exception';
 import { EventRecorder, type Actor } from '../../events/event-recorder.service';
-import type { VerifiedInstallation } from '../authorization/github-authorization.service';
+import { VerifiedInstallation } from '../authorization/github-authorization.service';
 import type { GithubRepo } from '../github-app.client';
 
 /**
@@ -104,6 +104,7 @@ export class RepositoryAccess {
     proof: VerifiedInstallation,
     actor: Actor | null,
   ): Promise<void> {
+    if (!VerifiedInstallation.isIssued(proof)) throw notAuthorized();
     const info = proof.installation;
     const status = info.suspendedAt ? ('SUSPENDED' as const) : ('ACTIVE' as const);
     const [installation] = await tx
@@ -359,16 +360,17 @@ export class RepositoryAccess {
 
   /**
    * Replaces the connection's repository grants. Fails unless every repository is grantable by
-   * the actor; removes this workspace's project repositories that lose their grant.
+   * `userId` (recorded as `actor`); removes this workspace's project repositories that lose their grant.
    */
   async setGrants(
     tx: Transaction,
     connection: ConnectionRef,
     githubRepositoryIds: number[],
-    actor: Actor,
+    userId: string,
+    actor: Actor | null,
   ): Promise<void> {
     const row = await this.lockConnection(tx, connection);
-    const { granted, grantable } = await this.grantRule(tx, row, actor.id);
+    const { granted, grantable } = await this.grantRule(tx, row, userId);
     const allowed = new Set(grantable);
     if (githubRepositoryIds.some((id) => !allowed.has(id))) throw notAuthorized();
     const kept = new Set(githubRepositoryIds);
@@ -407,7 +409,7 @@ export class RepositoryAccess {
   async disconnectWorkspace(
     tx: Transaction,
     connection: ConnectionRef,
-    actor: Actor,
+    actor: Actor | null,
   ): Promise<void> {
     await this.lockConnection(tx, connection);
     await this.removeWorkspaceProjectRepositories(tx, connection, 'all');

@@ -22,6 +22,7 @@ import { AppException } from '../../common/errors/app.exception';
 import { isUuid } from '../../common/pipes/uuid-param.pipe';
 import { APP_CONFIG, type AppConfig } from '../../config/app-config';
 import { DATABASE } from '../../database/database.module';
+import type { Actor } from '../../events/event-recorder.service';
 import { WorkspaceAccessService } from '../../workspaces/workspace-access.service';
 import { RepositoryAccess, type ConnectionRef } from '../access/repository-access.service';
 import type { VerifiedInstallation } from '../authorization/github-authorization.service';
@@ -64,11 +65,8 @@ export class GithubInstallationsService {
 
   /** Saves the workspace's connection once GitHub verified the user (GithubAuthorization). */
   async connect(proof: VerifiedInstallation): Promise<void> {
-    const [actor] = await this.db
-      .select({ id: users.id, username: users.username })
-      .from(users)
-      .where(eq(users.id, proof.userId));
-    await this.db.transaction((tx) => this.repoAccess.connectWorkspace(tx, proof, actor ?? null));
+    const actor = await this.actor(proof.userId);
+    await this.db.transaction((tx) => this.repoAccess.connectWorkspace(tx, proof, actor));
   }
 
   async list(userId: string, workspaceId: string): Promise<GithubConnectionList> {
@@ -176,7 +174,9 @@ export class GithubInstallationsService {
         'Reauthorize GitHub to grant access to additional repositories.',
       );
     const actor = await this.actor(userId);
-    await this.db.transaction((tx) => this.repoAccess.setGrants(tx, connection.ref, ids, actor));
+    await this.db.transaction((tx) =>
+      this.repoAccess.setGrants(tx, connection.ref, ids, userId, actor),
+    );
   }
 
   async disconnectWorkspace(userId: string, connectionId: string) {
@@ -187,13 +187,13 @@ export class GithubInstallationsService {
     );
   }
 
-  private async actor(userId: string) {
+  /** The user as an activity actor; null if the row is gone, as activity allowed before. */
+  private async actor(userId: string): Promise<Actor | null> {
     const [actor] = await this.db
       .select({ id: users.id, username: users.username })
       .from(users)
       .where(eq(users.id, userId));
-    if (!actor) throw AppException.unauthenticated();
-    return actor;
+    return actor ?? null;
   }
 
   async requireForAdmin(userId: string, connectionId: string): Promise<WorkspaceConnection> {

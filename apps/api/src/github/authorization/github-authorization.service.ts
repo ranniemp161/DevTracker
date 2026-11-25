@@ -13,24 +13,50 @@ import { GithubAppClient, type GithubInstallationInfo } from '../github-app.clie
 /** How long verified installations stay on offer after "Connect existing installation". */
 const CHOICE_WINDOW_MS = 10 * 60 * 1000;
 
-declare const verified: unique symbol;
+/** Held only by this file: nothing else can pass it to the VerifiedInstallation constructor. */
+const ISSUER = Symbol('GithubAuthorization');
 
 /**
  * Proof that GitHub confirmed `userId` can manage this installation, made while they were an
  * Admin/Owner of `workspaceId`. Saving a connection requires it. Only GithubAuthorization can
- * create one: the brand is private to this file.
+ * create one. The private field makes the type nominal, so neither an object literal nor a
+ * copy of a real proof (`{ ...proof, workspaceId }`) passes as one, and `isIssued` checks it
+ * at runtime too.
  */
-export interface VerifiedInstallation {
-  readonly [verified]: true;
-  readonly installation: GithubInstallationInfo;
-  /** Repositories verified with the user's own GitHub token: the candidates they may grant. */
-  readonly repositoryIds: readonly number[];
-  readonly userId: string;
-  readonly workspaceId: string;
+export class VerifiedInstallation {
+  readonly #issued = true;
+
+  constructor(
+    issuer: typeof ISSUER,
+    readonly installation: Readonly<GithubInstallationInfo>,
+    /** Repositories verified with the user's own GitHub token: the candidates they may grant. */
+    readonly repositoryIds: readonly number[],
+    readonly userId: string,
+    readonly workspaceId: string,
+  ) {
+    if (issuer !== ISSUER)
+      throw new Error('Only GithubAuthorization issues a VerifiedInstallation.');
+    Object.freeze(this);
+  }
+
+  static isIssued(value: unknown): value is VerifiedInstallation {
+    return typeof value === 'object' && value !== null && #issued in value;
+  }
 }
 
-const issue = (proof: Omit<VerifiedInstallation, typeof verified>) =>
-  Object.freeze({ ...proof }) as VerifiedInstallation;
+const issue = (proof: {
+  installation: GithubInstallationInfo;
+  repositoryIds: number[];
+  userId: string;
+  workspaceId: string;
+}) =>
+  new VerifiedInstallation(
+    ISSUER,
+    Object.freeze({ ...proof.installation }),
+    Object.freeze([...proof.repositoryIds]),
+    proof.userId,
+    proof.workspaceId,
+  );
 
 /** A consumed sign-in state: the flow GitHub's redirect belongs to. */
 export type SignInFlow = Readonly<typeof githubInstallStates.$inferSelect>;

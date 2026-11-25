@@ -13,7 +13,7 @@ import { FakeGithubAppClient, testConfig } from '../../../test/utils/test-app';
 import { WorkspaceAccessService } from '../../workspaces/workspace-access.service';
 import type { RepositoryAccess } from '../access/repository-access.service';
 import type { GithubAppClient } from '../github-app.client';
-import { GithubAuthorization, type VerifiedInstallation } from './github-authorization.service';
+import { GithubAuthorization, VerifiedInstallation } from './github-authorization.service';
 
 /**
  * GithubAuthorization through its interface, on PGlite with the fake GitHub client (#118).
@@ -261,8 +261,34 @@ describe('VerifiedInstallation', () => {
       const proof: VerifiedInstallation = forged;
       // @ts-expect-error connectWorkspace accepts nothing but the proof
       void access.connectWorkspace(tx, forged, { id: 'u', username: 'u' });
+      // @ts-expect-error a copy of a real proof, pointed at another workspace, is not one either
+      void access.connectWorkspace(tx, { ...proof, workspaceId: 'other' }, null);
       return proof;
     };
     expect(_neverCalled).toBeTypeOf('function');
+  });
+
+  it('is refused at runtime when it was not issued here', async () => {
+    const { workspaceId, admin } = await acme();
+    github.codes.set('code', [111]);
+    const state = await started(admin, workspaceId);
+    const real = await auth.verifyInstall(await auth.consume(state, state), {
+      installationId: '111',
+      code: 'code',
+    });
+    expect(VerifiedInstallation.isIssued(real)).toBe(true);
+    expect(VerifiedInstallation.isIssued({ ...(real as object), workspaceId: 'other' })).toBe(
+      false,
+    );
+    expect(
+      () =>
+        new VerifiedInstallation(
+          undefined as never,
+          real === 'requested' ? (undefined as never) : real.installation,
+          [],
+          admin,
+          workspaceId,
+        ),
+    ).toThrow();
   });
 });
