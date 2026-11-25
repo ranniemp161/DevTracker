@@ -32,7 +32,7 @@ Single-context repo: one vocabulary across `apps/*` and `packages/*`.
 
 - Put it in `Docs/decisions/`, not `docs/adr/`.
 - Continue the numbering: the next free four-digit number, then a kebab-case slug (`0022-repository-access.md`).
-- Follow the existing records' header: `# NNNN - Title`, then `- **Status:**`, `- **Date:**` (YYYY-MM-DD) and, when it replaces earlier decisions, `- **Supersedes:**`.
+- Follow the existing records' header: `# NNNN — Title` (em dash), then `- **Status:**`, `- **Date:**` (YYYY-MM-DD), `- **Scope:**` and, where they apply, `- **Builds on:**` (earlier records it extends) and `- **Supersedes:**` (earlier decisions it replaces).
 
 ## Use the glossary's vocabulary
 
@@ -44,4 +44,4 @@ If the concept you need isn't in the glossary yet, that's a signal: either you'r
 
 If your output contradicts an existing decision record, surface it explicitly rather than silently overriding:
 
-> _Contradicts decision record 0010 (shared GitHub connections), but worth reopening because…_
+> _Contradicts decision record 0010 (shared GitHub installations with scoped workspace connections), but worth reopening because…_
