@@ -3,7 +3,7 @@
 import type {
   AvailableRepository,
   ConnectedRepository,
-  GithubInstallationList,
+  GithubConnectionList,
 } from '@devtrack/types';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -123,14 +123,14 @@ function ConnectForm({
   onConnected: () => void;
 }) {
   const { project } = useProject();
-  const installations = useApiQuery<GithubInstallationList>(
-    `/github/installations?workspaceId=${project.workspaceId}`,
+  const connections = useApiQuery<GithubConnectionList>(
+    `/github/connections?workspaceId=${project.workspaceId}`,
   );
-  const active = installations.data?.installations.filter((i) => i.status === 'ACTIVE') ?? [];
-  const [chosenInstallation, setChosenInstallation] = useState('');
-  const installationId = chosenInstallation || active[0]?.id || '';
+  const active = connections.data?.connections.filter((c) => c.status === 'ACTIVE') ?? [];
+  const [chosenConnection, setChosenConnection] = useState('');
+  const connectionId = chosenConnection || active[0]?.id || '';
   const repos = useApiQuery<AvailableRepository[]>(
-    installationId ? `/github/installations/${installationId}/repositories` : null,
+    connectionId ? `/github/connections/${connectionId}/repositories` : null,
   );
   const [repoId, setRepoId] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -142,8 +142,8 @@ function ConnectForm({
     </Link>
   );
 
-  if (installations.error) return <Alert>{installations.error.message}</Alert>;
-  if (!installations.data) return null;
+  if (connections.error) return <Alert>{connections.error.message}</Alert>;
+  if (!connections.data) return null;
   if (active.length === 0) {
     return (
       <Alert tone="info">
@@ -162,7 +162,7 @@ function ConnectForm({
     setError(null);
     try {
       await api(`/projects/${project.id}/repositories`, {
-        body: { installationId, githubRepositoryId: Number(repoId) },
+        body: { connectionId, githubRepositoryId: Number(repoId) },
       });
       setRepoId('');
       onConnected();
@@ -183,10 +183,10 @@ function ConnectForm({
         {active.length > 1 ? (
           <Select
             label="GitHub account"
-            name="installation"
-            value={installationId}
+            name="connection"
+            value={connectionId}
             onChange={(e) => {
-              setChosenInstallation(e.target.value);
+              setChosenConnection(e.target.value);
               setRepoId('');
             }}
           >

@@ -1,8 +1,8 @@
 'use client';
 
 import type {
-  GithubInstallation,
-  GithubInstallationList,
+  GithubConnection,
+  GithubConnectionList,
   AvailableGithubInstallation,
   GithubRepositoryAccess,
 } from '@devtrack/types';
@@ -15,7 +15,7 @@ import { useWorkspace } from '../workspaces/workspace-context';
 import { githubErrorMessage } from './error-messages';
 
 const STATUS: Record<
-  GithubInstallation['status'],
+  GithubConnection['status'],
   { label: string; tone: 'green' | 'amber' | 'red' }
 > = {
   ACTIVE: { label: 'Active', tone: 'green' },
@@ -30,8 +30,8 @@ const STATUS: Record<
 export function GithubSettings() {
   const { workspace } = useWorkspace();
   const params = useSearchParams();
-  const query = useApiQuery<GithubInstallationList>(
-    `/github/installations?workspaceId=${workspace.id}`,
+  const query = useApiQuery<GithubConnectionList>(
+    `/github/connections?workspaceId=${workspace.id}`,
   );
   const outcome = params.get('github');
   const errorCode = params.get('githubError');
@@ -85,12 +85,12 @@ export function GithubSettings() {
             the GITHUB_APP_* variables.
           </Alert>
         ) : null}
-        {query.data?.installations.length === 0 && query.data.appConfigured ? (
+        {query.data?.connections.length === 0 && query.data.appConfigured ? (
           <p className="text-sm text-fg-subtle">No GitHub connections yet.</p>
         ) : null}
         <ul className="divide-y divide-line-subtle">
-          {query.data?.installations.map((i) => (
-            <ConnectionRow key={i.id} installation={i} onChanged={query.reload} />
+          {query.data?.connections.map((c) => (
+            <ConnectionRow key={c.id} connection={c} onChanged={query.reload} />
           ))}
         </ul>
       </div>
@@ -169,10 +169,10 @@ function ExistingInstallationPicker({
 }
 
 function ConnectionRow({
-  installation: i,
+  connection: i,
   onChanged,
 }: {
-  installation: GithubInstallation;
+  connection: GithubConnection;
   onChanged: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -183,7 +183,7 @@ function ConnectionRow({
     setBusy(true);
     setError(null);
     try {
-      await api(`/github/installations/${i.id}`, { method: 'DELETE' });
+      await api(`/github/connections/${i.id}`, { method: 'DELETE' });
       onChanged();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not disconnect GitHub.');
@@ -243,7 +243,7 @@ function ConnectionRow({
 function RepositoryAccessEditor({ connectionId }: { connectionId: string }) {
   const [saved, setSaved] = useState(false);
   const query = useApiQuery<GithubRepositoryAccess[]>(
-    `/github/installations/${connectionId}/repository-access`,
+    `/github/connections/${connectionId}/repository-access`,
   );
   if (query.error) return <Alert>{query.error.message}</Alert>;
   if (!query.data) return <p className="text-sm text-fg-muted">Loading repository access...</p>;
@@ -285,7 +285,7 @@ function RepositoryAccessForm({
     setBusy(true);
     setError(null);
     try {
-      await api(`/github/installations/${connectionId}/repository-access`, {
+      await api(`/github/connections/${connectionId}/repository-access`, {
         method: 'PUT',
         body: { githubRepositoryIds: [...selected] },
       });

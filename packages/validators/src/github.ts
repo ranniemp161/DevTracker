@@ -28,8 +28,8 @@ export type UpdateGithubRepositoryAccessInput = z.infer<typeof updateGithubRepos
  */
 export const connectRepositorySchema = z
   .object({
-    connectionId: z.uuid({ error: 'Choose a GitHub installation.' }).optional(),
-    installationId: z.uuid({ error: 'Choose a GitHub installation.' }).optional(),
+    connectionId: z.uuid({ error: 'Choose a GitHub connection.' }).optional(),
+    installationId: z.uuid({ error: 'Choose a GitHub connection.' }).optional(),
     githubRepositoryId: z
       .number({ error: 'Choose a repository.' })
       .int({ error: 'Choose a repository.' })
@@ -37,7 +37,7 @@ export const connectRepositorySchema = z
       .max(Number.MAX_SAFE_INTEGER),
   })
   .refine((v) => v.connectionId ?? v.installationId, {
-    error: 'Choose a GitHub installation.',
+    error: 'Choose a GitHub connection.',
     path: ['connectionId'],
   })
   .refine((v) => !v.connectionId || !v.installationId || v.connectionId === v.installationId, {
