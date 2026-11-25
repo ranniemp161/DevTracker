@@ -62,11 +62,7 @@ export class ProjectRepositoriesService {
     const { project } = await this.access.require(actor.id, projectId, { manage: true });
 
     const installation = await this.installations.requireForAdmin(actor.id, input.connectionId);
-    const connection = {
-      id: installation.connectionId,
-      workspaceId: installation.workspaceId,
-      installationId: installation.id,
-    };
+    const connection = installation.ref;
     await this.repositoryAccess.assertCanConnect(
       this.db,
       project,

@@ -56,6 +56,12 @@ export interface ProjectRef {
 const connectionNotFound = () => AppException.notFound('GitHub installation not found.');
 const notGranted = () =>
   AppException.forbidden('Allow this repository in workspace GitHub settings first.');
+export const notAuthorized = () =>
+  new AppException(
+    HttpStatus.FORBIDDEN,
+    ErrorCode.GITHUB_INSTALL_NOT_AUTHORIZED,
+    'GitHub did not confirm that you can manage this installation.',
+  );
 const notLinked = () => AppException.notFound('This repository is not connected to the project.');
 
 /** A project that receives a repository's GitHub events. */
@@ -265,6 +271,171 @@ export class RepositoryAccess {
     if (!removed) throw notLinked();
     await this.markDisconnectedIfUnlinked(tx, [repositoryId]);
     await this.recordRemoval(tx, project, repo, { actor });
+  }
+
+  /**
+   * What `userId` may grant on this connection: its existing grants, plus the candidate
+   * repositories verified with GitHub, but those only for the user who last authorized with
+   * GitHub. Another admin must not inherit that user's wider GitHub scope. Sorted ascending.
+   */
+  async grantable(
+    tx: Executor,
+    connection: ConnectionRef,
+    userId: string,
+  ): Promise<{ granted: number[]; grantable: number[] }> {
+    const [row] = await tx
+      .select()
+      .from(githubWorkspaceConnections)
+      .where(eq(githubWorkspaceConnections.id, connection.id));
+    if (!row) throw connectionNotFound();
+    return this.grantRule(tx, row, userId);
+  }
+
+  /**
+   * Replaces the connection's repository grants. Fails unless every repository is grantable by
+   * the actor; removes this workspace's project repositories that lose their grant.
+   */
+  async setGrants(
+    tx: Transaction,
+    connection: ConnectionRef,
+    githubRepositoryIds: number[],
+    actor: Actor,
+  ): Promise<void> {
+    const row = await this.lockConnection(tx, connection);
+    const { granted, grantable } = await this.grantRule(tx, row, actor.id);
+    const allowed = new Set(grantable);
+    if (githubRepositoryIds.some((id) => !allowed.has(id))) throw notAuthorized();
+    const kept = new Set(githubRepositoryIds);
+    await this.removeWorkspaceProjectRepositories(
+      tx,
+      connection,
+      granted.filter((id) => !kept.has(id)),
+    );
+    await tx
+      .delete(githubWorkspaceRepositories)
+      .where(eq(githubWorkspaceRepositories.connectionId, connection.id));
+    if (githubRepositoryIds.length)
+      await tx.insert(githubWorkspaceRepositories).values(
+        githubRepositoryIds.map((id) => ({
+          connectionId: connection.id,
+          githubRepositoryId: id,
+        })),
+      );
+    await this.events.activity(tx, {
+      workspaceId: connection.workspaceId,
+      projectId: null,
+      actor,
+      entity: { type: 'github_installation', id: connection.id },
+      action: 'github_installation.repository_access_updated',
+      metadata: {
+        account: await this.accountLogin(tx, connection),
+        repositoryCount: githubRepositoryIds.length,
+      },
+    });
+  }
+
+  /**
+   * Removes this workspace's connection, its grants and its project repositories. The
+   * installation and other workspaces' connections are unaffected.
+   */
+  async disconnectWorkspace(
+    tx: Transaction,
+    connection: ConnectionRef,
+    actor: Actor,
+  ): Promise<void> {
+    await this.lockConnection(tx, connection);
+    await this.removeWorkspaceProjectRepositories(tx, connection, 'all');
+    await tx
+      .delete(githubWorkspaceConnections)
+      .where(eq(githubWorkspaceConnections.id, connection.id));
+    await this.events.activity(tx, {
+      workspaceId: connection.workspaceId,
+      projectId: null,
+      actor,
+      entity: { type: 'github_installation', id: connection.id },
+      action: 'github_installation.disconnected',
+      metadata: { account: await this.accountLogin(tx, connection) },
+    });
+  }
+
+  private async grantRule(
+    tx: Executor,
+    row: typeof githubWorkspaceConnections.$inferSelect,
+    userId: string,
+  ) {
+    const grants = await tx
+      .select({ id: githubWorkspaceRepositories.githubRepositoryId })
+      .from(githubWorkspaceRepositories)
+      .where(eq(githubWorkspaceRepositories.connectionId, row.id));
+    const granted = grants.map((g) => g.id);
+    const candidates = row.connectedBy === userId ? row.authorizedRepositoryIds : [];
+    const ascending = (ids: Iterable<number>) => [...new Set(ids)].sort((a, b) => a - b);
+    return { granted: ascending(granted), grantable: ascending([...granted, ...candidates]) };
+  }
+
+  /** Locks the connection row; serializes grant changes, disconnects and project connections. */
+  private async lockConnection(tx: Transaction, connection: ConnectionRef) {
+    const [row] = await tx
+      .select()
+      .from(githubWorkspaceConnections)
+      .where(eq(githubWorkspaceConnections.id, connection.id))
+      .for('update');
+    if (!row) throw connectionNotFound();
+    return row;
+  }
+
+  private async accountLogin(tx: Executor, connection: ConnectionRef) {
+    const [row] = await tx
+      .select({ accountLogin: githubInstallations.accountLogin })
+      .from(githubInstallations)
+      .where(eq(githubInstallations.id, connection.installationId));
+    return row?.accountLogin ?? null;
+  }
+
+  /**
+   * Removes this workspace's project repositories for these GitHub repositories (`'all'`: every
+   * repository of the connection's installation) and records each removal, with no actor.
+   */
+  private async removeWorkspaceProjectRepositories(
+    tx: Transaction,
+    connection: ConnectionRef,
+    githubRepositoryIds: number[] | 'all',
+  ) {
+    if (githubRepositoryIds !== 'all' && githubRepositoryIds.length === 0) return;
+    const rows = await tx
+      .select({ projectId: projects.id, repo: githubRepositories })
+      .from(projectRepositories)
+      .innerJoin(projects, eq(projects.id, projectRepositories.projectId))
+      .innerJoin(githubRepositories, eq(githubRepositories.id, projectRepositories.repositoryId))
+      .where(
+        and(
+          eq(projects.workspaceId, connection.workspaceId),
+          eq(githubRepositories.installationId, connection.installationId),
+          githubRepositoryIds === 'all'
+            ? undefined
+            : inArray(githubRepositories.githubRepositoryId, githubRepositoryIds),
+        ),
+      );
+    for (const row of rows) {
+      await tx
+        .delete(projectRepositories)
+        .where(
+          and(
+            eq(projectRepositories.projectId, row.projectId),
+            eq(projectRepositories.repositoryId, row.repo.id),
+          ),
+        );
+      await this.recordRemoval(
+        tx,
+        { id: row.projectId, workspaceId: connection.workspaceId },
+        row.repo,
+        { actor: null, reason: 'workspace_access_removed' },
+      );
+    }
+    await this.markDisconnectedIfUnlinked(
+      tx,
+      rows.map((r) => r.repo.id),
+    );
   }
 
   /**

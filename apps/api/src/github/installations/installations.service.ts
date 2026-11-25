@@ -7,10 +7,7 @@ import {
   githubInstallStates,
   githubRepositories,
   githubWorkspaceConnections,
-  githubWorkspaceRepositories,
   projects,
-  type Transaction,
-  inArray,
   lt,
   projectRepositories,
   users,
@@ -32,6 +29,7 @@ import { APP_CONFIG, type AppConfig } from '../../config/app-config';
 import { DATABASE } from '../../database/database.module';
 import { EventRecorder } from '../../events/event-recorder.service';
 import { WorkspaceAccessService } from '../../workspaces/workspace-access.service';
+import { RepositoryAccess, type ConnectionRef } from '../access/repository-access.service';
 import {
   GithubAppClient,
   GithubInstallationUnavailableError,
@@ -39,11 +37,12 @@ import {
 } from '../github-app.client';
 
 export type InstallationRow = typeof githubInstallations.$inferSelect;
-type WorkspaceInstallation = InstallationRow & {
+/** A workspace connection with its installation's row (`id` is the installation's). */
+export type WorkspaceConnection = InstallationRow & {
   connectionId: string;
   workspaceId: string;
-  authorizedRepositoryIds: number[];
-  authorizedBy: string | null;
+  /** The connection as RepositoryAccess takes it. */
+  ref: ConnectionRef;
 };
 type InstallStateRow = typeof githubInstallStates.$inferSelect;
 
@@ -90,6 +89,7 @@ export class GithubInstallationsService {
     private readonly access: WorkspaceAccessService,
     private readonly client: GithubAppClient,
     private readonly events: EventRecorder,
+    private readonly repoAccess: RepositoryAccess,
   ) {}
 
   /** Returns GitHub's installation URL and the raw state for the browser-binding cookie. */
@@ -370,15 +370,9 @@ export class GithubInstallationsService {
     const repos = await this.call(installation, () =>
       this.client.listInstallationRepositories(installation.githubInstallationId),
     );
-    const grants = await this.db
-      .select()
-      .from(githubWorkspaceRepositories)
-      .where(eq(githubWorkspaceRepositories.connectionId, connectionId));
-    const allowed = new Set(grants.map((r) => r.githubRepositoryId));
-    // A client-side workspace admin must not inherit the agency installer's wider GitHub scope.
-    const candidates =
-      installation.authorizedBy === userId ? installation.authorizedRepositoryIds : [];
-    const visible = new Set([...candidates, ...allowed]);
+    const rule = await this.repoAccess.grantable(this.db, installation.ref, userId);
+    const allowed = new Set(rule.granted);
+    const visible = new Set(rule.grantable);
     const connected = await this.db
       .select({ repoId: githubRepositories.githubRepositoryId, projectId: projects.id })
       .from(projectRepositories)
@@ -433,141 +427,36 @@ export class GithubInstallationsService {
   }
 
   async updateRepositoryAccess(userId: string, connectionId: string, ids: number[]) {
-    const installation = await this.requireForAdmin(userId, connectionId);
+    const connection = await this.requireForAdmin(userId, connectionId);
+    // Only repositories GitHub still lets the installation read, within what the user may grant.
     const available = await this.repositoryAccess(userId, connectionId);
     const visible = new Set(available.map((r) => r.githubRepositoryId));
     if (ids.some((id) => !visible.has(id)))
       throw AppException.forbidden(
         'Reauthorize GitHub to grant access to additional repositories.',
       );
-    await this.db.transaction(async (tx) => {
-      // Serialize grant changes, disconnects and project connections for this workspace.
-      const [connection] = await tx
-        .select()
-        .from(githubWorkspaceConnections)
-        .where(eq(githubWorkspaceConnections.id, connectionId))
-        .for('update');
-      if (!connection) throw installationNotFound();
-      const old = await tx
-        .select()
-        .from(githubWorkspaceRepositories)
-        .where(eq(githubWorkspaceRepositories.connectionId, connectionId));
-      const permitted = new Set([
-        ...(connection.connectedBy === userId ? connection.authorizedRepositoryIds : []),
-        ...old.map((r) => r.githubRepositoryId),
-      ]);
-      if (ids.some((id) => !permitted.has(id))) throw notAuthorized();
-      const removed = old
-        .filter((r) => !ids.includes(r.githubRepositoryId))
-        .map((r) => r.githubRepositoryId);
-      await this.disconnectRepositories(tx, installation, removed);
-      await tx
-        .delete(githubWorkspaceRepositories)
-        .where(eq(githubWorkspaceRepositories.connectionId, connectionId));
-      if (ids.length)
-        await tx
-          .insert(githubWorkspaceRepositories)
-          .values(ids.map((id) => ({ connectionId, githubRepositoryId: id })));
-      await this.events.activity(tx, {
-        workspaceId: installation.workspaceId,
-        projectId: null,
-        actor: await this.actor(tx, userId),
-        entity: { type: 'github_installation', id: connectionId },
-        action: 'github_installation.repository_access_updated',
-        metadata: { account: installation.accountLogin, repositoryCount: ids.length },
-      });
-    });
+    const actor = await this.actor(userId);
+    await this.db.transaction((tx) => this.repoAccess.setGrants(tx, connection.ref, ids, actor));
   }
 
   async disconnectWorkspace(userId: string, connectionId: string) {
-    const installation = await this.requireForAdmin(userId, connectionId);
-    await this.db.transaction(async (tx) => {
-      const locked = await tx
-        .select()
-        .from(githubWorkspaceConnections)
-        .where(eq(githubWorkspaceConnections.id, connectionId))
-        .for('update');
-      if (!locked.length) throw installationNotFound();
-      await this.disconnectRepositories(tx, installation);
-      await tx
-        .delete(githubWorkspaceConnections)
-        .where(eq(githubWorkspaceConnections.id, connectionId));
-      await this.events.activity(tx, {
-        workspaceId: installation.workspaceId,
-        projectId: null,
-        actor: await this.actor(tx, userId),
-        entity: { type: 'github_installation', id: connectionId },
-        action: 'github_installation.disconnected',
-        metadata: { account: installation.accountLogin },
-      });
-    });
+    const connection = await this.requireForAdmin(userId, connectionId);
+    const actor = await this.actor(userId);
+    await this.db.transaction((tx) =>
+      this.repoAccess.disconnectWorkspace(tx, connection.ref, actor),
+    );
   }
 
-  private async actor(tx: Transaction, userId: string) {
-    const [actor] = await tx
+  private async actor(userId: string) {
+    const [actor] = await this.db
       .select({ id: users.id, username: users.username })
       .from(users)
       .where(eq(users.id, userId));
-    return actor ?? null;
+    if (!actor) throw AppException.unauthenticated();
+    return actor;
   }
 
-  private async disconnectRepositories(
-    tx: Transaction,
-    installation: WorkspaceInstallation,
-    ids?: number[],
-  ) {
-    if (ids?.length === 0) return;
-    const rows = await tx
-      .select({ projectId: projects.id, repo: githubRepositories })
-      .from(projectRepositories)
-      .innerJoin(projects, eq(projects.id, projectRepositories.projectId))
-      .innerJoin(githubRepositories, eq(githubRepositories.id, projectRepositories.repositoryId))
-      .where(
-        and(
-          eq(projects.workspaceId, installation.workspaceId),
-          eq(githubRepositories.installationId, installation.id),
-          ids ? inArray(githubRepositories.githubRepositoryId, ids) : undefined,
-        ),
-      );
-    for (const row of rows) {
-      await tx
-        .delete(projectRepositories)
-        .where(
-          and(
-            eq(projectRepositories.projectId, row.projectId),
-            eq(projectRepositories.repositoryId, row.repo.id),
-          ),
-        );
-      await this.events.activity(tx, {
-        workspaceId: installation.workspaceId,
-        projectId: row.projectId,
-        actor: null,
-        entity: { type: 'project', id: row.projectId },
-        action: 'project.repository_disconnected',
-        metadata: {
-          repository: { id: row.repo.id, fullName: row.repo.fullName },
-          reason: 'workspace_access_removed',
-        },
-        event: { type: 'project.repository_disconnected', payload: { repositoryId: row.repo.id } },
-      });
-    }
-    // Shared repository history is retained. target() requires an active scoped grant and connection.
-    const repoIds = [...new Set(rows.map((r) => r.repo.id))];
-    if (repoIds.length === 0) return;
-    const stillConnected = await tx
-      .selectDistinct({ id: projectRepositories.repositoryId })
-      .from(projectRepositories)
-      .where(inArray(projectRepositories.repositoryId, repoIds));
-    const keep = new Set(stillConnected.map((r) => r.id));
-    const orphaned = repoIds.filter((id) => !keep.has(id));
-    if (orphaned.length)
-      await tx
-        .update(githubRepositories)
-        .set({ disconnectedAt: new Date() })
-        .where(inArray(githubRepositories.id, orphaned));
-  }
-
-  async requireForAdmin(userId: string, connectionId: string): Promise<WorkspaceInstallation> {
+  async requireForAdmin(userId: string, connectionId: string): Promise<WorkspaceConnection> {
     const [row] = isUuid(connectionId)
       ? await this.db
           .select({ installation: githubInstallations, connection: githubWorkspaceConnections })
@@ -584,8 +473,11 @@ export class GithubInstallationsService {
       ...row.installation,
       connectionId: row.connection.id,
       workspaceId: row.connection.workspaceId,
-      authorizedRepositoryIds: row.connection.authorizedRepositoryIds,
-      authorizedBy: row.connection.connectedBy,
+      ref: {
+        id: row.connection.id,
+        workspaceId: row.connection.workspaceId,
+        installationId: row.installation.id,
+      },
     };
   }
 

@@ -79,7 +79,7 @@ async function repository(installationId: string, githubRepositoryId: number) {
 async function workspace(
   name: string,
   installationId: string,
-  options: { connected?: boolean; key?: string } = {},
+  options: { connected?: boolean; key?: string; authorized?: number[] } = {},
 ) {
   const owner = await user(`${name.toLowerCase()}-owner`);
   const [ws] = await db
@@ -95,7 +95,12 @@ async function workspace(
       ? [undefined]
       : await db
           .insert(githubWorkspaceConnections)
-          .values({ installationId, workspaceId: ws!.id, connectedBy: owner.id })
+          .values({
+            installationId,
+            workspaceId: ws!.id,
+            connectedBy: owner.id,
+            authorizedRepositoryIds: options.authorized ?? [],
+          })
           .returning();
   return { owner, workspaceId: ws!.id, project: project!, connection };
 }
@@ -430,5 +435,127 @@ describe('connectProject and disconnectProject', () => {
         ),
       ),
     ).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe('repository grants and workspace disconnect', () => {
+  const ref = (inst: { id: string }, w: Awaited<ReturnType<typeof workspace>>) => ({
+    id: w.connection!.id,
+    workspaceId: w.workspaceId,
+    installationId: inst.id,
+  });
+  const grants = async (connectionId: string) =>
+    (
+      await db
+        .select()
+        .from(githubWorkspaceRepositories)
+        .where(eq(githubWorkspaceRepositories.connectionId, connectionId))
+    )
+      .map((g) => g.githubRepositoryId)
+      .sort();
+
+  /** Acme's owner last authorized with GitHub and verified 1001 and 1002; 1001 is granted. */
+  async function authorized() {
+    const inst = await installation();
+    const acme = await workspace('Acme', inst.id, { authorized: [1001, 1002] });
+    await grant(acme.connection!.id, 1001);
+    const admin = await user('acme-admin');
+    return { inst, acme, admin, connection: ref(inst, acme) };
+  }
+
+  it('lets the last authorizer grant their verified repositories, and others only keep grants', async () => {
+    const { acme, admin, connection } = await authorized();
+    expect(await access.grantable(db, connection, acme.owner.id)).toEqual({
+      granted: [1001],
+      grantable: [1001, 1002],
+    });
+    expect(await access.grantable(db, connection, admin.id)).toEqual({
+      granted: [1001],
+      grantable: [1001],
+    });
+  });
+
+  it('refuses a grant outside what the user may grant', async () => {
+    const { admin, connection, acme } = await authorized();
+    await expect(
+      db.transaction((tx) => access.setGrants(tx, connection, [1001, 1002], admin)),
+    ).rejects.toMatchObject({ status: 403, code: 'GITHUB_INSTALL_NOT_AUTHORIZED' });
+    await expect(
+      db.transaction((tx) => access.setGrants(tx, connection, [9999], acme.owner)),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(await grants(connection.id)).toEqual([1001]);
+  });
+
+  it('saves grants and records the change', async () => {
+    const { acme, connection } = await authorized();
+    await db.transaction((tx) => access.setGrants(tx, connection, [1001, 1002], acme.owner));
+    expect(await grants(connection.id)).toEqual([1001, 1002]);
+    const [activity] = await db
+      .select()
+      .from(activityLogs)
+      .where(eq(activityLogs.action, 'repository_access_updated'));
+    expect(activity).toMatchObject({
+      workspaceId: acme.workspaceId,
+      projectId: null,
+      actorId: acme.owner.id,
+      entityType: 'github_installation',
+      entityId: connection.id,
+      metadata: { account: 'acme-org', repositoryCount: 2 },
+    });
+  });
+
+  it('removes the project repositories that lose their grant, only in this workspace', async () => {
+    const { inst, acme, admin, connection } = await authorized();
+    const repo = await repository(inst.id, 1001);
+    await link(acme.project.id, repo.id);
+    const client = await workspace('Client', inst.id, { key: 'DEV' });
+    await grant(client.connection!.id, 1001);
+    await link(client.project.id, repo.id);
+
+    // Another admin may still remove grants.
+    await db.transaction((tx) => access.setGrants(tx, connection, [], admin));
+
+    expect(await targetIds()).toEqual([client.project.id]);
+    expect(await grants(client.connection!.id)).toEqual([1001]);
+    const [removal] = await db
+      .select()
+      .from(activityLogs)
+      .where(eq(activityLogs.action, 'repository_disconnected'));
+    expect(removal).toMatchObject({
+      projectId: acme.project.id,
+      actorId: null,
+      metadata: {
+        repository: { id: repo.id, fullName: repo.fullName },
+        reason: 'workspace_access_removed',
+      },
+    });
+  });
+
+  it('disconnects only this workspace and records it', async () => {
+    const { inst, acme, connection } = await authorized();
+    const repo = await repository(inst.id, 1001);
+    await link(acme.project.id, repo.id);
+    const client = await workspace('Client', inst.id, { key: 'WEB' });
+    await grant(client.connection!.id, 1001);
+    await link(client.project.id, repo.id);
+
+    await db.transaction((tx) => access.disconnectWorkspace(tx, connection, acme.owner));
+
+    const connections = await db.select().from(githubWorkspaceConnections);
+    expect(connections.map((c) => c.id)).toEqual([client.connection!.id]);
+    expect(await grants(connection.id)).toEqual([]);
+    expect(await targetIds()).toEqual([client.project.id]);
+    expect(await db.select().from(githubInstallations)).toHaveLength(1);
+
+    const activity = await db.select().from(activityLogs).orderBy(activityLogs.createdAt);
+    expect(activity.map((a) => [a.action, a.projectId, a.actorId])).toEqual([
+      ['repository_disconnected', acme.project.id, null],
+      ['disconnected', null, acme.owner.id],
+    ]);
+    expect(activity[1]).toMatchObject({
+      entityType: 'github_installation',
+      entityId: connection.id,
+      metadata: { account: 'acme-org' },
+    });
   });
 });
