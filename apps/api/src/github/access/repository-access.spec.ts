@@ -282,3 +282,153 @@ describe('revokeOnGitHub', () => {
     ).toBe(true);
   });
 });
+
+describe('connectProject and disconnectProject', () => {
+  const verified = (id: number) => ({
+    id,
+    fullName: `acme-org/repo-${id}`,
+    ownerLogin: 'acme-org',
+    defaultBranch: 'main',
+    visibility: 'private',
+  });
+  const connectionOf = (inst: { id: string }, w: Awaited<ReturnType<typeof workspace>>) => ({
+    id: w.connection!.id,
+    workspaceId: w.workspaceId,
+    installationId: inst.id,
+  });
+
+  /** Installation 111 and workspace Acme with 1001 granted, nothing linked yet. */
+  async function granted() {
+    const inst = await installation();
+    const acme = await workspace('Acme', inst.id);
+    await grant(acme.connection!.id, 1001);
+    return { inst, acme, connection: connectionOf(inst, acme) };
+  }
+
+  it('links a granted repository and records it', async () => {
+    const { acme, connection } = await granted();
+    const repositoryId = await db.transaction((tx) =>
+      access.connectProject(tx, acme.project, connection, verified(1001), acme.owner),
+    );
+    expect(await targetIds()).toEqual([acme.project.id]);
+    const [repo] = await db.select().from(githubRepositories);
+    expect(repo).toMatchObject({ id: repositoryId, fullName: 'acme-org/repo-1001' });
+
+    const [activity] = await db
+      .select()
+      .from(activityLogs)
+      .where(eq(activityLogs.action, 'repository_connected'));
+    expect(activity).toMatchObject({
+      projectId: acme.project.id,
+      actorId: acme.owner.id,
+      metadata: { repository: { id: repositoryId, fullName: 'acme-org/repo-1001' } },
+    });
+    const [event] = await db
+      .select()
+      .from(outboxEvents)
+      .where(eq(outboxEvents.eventType, 'project.repository_connected'));
+    expect((event!.payload as { payload: unknown }).payload).toEqual({
+      repositoryId,
+      githubRepositoryId: 1001,
+    });
+  });
+
+  it('refuses a repository the workspace has no grant for', async () => {
+    const { acme, connection } = await granted();
+    await expect(
+      db.transaction((tx) =>
+        access.connectProject(tx, acme.project, connection, verified(1002), acme.owner),
+      ),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(await db.select().from(projectRepositories)).toEqual([]);
+  });
+
+  it("refuses another workspace's connection", async () => {
+    const { inst, acme } = await granted();
+    const client = await workspace('Client', inst.id, { key: 'WEB' });
+    await grant(client.connection!.id, 1001);
+    await expect(
+      db.transaction((tx) =>
+        access.connectProject(
+          tx,
+          acme.project,
+          connectionOf(inst, client),
+          verified(1001),
+          acme.owner,
+        ),
+      ),
+    ).rejects.toMatchObject({ status: 404 });
+    expect(await db.select().from(projectRepositories)).toEqual([]);
+  });
+
+  it('refuses a project repository that already exists', async () => {
+    const { acme, connection } = await granted();
+    const connect = () =>
+      db.transaction((tx) =>
+        access.connectProject(tx, acme.project, connection, verified(1001), acme.owner),
+      );
+    await connect();
+    await expect(connect()).rejects.toMatchObject({
+      status: 409,
+      code: 'REPOSITORY_ALREADY_CONNECTED',
+    });
+  });
+
+  it('disconnects, keeps the repository and marks it, and reconnecting clears the mark', async () => {
+    const { inst, acme, connection } = await granted();
+    const second = await workspace('Second', inst.id, { key: 'MOB' });
+    await grant(second.connection!.id, 1001);
+    const repositoryId = await db.transaction((tx) =>
+      access.connectProject(tx, acme.project, connection, verified(1001), acme.owner),
+    );
+    await db.transaction((tx) =>
+      access.connectProject(
+        tx,
+        second.project,
+        connectionOf(inst, second),
+        verified(1001),
+        second.owner,
+      ),
+    );
+    const mark = async () => (await db.select().from(githubRepositories))[0]!.disconnectedAt;
+
+    await db.transaction((tx) =>
+      access.disconnectProject(tx, acme.project, repositoryId, acme.owner),
+    );
+    expect(await mark()).toBeNull(); // still linked to the second project
+    await db.transaction((tx) =>
+      access.disconnectProject(tx, second.project, repositoryId, second.owner),
+    );
+    expect(await mark()).toBeInstanceOf(Date);
+    expect(await db.select().from(githubRepositories)).toHaveLength(1);
+
+    const disconnected = await db
+      .select()
+      .from(activityLogs)
+      .where(eq(activityLogs.action, 'repository_disconnected'));
+    expect(disconnected.map((a) => [a.actorId, a.metadata])).toEqual([
+      [acme.owner.id, { repository: { id: repositoryId, fullName: 'acme-org/repo-1001' } }],
+      [second.owner.id, { repository: { id: repositoryId, fullName: 'acme-org/repo-1001' } }],
+    ]);
+
+    const again = await db.transaction((tx) =>
+      access.connectProject(tx, acme.project, connection, verified(1001), acme.owner),
+    );
+    expect(again).toBe(repositoryId);
+    expect(await mark()).toBeNull();
+  });
+
+  it('refuses to disconnect a repository the project is not linked to', async () => {
+    const { acme } = await granted();
+    await expect(
+      db.transaction((tx) =>
+        access.disconnectProject(
+          tx,
+          acme.project,
+          '00000000-0000-4000-8000-000000000000',
+          acme.owner,
+        ),
+      ),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+});

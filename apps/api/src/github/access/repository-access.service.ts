@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import {
   and,
   asc,
@@ -12,10 +12,14 @@ import {
   ne,
   projectRepositories,
   projects,
+  sql,
   type Executor,
   type Transaction,
 } from '@devtrack/database';
-import { EventRecorder } from '../../events/event-recorder.service';
+import { ErrorCode } from '@devtrack/types';
+import { AppException } from '../../common/errors/app.exception';
+import { EventRecorder, type Actor } from '../../events/event-recorder.service';
+import type { GithubRepo } from '../github-app.client';
 
 /**
  * Why a project repository was removed without a person doing it. Stored in activity metadata,
@@ -33,6 +37,26 @@ export type DisconnectReason = (typeof DISCONNECT_REASONS)[number];
 
 export type InstallationRow = typeof githubInstallations.$inferSelect;
 export type RepositoryRow = typeof githubRepositories.$inferSelect;
+
+/** One workspace's connection to an installation, as the module needs it. */
+export interface ConnectionRef {
+  /** The connection ID. */
+  id: string;
+  workspaceId: string;
+  /** DevTrack's installation UUID. */
+  installationId: string;
+}
+
+/** The part of a project the access rules need. */
+export interface ProjectRef {
+  id: string;
+  workspaceId: string;
+}
+
+const connectionNotFound = () => AppException.notFound('GitHub installation not found.');
+const notGranted = () =>
+  AppException.forbidden('Allow this repository in workspace GitHub settings first.');
+const notLinked = () => AppException.notFound('This repository is not connected to the project.');
 
 /** A project that receives a repository's GitHub events. */
 export interface TargetProject {
@@ -114,6 +138,133 @@ export class RepositoryAccess {
       );
     if (connected.length === 0) return null;
     return { repo: row.repo, projects: connected };
+  }
+
+  /**
+   * Fails unless the project may be linked to this repository through this connection: the
+   * connection belongs to the project's workspace and has a grant for the repository. Callers
+   * may check early, before asking GitHub; `connectProject` checks again under the lock.
+   */
+  async assertCanConnect(
+    tx: Executor,
+    project: ProjectRef,
+    connection: ConnectionRef,
+    githubRepositoryId: number,
+  ): Promise<void> {
+    if (connection.workspaceId !== project.workspaceId) throw connectionNotFound();
+    const [granted] = await tx
+      .select()
+      .from(githubWorkspaceRepositories)
+      .where(
+        and(
+          eq(githubWorkspaceRepositories.connectionId, connection.id),
+          eq(githubWorkspaceRepositories.githubRepositoryId, githubRepositoryId),
+        ),
+      );
+    if (!granted) throw notGranted();
+  }
+
+  /**
+   * Links a project to a repository the caller verified with GitHub. Requires the same
+   * workspace and an existing grant, checked under the connection lock so a concurrent grant
+   * removal can't slip between check and write. Returns the DevTrack repository ID.
+   */
+  async connectProject(
+    tx: Transaction,
+    project: ProjectRef,
+    connection: ConnectionRef,
+    repo: GithubRepo,
+    actor: Actor,
+  ): Promise<string> {
+    if (connection.workspaceId !== project.workspaceId) throw connectionNotFound();
+    const [locked] = await tx
+      .select({ id: githubWorkspaceConnections.id })
+      .from(githubWorkspaceConnections)
+      .where(eq(githubWorkspaceConnections.id, connection.id))
+      .for('update');
+    if (!locked) throw AppException.notFound('GitHub connection not found.');
+    await this.assertCanConnect(tx, project, connection, repo.id);
+
+    const metadata = {
+      fullName: repo.fullName,
+      ownerLogin: repo.ownerLogin,
+      defaultBranch: repo.defaultBranch,
+      visibility: repo.visibility,
+    };
+    const [row] = await tx
+      .insert(githubRepositories)
+      .values({
+        installationId: connection.installationId,
+        githubRepositoryId: repo.id,
+        ...metadata,
+      })
+      .onConflictDoUpdate({
+        target: [githubRepositories.installationId, githubRepositories.githubRepositoryId],
+        set: { ...metadata, disconnectedAt: null, updatedAt: sql`now()` },
+      })
+      .returning({ id: githubRepositories.id });
+    const repositoryId = row!.id;
+    const [linked] = await tx
+      .insert(projectRepositories)
+      .values({ projectId: project.id, repositoryId, connectedBy: actor.id })
+      .onConflictDoNothing()
+      .returning();
+    if (!linked)
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        ErrorCode.REPOSITORY_ALREADY_CONNECTED,
+        'This repository is already connected to the project.',
+      );
+    await this.events.activity(tx, {
+      workspaceId: project.workspaceId,
+      projectId: project.id,
+      actor,
+      entity: { type: 'project', id: project.id },
+      action: 'project.repository_connected',
+      metadata: { repository: { id: repositoryId, fullName: repo.fullName } },
+      event: {
+        type: 'project.repository_connected',
+        payload: { repositoryId, githubRepositoryId: repo.id },
+      },
+    });
+    return repositoryId;
+  }
+
+  /** Unlinks a project from a repository. The repository and its history are kept. */
+  async disconnectProject(
+    tx: Transaction,
+    project: ProjectRef,
+    repositoryId: string,
+    actor: Actor,
+  ): Promise<void> {
+    const [repo] = await tx
+      .select()
+      .from(githubRepositories)
+      .where(eq(githubRepositories.id, repositoryId));
+    if (!repo) throw notLinked();
+    // Serialize with grant changes and workspace disconnects of this workspace's connection.
+    await tx
+      .select({ id: githubWorkspaceConnections.id })
+      .from(githubWorkspaceConnections)
+      .where(
+        and(
+          eq(githubWorkspaceConnections.installationId, repo.installationId),
+          eq(githubWorkspaceConnections.workspaceId, project.workspaceId),
+        ),
+      )
+      .for('update');
+    const [removed] = await tx
+      .delete(projectRepositories)
+      .where(
+        and(
+          eq(projectRepositories.projectId, project.id),
+          eq(projectRepositories.repositoryId, repositoryId),
+        ),
+      )
+      .returning();
+    if (!removed) throw notLinked();
+    await this.markDisconnectedIfUnlinked(tx, [repositoryId]);
+    await this.recordRemoval(tx, project, repo, { actor });
   }
 
   /**
@@ -215,7 +366,7 @@ export class RepositoryAccess {
     tx: Transaction,
     project: { id: string; workspaceId: string },
     repo: { id: string; fullName: string | null },
-    by: { actor: { id: string; username: string } | null; reason?: DisconnectReason },
+    by: { actor: Actor | null; reason?: DisconnectReason },
   ) {
     return this.events.activity(tx, {
       workspaceId: project.workspaceId,
