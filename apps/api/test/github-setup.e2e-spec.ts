@@ -157,18 +157,20 @@ describe('GitHub App installation flow', () => {
 
     const list = await owner.browser.get(`/api/v1/github/installations?workspaceId=${ws}`);
     expect(list.status).toBe(200);
+    const connections = [
+      expect.objectContaining({
+        workspaceId: ws,
+        githubInstallationId: 111,
+        accountLogin: 'acme-org',
+        accountType: 'Organization',
+        status: 'ACTIVE',
+        installedBy: expect.objectContaining({ username: 'owner' }),
+      }),
+    ];
     expect(list.body.data).toEqual({
       appConfigured: true,
-      installations: [
-        expect.objectContaining({
-          workspaceId: ws,
-          githubInstallationId: 111,
-          accountLogin: 'acme-org',
-          accountType: 'Organization',
-          status: 'ACTIVE',
-          installedBy: expect.objectContaining({ username: 'owner' }),
-        }),
-      ],
+      connections,
+      installations: connections,
     });
 
     const [activity] = await t.db
@@ -319,7 +321,11 @@ describe('installations and available repositories', () => {
     try {
       const { owner, ws } = await projectFixture(app);
       const list = await owner.browser.get(`/api/v1/github/installations?workspaceId=${ws}`);
-      expect(list.body.data).toEqual({ appConfigured: false, installations: [] });
+      expect(list.body.data).toEqual({
+        appConfigured: false,
+        connections: [],
+        installations: [],
+      });
       const start = await owner.browser.get(`/api/v1/github/install?workspaceId=${ws}`).expect(302);
       expect(redirectOf(start).searchParams.get('githubError')).toBe('GITHUB_APP_NOT_CONFIGURED');
     } finally {
@@ -410,6 +416,7 @@ describe('project repositories', () => {
     expect(res.status).toBe(201);
     expect(res.body.data.repository).toEqual({
       id: expect.any(String),
+      connectionId: inst.id,
       installationId: inst.id,
       installationStatus: 'ACTIVE',
       githubRepositoryId: 1001,

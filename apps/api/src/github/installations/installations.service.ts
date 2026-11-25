@@ -21,8 +21,8 @@ import {
   type AvailableRepository,
   type AvailableGithubInstallation,
   type GithubRepositoryAccess,
-  type GithubInstallation,
-  type GithubInstallationList,
+  type GithubConnection,
+  type GithubConnectionList,
 } from '@devtrack/types';
 import { generateToken, hashToken, safeEqual } from '../../common/crypto/tokens';
 import { AppException } from '../../common/errors/app.exception';
@@ -331,7 +331,7 @@ export class GithubInstallationsService {
     });
   }
 
-  async list(userId: string, workspaceId: string): Promise<GithubInstallationList> {
+  async list(userId: string, workspaceId: string): Promise<GithubConnectionList> {
     await this.access.require(userId, workspaceId, 'ADMIN');
     const rows = await this.db
       .select({
@@ -347,9 +347,11 @@ export class GithubInstallationsService {
       .leftJoin(users, eq(users.id, githubWorkspaceConnections.connectedBy))
       .where(eq(githubWorkspaceConnections.workspaceId, workspaceId))
       .orderBy(asc(githubInstallations.accountLogin));
+    const connections = rows.map((r) => toConnection(r.installation, r.connection, r.installer));
     return {
       appConfigured: this.config.githubApp !== null,
-      installations: rows.map((r) => toInstallation(r.installation, r.connection, r.installer)),
+      connections,
+      installations: connections,
     };
   }
 
@@ -614,11 +616,11 @@ export class GithubInstallationsService {
   }
 }
 
-function toInstallation(
+function toConnection(
   row: InstallationRow,
   connection: typeof githubWorkspaceConnections.$inferSelect,
   installer: { id: string; username: string; avatarUrl: string | null } | null,
-): GithubInstallation {
+): GithubConnection {
   return {
     id: connection.id,
     workspaceId: connection.workspaceId,

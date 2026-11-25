@@ -63,7 +63,7 @@ export class ProjectRepositoriesService {
   ): Promise<ConnectedRepository> {
     const { project } = await this.access.require(actor.id, projectId, { manage: true });
 
-    const installation = await this.installations.requireForAdmin(actor.id, input.installationId);
+    const installation = await this.installations.requireForAdmin(actor.id, input.connectionId);
     if (installation.workspaceId !== project.workspaceId)
       throw AppException.notFound('GitHub installation not found.');
 
@@ -72,7 +72,7 @@ export class ProjectRepositoriesService {
       .from(githubWorkspaceRepositories)
       .where(
         and(
-          eq(githubWorkspaceRepositories.connectionId, input.installationId),
+          eq(githubWorkspaceRepositories.connectionId, input.connectionId),
           eq(githubWorkspaceRepositories.githubRepositoryId, input.githubRepositoryId),
         ),
       );
@@ -96,7 +96,7 @@ export class ProjectRepositoriesService {
         const [connection] = await tx
           .select()
           .from(githubWorkspaceConnections)
-          .where(eq(githubWorkspaceConnections.id, input.installationId))
+          .where(eq(githubWorkspaceConnections.id, input.connectionId))
           .for('update');
         if (!connection) throw AppException.notFound('GitHub connection not found.');
         const [grant] = await tx
@@ -104,7 +104,7 @@ export class ProjectRepositoriesService {
           .from(githubWorkspaceRepositories)
           .where(
             and(
-              eq(githubWorkspaceRepositories.connectionId, input.installationId),
+              eq(githubWorkspaceRepositories.connectionId, input.connectionId),
               eq(githubWorkspaceRepositories.githubRepositoryId, input.githubRepositoryId),
             ),
           );
@@ -276,6 +276,7 @@ export class ProjectRepositoriesService {
       .orderBy(asc(githubRepositories.fullName));
     return rows.map((r) => ({
       id: r.repo.id,
+      connectionId: r.connectionId,
       installationId: r.connectionId,
       installationStatus: r.installationStatus,
       githubRepositoryId: r.repo.githubRepositoryId,

@@ -8,11 +8,28 @@ import {
 const installationId = '6f1c2a52-6a3c-4b84-9a43-1f1d1c0b6d7e';
 
 describe('connectRepositorySchema', () => {
-  it('accepts an installation UUID and a positive integer repository ID', () => {
+  it('accepts a connection UUID and a positive integer repository ID', () => {
+    expect(
+      connectRepositorySchema.parse({ connectionId: installationId, githubRepositoryId: 123 }),
+    ).toEqual({ connectionId: installationId, githubRepositoryId: 123 });
+  });
+
+  it('still accepts the deprecated installationId, as the connection', () => {
     expect(connectRepositorySchema.parse({ installationId, githubRepositoryId: 123 })).toEqual({
-      installationId,
+      connectionId: installationId,
       githubRepositoryId: 123,
     });
+  });
+
+  it('requires a connection and refuses two different ones', () => {
+    expect(connectRepositorySchema.safeParse({ githubRepositoryId: 1 }).success).toBe(false);
+    expect(
+      connectRepositorySchema.safeParse({
+        connectionId: installationId,
+        installationId: '7a1c2a52-6a3c-4b84-9a43-1f1d1c0b6d7e',
+        githubRepositoryId: 1,
+      }).success,
+    ).toBe(false);
   });
 
   it.each([0, -1, 1.5, '123', null])('rejects repository ID %j', (githubRepositoryId) => {
@@ -21,10 +38,11 @@ describe('connectRepositorySchema', () => {
     );
   });
 
-  it('rejects a non-UUID installation ID', () => {
-    expect(
-      connectRepositorySchema.safeParse({ installationId: '42', githubRepositoryId: 1 }).success,
-    ).toBe(false);
+  it('rejects a non-UUID connection ID', () => {
+    for (const key of ['connectionId', 'installationId'])
+      expect(
+        connectRepositorySchema.safeParse({ [key]: '42', githubRepositoryId: 1 }).success,
+      ).toBe(false);
   });
 });
 

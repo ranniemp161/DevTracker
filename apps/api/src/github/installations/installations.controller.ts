@@ -14,7 +14,7 @@ import {
   Req,
   Res,
 } from '@nestjs/common';
-import { ErrorCode, type AvailableRepository, type GithubInstallationList } from '@devtrack/types';
+import { ErrorCode, type AvailableRepository, type GithubConnectionList } from '@devtrack/types';
 import {
   listInstallationsQuerySchema,
   type ListInstallationsQuery,
@@ -35,7 +35,11 @@ import { GithubInstallationsService } from './installations.service';
 
 const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
 
-/** GitHub App installation (architecture §9 "GitHub", §11.2). */
+/**
+ * GitHub App installation and workspace connections (architecture §9 "GitHub", §11.2).
+ * Connection routes are served under `/github/connections` and, until #121, also under the
+ * deprecated `/github/installations`.
+ */
 @Controller('github')
 export class GithubInstallationsController {
   private readonly logger = new Logger(GithubInstallationsController.name);
@@ -116,15 +120,15 @@ export class GithubInstallationsController {
     }
   }
 
-  @Get('installations')
+  @Get(['connections', 'installations'])
   list(
     @CurrentUser() user: User,
     @Query(new ZodValidationPipe(listInstallationsQuerySchema)) query: ListInstallationsQuery,
-  ): Promise<GithubInstallationList> {
+  ): Promise<GithubConnectionList> {
     return this.installations.list(user.id, query.workspaceId);
   }
 
-  @Get('installations/:id/repositories')
+  @Get(['connections/:id/repositories', 'installations/:id/repositories'])
   listRepositories(
     @CurrentUser() user: User,
     @Param('id', UuidParamPipe) id: string,
@@ -163,12 +167,12 @@ export class GithubInstallationsController {
     return { connected: true };
   }
 
-  @Get('installations/:id/repository-access')
+  @Get(['connections/:id/repository-access', 'installations/:id/repository-access'])
   repositoryAccess(@CurrentUser() user: User, @Param('id', UuidParamPipe) id: string) {
     return this.installations.repositoryAccess(user.id, id);
   }
 
-  @Put('installations/:id/repository-access')
+  @Put(['connections/:id/repository-access', 'installations/:id/repository-access'])
   @HttpCode(HttpStatus.NO_CONTENT)
   async updateRepositoryAccess(
     @CurrentUser() user: User,
@@ -179,7 +183,7 @@ export class GithubInstallationsController {
     await this.installations.updateRepositoryAccess(user.id, id, input.githubRepositoryIds);
   }
 
-  @Delete('installations/:id')
+  @Delete(['connections/:id', 'installations/:id'])
   @HttpCode(HttpStatus.NO_CONTENT)
   async disconnect(@CurrentUser() user: User, @Param('id', UuidParamPipe) id: string) {
     await this.installations.disconnectWorkspace(user.id, id);

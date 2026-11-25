@@ -158,10 +158,11 @@ export class GithubAppClient {
    */
   async findUserInstallation(
     userToken: string,
-    installationId: number,
+    githubInstallationId: number,
   ): Promise<GithubInstallationInfo | null> {
     return (
-      (await this.listUserInstallations(userToken)).find((i) => i.id === installationId) ?? null
+      (await this.listUserInstallations(userToken)).find((i) => i.id === githubInstallationId) ??
+      null
     );
   }
 
@@ -188,11 +189,14 @@ export class GithubAppClient {
   }
 
   /** The intersection of the user's access and the App's access, never the App's full scope. */
-  async listUserRepositories(userToken: string, installationId: number): Promise<GithubRepo[]> {
+  async listUserRepositories(
+    userToken: string,
+    githubInstallationId: number,
+  ): Promise<GithubRepo[]> {
     const repos: GithubRepo[] = [];
     for (let page = 1; page * 100 <= MAX_LISTED_REPOSITORIES; page++) {
       const res = await this.fetch(
-        `${API}/user/installations/${installationId}/repositories?per_page=100&page=${page}`,
+        `${API}/user/installations/${githubInstallationId}/repositories?per_page=100&page=${page}`,
         {
           headers: { ...API_HEADERS, Authorization: `Bearer ${userToken}` },
         },
@@ -218,11 +222,11 @@ export class GithubAppClient {
   }
 
   /** Repositories the installation can access, up to `MAX_LISTED_REPOSITORIES`. */
-  async listInstallationRepositories(installationId: number): Promise<GithubRepo[]> {
+  async listInstallationRepositories(githubInstallationId: number): Promise<GithubRepo[]> {
     const repos: GithubRepo[] = [];
     for (let page = 1; page * 100 <= MAX_LISTED_REPOSITORIES; page++) {
       const res = await this.installationGet(
-        installationId,
+        githubInstallationId,
         `/installation/repositories?per_page=100&page=${page}`,
       );
       if (!res.ok) throw githubApiError();
@@ -236,10 +240,13 @@ export class GithubAppClient {
 
   /** The repository if the installation can access it, otherwise null. */
   async getRepository(
-    installationId: number,
+    githubInstallationId: number,
     githubRepositoryId: number,
   ): Promise<GithubRepo | null> {
-    const res = await this.installationGet(installationId, `/repositories/${githubRepositoryId}`);
+    const res = await this.installationGet(
+      githubInstallationId,
+      `/repositories/${githubRepositoryId}`,
+    );
     if (res.status === 404 || res.status === 403) return null;
     if (!res.ok) throw githubApiError();
     const parsed = repoSchema.safeParse(await res.json().catch(() => null));
@@ -252,13 +259,13 @@ export class GithubAppClient {
    * in the same shape as webhook payloads. Invalid entries are skipped.
    */
   async listPullRequests(
-    installationId: number,
+    githubInstallationId: number,
     githubRepositoryId: number,
     limit = 100,
   ): Promise<PullRequestPayload[]> {
     const perPage = Math.min(Math.max(limit, 1), 100);
     const res = await this.installationGet(
-      installationId,
+      githubInstallationId,
       `/repositories/${githubRepositoryId}/pulls?state=all&sort=updated&direction=desc&per_page=${perPage}`,
     );
     if (res.status === 404 || res.status === 403) return [];
@@ -271,25 +278,28 @@ export class GithubAppClient {
     });
   }
 
-  private async installationGet(installationId: number, path: string): Promise<FetchResponse> {
-    const token = await this.installationToken(installationId);
+  private async installationGet(
+    githubInstallationId: number,
+    path: string,
+  ): Promise<FetchResponse> {
+    const token = await this.installationToken(githubInstallationId);
     const res = await this.fetch(`${API}${path}`, {
       headers: { ...API_HEADERS, Authorization: `Bearer ${token}` },
     });
     // A revoked token (e.g. uninstalled since it was cached): forget it so the next call re-mints.
     if (res.status === 401) {
-      this.tokens.delete(installationId);
+      this.tokens.delete(githubInstallationId);
       throw githubApiError();
     }
     return res;
   }
 
-  private async installationToken(installationId: number): Promise<string> {
-    const cached = this.tokens.get(installationId);
+  private async installationToken(githubInstallationId: number): Promise<string> {
+    const cached = this.tokens.get(githubInstallationId);
     if (cached && cached.expiresAt - TOKEN_REFRESH_MARGIN_MS > Date.now()) return cached.token;
 
     const app = this.app();
-    const res = await this.fetch(`${API}/app/installations/${installationId}/access_tokens`, {
+    const res = await this.fetch(`${API}/app/installations/${githubInstallationId}/access_tokens`, {
       method: 'POST',
       headers: {
         ...API_HEADERS,
@@ -307,7 +317,7 @@ export class GithubAppClient {
     if (!res.ok) throw githubApiError();
     const parsed = tokenSchema.safeParse(await res.json().catch(() => null));
     if (!parsed.success) throw githubApiError();
-    this.tokens.set(installationId, {
+    this.tokens.set(githubInstallationId, {
       token: parsed.data.token,
       expiresAt: new Date(parsed.data.expires_at).getTime(),
     });
