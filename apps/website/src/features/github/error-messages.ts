@@ -2,7 +2,7 @@
 const MESSAGES: Record<string, string> = {
   GITHUB_APP_NOT_CONFIGURED: 'The GitHub App is not configured on this server.',
   GITHUB_INSTALL_STATE_INVALID:
-    'The GitHub installation session expired or did not start here. Please start the GitHub connection again.',
+    'The GitHub sign-in expired or did not start here. Start connecting GitHub again.',
   GITHUB_INSTALL_NOT_AUTHORIZED:
     'GitHub did not confirm that you can manage that installation, so it was not connected.',
   GITHUB_API_ERROR: 'GitHub could not be reached. Please try again.',
