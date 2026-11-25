@@ -19,6 +19,7 @@ import {
 import { ErrorCode } from '@devtrack/types';
 import { AppException } from '../../common/errors/app.exception';
 import { EventRecorder, type Actor } from '../../events/event-recorder.service';
+import type { VerifiedInstallation } from '../authorization/github-authorization.service';
 import type { GithubRepo } from '../github-app.client';
 
 /**
@@ -92,6 +93,71 @@ export interface Target {
 @Injectable()
 export class RepositoryAccess {
   constructor(private readonly events: EventRecorder) {}
+
+  /**
+   * Creates or refreshes the installation and the workspace's connection to it. Accepts
+   * nothing but the proof that GitHub confirmed the user can manage the installation. An
+   * existing connection keeps its grants and gets the newly verified candidate repositories.
+   */
+  async connectWorkspace(
+    tx: Transaction,
+    proof: VerifiedInstallation,
+    actor: Actor | null,
+  ): Promise<void> {
+    const info = proof.installation;
+    const status = info.suspendedAt ? ('SUSPENDED' as const) : ('ACTIVE' as const);
+    const [installation] = await tx
+      .insert(githubInstallations)
+      .values({
+        githubInstallationId: info.id,
+        accountLogin: info.accountLogin,
+        accountType: info.accountType,
+        status,
+        suspendedAt: info.suspendedAt,
+        installedBy: proof.userId,
+      })
+      .onConflictDoUpdate({
+        target: githubInstallations.githubInstallationId,
+        set: {
+          accountLogin: info.accountLogin,
+          accountType: info.accountType,
+          status,
+          suspendedAt: info.suspendedAt,
+        },
+      })
+      .returning();
+    const repositoryIds = [...proof.repositoryIds];
+    const [connection] = await tx
+      .insert(githubWorkspaceConnections)
+      .values({
+        installationId: installation!.id,
+        workspaceId: proof.workspaceId,
+        connectedBy: proof.userId,
+        authorizedRepositoryIds: repositoryIds,
+      })
+      .onConflictDoNothing()
+      .returning();
+    if (!connection) {
+      await tx
+        .update(githubWorkspaceConnections)
+        .set({ authorizedRepositoryIds: repositoryIds, connectedBy: proof.userId })
+        .where(
+          and(
+            eq(githubWorkspaceConnections.installationId, installation!.id),
+            eq(githubWorkspaceConnections.workspaceId, proof.workspaceId),
+          ),
+        );
+      return;
+    }
+    await this.events.activity(tx, {
+      workspaceId: proof.workspaceId,
+      projectId: null,
+      actor,
+      entity: { type: 'github_installation', id: connection.id },
+      action: 'github_installation.installed',
+      metadata: { account: info.accountLogin },
+    });
+  }
 
   /**
    * Which projects receive a GitHub event for this repository. A project is a target only when

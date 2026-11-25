@@ -4,11 +4,9 @@ import {
   asc,
   eq,
   githubInstallations,
-  githubInstallStates,
   githubRepositories,
   githubWorkspaceConnections,
   projects,
-  lt,
   projectRepositories,
   users,
   type Database,
@@ -16,25 +14,18 @@ import {
 import {
   ErrorCode,
   type AvailableRepository,
-  type AvailableGithubInstallation,
   type GithubRepositoryAccess,
   type GithubConnection,
   type GithubConnectionList,
 } from '@devtrack/types';
-import { generateToken, hashToken, safeEqual } from '../../common/crypto/tokens';
 import { AppException } from '../../common/errors/app.exception';
 import { isUuid } from '../../common/pipes/uuid-param.pipe';
-import { GITHUB_INSTALL_STATE_TTL_MS } from '../../auth/auth-cookies.service';
 import { APP_CONFIG, type AppConfig } from '../../config/app-config';
 import { DATABASE } from '../../database/database.module';
-import { EventRecorder } from '../../events/event-recorder.service';
 import { WorkspaceAccessService } from '../../workspaces/workspace-access.service';
 import { RepositoryAccess, type ConnectionRef } from '../access/repository-access.service';
-import {
-  GithubAppClient,
-  GithubInstallationUnavailableError,
-  type GithubInstallationInfo,
-} from '../github-app.client';
+import type { VerifiedInstallation } from '../authorization/github-authorization.service';
+import { GithubAppClient, GithubInstallationUnavailableError } from '../github-app.client';
 
 export type InstallationRow = typeof githubInstallations.$inferSelect;
 /** A workspace connection with its installation's row (`id` is the installation's). */
@@ -44,22 +35,6 @@ export type WorkspaceConnection = InstallationRow & {
   /** The connection as RepositoryAccess takes it. */
   ref: ConnectionRef;
 };
-type InstallStateRow = typeof githubInstallStates.$inferSelect;
-
-const stateInvalid = () =>
-  new AppException(
-    HttpStatus.BAD_REQUEST,
-    ErrorCode.GITHUB_INSTALL_STATE_INVALID,
-    'The GitHub installation session expired or is invalid. Start the installation again from DevTrack.',
-  );
-
-const notAuthorized = () =>
-  new AppException(
-    HttpStatus.FORBIDDEN,
-    ErrorCode.GITHUB_INSTALL_NOT_AUTHORIZED,
-    'GitHub did not confirm that you can manage this installation.',
-  );
-
 export const installationUnavailable = () =>
   new AppException(
     HttpStatus.CONFLICT,
@@ -70,14 +45,10 @@ export const installationUnavailable = () =>
 const installationNotFound = () => AppException.notFound('GitHub installation not found.');
 
 /**
- * GitHub App installation lifecycle (architecture §11.2, decision record 0005).
- *
- * Binding an installation to a workspace needs three proofs:
- * 1. the browser that returns from GitHub is the one that started the flow (state cookie);
- * 2. the DevTrack user who started it is still an Admin/Owner of the workspace;
- * 3. the GitHub user who completed it can access the installation on GitHub (user token
- *    from "Request user authorization during installation"), so a forged `installation_id`
- *    cannot attach someone else's repositories.
+ * A workspace's GitHub connections (architecture §11.2, decision records 0005 and 0010):
+ * listing them, the live repository access list from GitHub, and the wrapper that records an
+ * installation GitHub reports suspended or removed. Signing in with GitHub is
+ * GithubAuthorization's job; access rules and writes are RepositoryAccess's.
  */
 @Injectable()
 export class GithubInstallationsService {
@@ -88,247 +59,16 @@ export class GithubInstallationsService {
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     private readonly access: WorkspaceAccessService,
     private readonly client: GithubAppClient,
-    private readonly events: EventRecorder,
     private readonly repoAccess: RepositoryAccess,
   ) {}
 
-  /** Returns GitHub's installation URL and the raw state for the browser-binding cookie. */
-  async begin(
-    userId: string,
-    workspaceId: string,
-    mode: 'install' | 'connect' = 'install',
-  ): Promise<{ installUrl: string; state: string }> {
-    await this.access.require(userId, workspaceId, 'ADMIN');
-    const app = this.config.githubApp;
-    if (!app) {
-      throw new AppException(
-        HttpStatus.SERVICE_UNAVAILABLE,
-        ErrorCode.GITHUB_APP_NOT_CONFIGURED,
-        'The GitHub App is not configured on this server.',
-      );
-    }
-
-    // Opportunistic cleanup of abandoned flows (indexed on expires_at).
-    await this.db.delete(githubInstallStates).where(lt(githubInstallStates.expiresAt, new Date()));
-
-    const state = generateToken();
-    await this.db.insert(githubInstallStates).values({
-      mode,
-      stateHash: hashToken(state),
-      userId,
-      workspaceId,
-      expiresAt: new Date(Date.now() + GITHUB_INSTALL_STATE_TTL_MS),
-    });
-    const url = new URL(
-      mode === 'connect'
-        ? 'https://github.com/login/oauth/authorize'
-        : `https://github.com/apps/${app.slug}/installations/new`,
-    );
-    if (mode === 'connect') {
-      url.searchParams.set('client_id', app.clientId);
-      url.searchParams.set(
-        'redirect_uri',
-        `${this.config.webOrigin}/api/v1/github/install/callback`,
-      );
-    }
-    url.searchParams.set('state', state);
-    return { installUrl: url.toString(), state };
-  }
-
-  /**
-   * Validates and consumes the flow state (single use). The query `state` must equal the
-   * browser's cookie and match an unexpired row.
-   */
-  async consumeState(state?: string, cookieState?: string): Promise<InstallStateRow> {
-    if (!state || !cookieState || !safeEqual(state, cookieState)) throw stateInvalid();
-    const [row] = await this.db
-      .delete(githubInstallStates)
-      .where(eq(githubInstallStates.stateHash, hashToken(state)))
-      .returning();
-    if (!row || row.mode === 'choose' || row.expiresAt.getTime() <= Date.now())
-      throw stateInvalid();
-    return row;
-  }
-
-  /**
-   * Completes the installation for a consumed state. Returns `requested` when a GitHub
-   * organization member asked an owner to approve the app (nothing is installed yet).
-   */
-  async complete(
-    flow: InstallStateRow,
-    params: { installationId?: string; code?: string; setupAction?: string },
-  ): Promise<'installed' | 'requested'> {
-    await this.access.require(flow.userId, flow.workspaceId, 'ADMIN');
-    if (flow.mode !== 'install') throw notAuthorized();
-    if (params.setupAction === 'request') return 'requested';
-
-    const githubInstallationId =
-      params.installationId && /^\d{1,15}$/.test(params.installationId)
-        ? Number(params.installationId)
-        : null;
-    if (!githubInstallationId || !params.code) throw notAuthorized();
-
-    const userToken = await this.client.exchangeInstallCode(params.code);
-    if (!userToken) throw notAuthorized();
-    let info;
-    let repositoryIds: number[] = [];
-    try {
-      info = await this.client.findUserInstallation(userToken, githubInstallationId);
-      if (info)
-        repositoryIds = (
-          await this.client.listUserRepositories(userToken, githubInstallationId)
-        ).map((r) => r.id);
-    } finally {
-      await this.client.revokeUserToken(userToken);
-    }
-    if (!info) throw notAuthorized();
-
-    // Installation access alone is insufficient: only repos readable by this user may be delegated.
-    await this.bind(flow, info, repositoryIds);
-    return 'installed';
-  }
-
-  /** Reauthorize an existing installation without running GitHub's installation UI again. */
-  async prepareExisting(flow: InstallStateRow, code?: string): Promise<string> {
-    await this.access.require(flow.userId, flow.workspaceId, 'ADMIN');
-    if (flow.mode !== 'connect' || !code) throw notAuthorized();
-    const token = await this.client.exchangeInstallCode(
-      code,
-      `${this.config.webOrigin}/api/v1/github/install/callback`,
-    );
-    if (!token) throw notAuthorized();
-    const choices: NonNullable<InstallStateRow['verifiedInstallations']> = [];
-    try {
-      const installations = await this.client.listUserInstallations(token);
-      for (const info of installations.filter((i) => !i.suspendedAt)) {
-        const repos = await this.client.listUserRepositories(token, info.id);
-        choices.push({ ...info, suspendedAt: null, repositoryIds: repos.map((r) => r.id) });
-      }
-    } finally {
-      await this.client.revokeUserToken(token);
-    }
-    const state = generateToken();
-    await this.db.insert(githubInstallStates).values({
-      userId: flow.userId,
-      workspaceId: flow.workspaceId,
-      mode: 'choose',
-      stateHash: hashToken(state),
-      verifiedInstallations: choices,
-      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
-    });
-    return state;
-  }
-
-  private async choiceFlow(userId: string, workspaceId: string, cookie?: string) {
-    await this.access.require(userId, workspaceId, 'ADMIN');
-    if (!cookie) return null;
-    const [flow] = await this.db
-      .select()
-      .from(githubInstallStates)
-      .where(
-        and(
-          eq(githubInstallStates.stateHash, hashToken(cookie)),
-          eq(githubInstallStates.userId, userId),
-          eq(githubInstallStates.workspaceId, workspaceId),
-          eq(githubInstallStates.mode, 'choose'),
-        ),
-      );
-    return flow && flow.expiresAt.getTime() > Date.now() ? flow : null;
-  }
-
-  async available(
-    userId: string,
-    workspaceId: string,
-    cookie?: string,
-  ): Promise<AvailableGithubInstallation[]> {
-    const flow = await this.choiceFlow(userId, workspaceId, cookie);
-    return (flow?.verifiedInstallations ?? []).map((i) => ({
-      githubInstallationId: i.id,
-      accountLogin: i.accountLogin,
-      accountType: i.accountType,
-    }));
-  }
-
-  async connectExisting(
-    userId: string,
-    workspaceId: string,
-    githubInstallationId: number,
-    cookie?: string,
-  ) {
-    const flow = await this.choiceFlow(userId, workspaceId, cookie);
-    const info = flow?.verifiedInstallations?.find((i) => i.id === githubInstallationId);
-    if (!flow || !info) throw notAuthorized();
-    // Consume once before binding; a replay cannot reuse this proof for another connection.
-    const consumed = await this.db
-      .delete(githubInstallStates)
-      .where(eq(githubInstallStates.id, flow.id))
-      .returning();
-    if (!consumed.length) throw stateInvalid();
-    await this.bind(
-      flow,
-      { ...info, suspendedAt: info.suspendedAt ? new Date(info.suspendedAt) : null },
-      info.repositoryIds,
-    );
-  }
-
-  private async bind(flow: InstallStateRow, info: GithubInstallationInfo, repositoryIds: number[]) {
-    await this.access.require(flow.userId, flow.workspaceId, 'ADMIN');
+  /** Saves the workspace's connection once GitHub verified the user (GithubAuthorization). */
+  async connect(proof: VerifiedInstallation): Promise<void> {
     const [actor] = await this.db
       .select({ id: users.id, username: users.username })
       .from(users)
-      .where(eq(users.id, flow.userId));
-    await this.db.transaction(async (tx) => {
-      const [installation] = await tx
-        .insert(githubInstallations)
-        .values({
-          githubInstallationId: info.id,
-          accountLogin: info.accountLogin,
-          accountType: info.accountType,
-          status: info.suspendedAt ? 'SUSPENDED' : 'ACTIVE',
-          suspendedAt: info.suspendedAt,
-          installedBy: flow.userId,
-        })
-        .onConflictDoUpdate({
-          target: githubInstallations.githubInstallationId,
-          set: {
-            accountLogin: info.accountLogin,
-            accountType: info.accountType,
-            status: info.suspendedAt ? 'SUSPENDED' : 'ACTIVE',
-            suspendedAt: info.suspendedAt,
-          },
-        })
-        .returning();
-      const [connection] = await tx
-        .insert(githubWorkspaceConnections)
-        .values({
-          installationId: installation!.id,
-          workspaceId: flow.workspaceId,
-          connectedBy: flow.userId,
-          authorizedRepositoryIds: repositoryIds,
-        })
-        .onConflictDoNothing()
-        .returning();
-      if (!connection) {
-        await tx
-          .update(githubWorkspaceConnections)
-          .set({ authorizedRepositoryIds: repositoryIds, connectedBy: flow.userId })
-          .where(
-            and(
-              eq(githubWorkspaceConnections.installationId, installation!.id),
-              eq(githubWorkspaceConnections.workspaceId, flow.workspaceId),
-            ),
-          );
-        return;
-      }
-      await this.events.activity(tx, {
-        workspaceId: flow.workspaceId,
-        projectId: null,
-        actor: actor ?? null,
-        entity: { type: 'github_installation', id: connection.id },
-        action: 'github_installation.installed',
-        metadata: { account: info.accountLogin },
-      });
-    });
+      .where(eq(users.id, proof.userId));
+    await this.db.transaction((tx) => this.repoAccess.connectWorkspace(tx, proof, actor ?? null));
   }
 
   async list(userId: string, workspaceId: string): Promise<GithubConnectionList> {
