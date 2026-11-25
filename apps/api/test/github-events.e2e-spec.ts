@@ -598,6 +598,22 @@ describe('installation lifecycle', () => {
   });
 });
 
+describe('the disconnected mark on GitHub-initiated removals', () => {
+  it('is set on every repository of an uninstalled installation', async () => {
+    await githubFixture(t);
+    await deliver(t, 'installation', {
+      action: 'deleted',
+      installation: { id: GH_INSTALLATION },
+      sender,
+    }).expect(202);
+    const [repo] = await t.db
+      .select()
+      .from(githubRepositories)
+      .where(eq(githubRepositories.githubRepositoryId, GH_REPO));
+    expect(repo!.disconnectedAt).toBeInstanceOf(Date);
+  });
+});
+
 describe('failures and retries', () => {
   it('keeps a failed delivery and its payload, rolls back partial work, and retries it', async () => {
     const f = await githubFixture(t);

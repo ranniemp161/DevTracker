@@ -21,15 +21,33 @@ export const updateGithubRepositoryAccessSchema = z.object({
 });
 export type UpdateGithubRepositoryAccessInput = z.infer<typeof updateGithubRepositoryAccessSchema>;
 
-/** `POST /projects/:id/repositories`. Repositories are identified by GitHub's stable numeric ID. */
-export const connectRepositorySchema = z.object({
-  installationId: z.uuid({ error: 'Choose a GitHub installation.' }),
-  githubRepositoryId: z
-    .number({ error: 'Choose a repository.' })
-    .int({ error: 'Choose a repository.' })
-    .positive({ error: 'Choose a repository.' })
-    .max(Number.MAX_SAFE_INTEGER),
-});
+/**
+ * `POST /projects/:id/repositories`. Repositories are identified by GitHub's stable numeric ID.
+ * The connection is `connectionId`; the deprecated `installationId` is still accepted (#114) and
+ * is removed in #121. Both parse to `connectionId`.
+ */
+export const connectRepositorySchema = z
+  .object({
+    connectionId: z.uuid({ error: 'Choose a GitHub installation.' }).optional(),
+    installationId: z.uuid({ error: 'Choose a GitHub installation.' }).optional(),
+    githubRepositoryId: z
+      .number({ error: 'Choose a repository.' })
+      .int({ error: 'Choose a repository.' })
+      .positive({ error: 'Choose a repository.' })
+      .max(Number.MAX_SAFE_INTEGER),
+  })
+  .refine((v) => v.connectionId ?? v.installationId, {
+    error: 'Choose a GitHub installation.',
+    path: ['connectionId'],
+  })
+  .refine((v) => !v.connectionId || !v.installationId || v.connectionId === v.installationId, {
+    error: 'connectionId and installationId must match.',
+    path: ['installationId'],
+  })
+  .transform((v) => ({
+    connectionId: (v.connectionId ?? v.installationId)!,
+    githubRepositoryId: v.githubRepositoryId,
+  }));
 export type ConnectRepositoryInput = z.infer<typeof connectRepositorySchema>;
 
 /** `POST /tasks/:id/pull-requests`. */

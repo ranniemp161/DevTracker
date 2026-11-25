@@ -2,15 +2,12 @@ import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
 import {
   and,
   asc,
-  count,
   eq,
   githubInstallations,
   githubRepositories,
   githubWorkspaceConnections,
-  githubWorkspaceRepositories,
   projectRepositories,
   projects,
-  sql,
   users,
   type Database,
 } from '@devtrack/database';
@@ -19,9 +16,9 @@ import type { ConnectRepositoryInput } from '@devtrack/validators';
 import { AppException } from '../../common/errors/app.exception';
 import { isUuid } from '../../common/pipes/uuid-param.pipe';
 import { DATABASE } from '../../database/database.module';
-import { isUniqueViolation } from '../../database/pg-errors';
 import { EventRecorder, type Actor } from '../../events/event-recorder.service';
-import { ProjectAccessService, type ProjectRow } from '../../projects/project-access.service';
+import { ProjectAccessService } from '../../projects/project-access.service';
+import { RepositoryAccess } from '../access/repository-access.service';
 import { GithubAppClient } from '../github-app.client';
 import { GithubInstallationsService } from '../installations/installations.service';
 import { GithubEventProcessor } from '../webhooks/github-event-processor.service';
@@ -47,6 +44,7 @@ export class ProjectRepositoriesService {
     private readonly client: GithubAppClient,
     private readonly events: EventRecorder,
     private readonly processor: GithubEventProcessor,
+    private readonly repositoryAccess: RepositoryAccess,
   ) {}
 
   private readonly logger = new Logger(ProjectRepositoriesService.name);
@@ -63,21 +61,14 @@ export class ProjectRepositoriesService {
   ): Promise<ConnectedRepository> {
     const { project } = await this.access.require(actor.id, projectId, { manage: true });
 
-    const installation = await this.installations.requireForAdmin(actor.id, input.installationId);
-    if (installation.workspaceId !== project.workspaceId)
-      throw AppException.notFound('GitHub installation not found.');
-
-    const [allowed] = await this.db
-      .select()
-      .from(githubWorkspaceRepositories)
-      .where(
-        and(
-          eq(githubWorkspaceRepositories.connectionId, input.installationId),
-          eq(githubWorkspaceRepositories.githubRepositoryId, input.githubRepositoryId),
-        ),
-      );
-    if (!allowed)
-      throw AppException.forbidden('Allow this repository in workspace GitHub settings first.');
+    const installation = await this.installations.requireForAdmin(actor.id, input.connectionId);
+    const connection = installation.ref;
+    await this.repositoryAccess.assertCanConnect(
+      this.db,
+      project,
+      connection,
+      input.githubRepositoryId,
+    );
 
     const repo = await this.installations.call(installation, () =>
       this.client.getRepository(installation.githubInstallationId, input.githubRepositoryId),
@@ -90,65 +81,9 @@ export class ProjectRepositoriesService {
       );
     }
 
-    let repositoryId!: string;
-    try {
-      await this.db.transaction(async (tx) => {
-        const [connection] = await tx
-          .select()
-          .from(githubWorkspaceConnections)
-          .where(eq(githubWorkspaceConnections.id, input.installationId))
-          .for('update');
-        if (!connection) throw AppException.notFound('GitHub connection not found.');
-        const [grant] = await tx
-          .select()
-          .from(githubWorkspaceRepositories)
-          .where(
-            and(
-              eq(githubWorkspaceRepositories.connectionId, input.installationId),
-              eq(githubWorkspaceRepositories.githubRepositoryId, input.githubRepositoryId),
-            ),
-          );
-        if (!grant)
-          throw AppException.forbidden('Allow this repository in workspace GitHub settings first.');
-        const metadata = {
-          fullName: repo.fullName,
-          ownerLogin: repo.ownerLogin,
-          defaultBranch: repo.defaultBranch,
-          visibility: repo.visibility,
-        };
-        const [row] = await tx
-          .insert(githubRepositories)
-          .values({ installationId: installation.id, githubRepositoryId: repo.id, ...metadata })
-          .onConflictDoUpdate({
-            target: [githubRepositories.installationId, githubRepositories.githubRepositoryId],
-            set: { ...metadata, disconnectedAt: null, updatedAt: sql`now()` },
-          })
-          .returning({ id: githubRepositories.id });
-        repositoryId = row!.id;
-        await tx
-          .insert(projectRepositories)
-          .values({ projectId: project.id, repositoryId, connectedBy: actor.id });
-        await this.events.activity(tx, {
-          ...projectScope(project),
-          actor,
-          action: 'project.repository_connected',
-          metadata: { repository: { id: repositoryId, fullName: repo.fullName } },
-          event: {
-            type: 'project.repository_connected',
-            payload: { repositoryId, githubRepositoryId: repo.id },
-          },
-        });
-      });
-    } catch (err) {
-      if (isUniqueViolation(err, 'project_repositories_pk')) {
-        throw new AppException(
-          HttpStatus.CONFLICT,
-          ErrorCode.REPOSITORY_ALREADY_CONNECTED,
-          'This repository is already connected to the project.',
-        );
-      }
-      throw err;
-    }
+    const repositoryId = await this.db.transaction((tx) =>
+      this.repositoryAccess.connectProject(tx, project, connection, repo, actor),
+    );
     // Import existing pull requests. Best effort: the connection stands even if GitHub is
     // unavailable right now, and "Sync pull requests" can be used later.
     await this.importPullRequests(installation, repo.id).catch((err: unknown) =>
@@ -210,40 +145,9 @@ export class ProjectRepositoriesService {
     const { project } = await this.access.require(actor.id, projectId, { manage: true });
     if (!isUuid(repositoryId)) throw notConnected();
 
-    await this.db.transaction(async (tx) => {
-      const [removed] = await tx
-        .delete(projectRepositories)
-        .where(
-          and(
-            eq(projectRepositories.projectId, project.id),
-            eq(projectRepositories.repositoryId, repositoryId),
-          ),
-        )
-        .returning();
-      if (!removed) throw notConnected();
-
-      const [repo] = await tx
-        .select({ fullName: githubRepositories.fullName })
-        .from(githubRepositories)
-        .where(eq(githubRepositories.id, repositoryId));
-      const [remaining] = await tx
-        .select({ n: count() })
-        .from(projectRepositories)
-        .where(eq(projectRepositories.repositoryId, repositoryId));
-      if (remaining!.n === 0) {
-        await tx
-          .update(githubRepositories)
-          .set({ disconnectedAt: new Date() })
-          .where(eq(githubRepositories.id, repositoryId));
-      }
-      await this.events.activity(tx, {
-        ...projectScope(project),
-        actor,
-        action: 'project.repository_disconnected',
-        metadata: { repository: { id: repositoryId, fullName: repo?.fullName ?? null } },
-        event: { type: 'project.repository_disconnected', payload: { repositoryId } },
-      });
-    });
+    await this.db.transaction((tx) =>
+      this.repositoryAccess.disconnectProject(tx, project, repositoryId, actor),
+    );
   }
 
   private async query(projectId: string, repositoryId?: string): Promise<ConnectedRepository[]> {
@@ -276,6 +180,7 @@ export class ProjectRepositoriesService {
       .orderBy(asc(githubRepositories.fullName));
     return rows.map((r) => ({
       id: r.repo.id,
+      connectionId: r.connectionId,
       installationId: r.connectionId,
       installationStatus: r.installationStatus,
       githubRepositoryId: r.repo.githubRepositoryId,
@@ -288,12 +193,4 @@ export class ProjectRepositoriesService {
       connectedAt: r.connectedAt.toISOString(),
     }));
   }
-}
-
-function projectScope(project: ProjectRow) {
-  return {
-    workspaceId: project.workspaceId,
-    projectId: project.id,
-    entity: { type: 'project' as const, id: project.id },
-  };
 }

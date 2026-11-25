@@ -159,11 +159,11 @@ export class FakeGithubAppClient implements Pick<GithubAppClient, keyof GithubAp
   }
   async findUserInstallation(
     userToken: string,
-    installationId: number,
+    githubInstallationId: number,
   ): Promise<GithubInstallationInfo | null> {
     const allowed = this.codes.get(userToken.replace(/^ghu_/, '')) ?? [];
-    const inst = this.installations.get(installationId);
-    if (!inst || !allowed.includes(installationId)) return null;
+    const inst = this.installations.get(githubInstallationId);
+    if (!inst || !allowed.includes(githubInstallationId)) return null;
     const { repos: _repos, unavailable: _unavailable, ...info } = inst;
     return info;
   }
@@ -176,24 +176,29 @@ export class FakeGithubAppClient implements Pick<GithubAppClient, keyof GithubAp
       (i): i is GithubInstallationInfo => i !== null,
     );
   }
-  async listUserRepositories(userToken: string, installationId: number): Promise<GithubRepo[]> {
+  async listUserRepositories(
+    userToken: string,
+    githubInstallationId: number,
+  ): Promise<GithubRepo[]> {
     const code = userToken.replace(/^ghu_/, '');
-    if (!(this.codes.get(code) ?? []).includes(installationId)) return [];
+    if (!(this.codes.get(code) ?? []).includes(githubInstallationId)) return [];
     const permitted = this.userRepositoryIds.get(code);
-    return this.usable(installationId).repos.filter((r) => !permitted || permitted.includes(r.id));
+    return this.usable(githubInstallationId).repos.filter(
+      (r) => !permitted || permitted.includes(r.id),
+    );
   }
-  async listInstallationRepositories(installationId: number): Promise<GithubRepo[]> {
-    return this.usable(installationId).repos;
+  async listInstallationRepositories(githubInstallationId: number): Promise<GithubRepo[]> {
+    return this.usable(githubInstallationId).repos;
   }
-  async getRepository(installationId: number, githubRepositoryId: number) {
-    return this.usable(installationId).repos.find((r) => r.id === githubRepositoryId) ?? null;
+  async getRepository(githubInstallationId: number, githubRepositoryId: number) {
+    return this.usable(githubInstallationId).repos.find((r) => r.id === githubRepositoryId) ?? null;
   }
-  async listPullRequests(installationId: number, githubRepositoryId: number) {
-    this.usable(installationId);
+  async listPullRequests(githubInstallationId: number, githubRepositoryId: number) {
+    this.usable(githubInstallationId);
     return this.pullRequests.get(githubRepositoryId) ?? [];
   }
-  private usable(installationId: number): FakeInstallation {
-    const inst = this.installations.get(installationId);
+  private usable(githubInstallationId: number): FakeInstallation {
+    const inst = this.installations.get(githubInstallationId);
     if (!inst) throw new GithubInstallationUnavailableError('REMOVED');
     if (inst.unavailable) throw new GithubInstallationUnavailableError(inst.unavailable);
     return inst;

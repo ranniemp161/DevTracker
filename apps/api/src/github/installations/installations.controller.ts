@@ -14,7 +14,7 @@ import {
   Req,
   Res,
 } from '@nestjs/common';
-import { ErrorCode, type AvailableRepository, type GithubInstallationList } from '@devtrack/types';
+import { ErrorCode, type AvailableRepository, type GithubConnectionList } from '@devtrack/types';
 import {
   listInstallationsQuerySchema,
   type ListInstallationsQuery,
@@ -31,11 +31,16 @@ import { isUuid, UuidParamPipe } from '../../common/pipes/uuid-param.pipe';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { APP_CONFIG, type AppConfig } from '../../config/app-config';
 import type { User } from '../../users/users.service';
+import { GithubAuthorization } from '../authorization/github-authorization.service';
 import { GithubInstallationsService } from './installations.service';
 
 const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
 
-/** GitHub App installation (architecture §9 "GitHub", §11.2). */
+/**
+ * GitHub App installation and workspace connections (architecture §9 "GitHub", §11.2).
+ * Connection routes are served under `/github/connections` and, until #121, also under the
+ * deprecated `/github/installations`.
+ */
 @Controller('github')
 export class GithubInstallationsController {
   private readonly logger = new Logger(GithubInstallationsController.name);
@@ -43,6 +48,7 @@ export class GithubInstallationsController {
   constructor(
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     private readonly installations: GithubInstallationsService,
+    private readonly authorization: GithubAuthorization,
     private readonly cookies: AuthCookiesService,
   ) {}
 
@@ -60,7 +66,7 @@ export class GithubInstallationsController {
     const id = str(workspaceId);
     try {
       if (!id || !isUuid(id)) throw AppException.notFound('Workspace not found.');
-      const { installUrl, state } = await this.installations.begin(
+      const { installUrl, state } = await this.authorization.start(
         user.id,
         id,
         mode === 'connect' ? 'connect' : 'install',
@@ -91,10 +97,10 @@ export class GithubInstallationsController {
     this.cookies.clearGithubInstallState(res);
     let workspaceId: string | null = null;
     try {
-      const flow = await this.installations.consumeState(str(state), cookieState);
+      const flow = await this.authorization.consume(str(state), cookieState);
       workspaceId = flow.workspaceId;
       if (flow.mode === 'connect') {
-        const selectionState = await this.installations.prepareExisting(flow, str(code));
+        const selectionState = await this.authorization.prepareChoices(flow, str(code));
         this.cookies.setGithubInstallState(res, selectionState);
         res.redirect(
           HttpStatus.FOUND,
@@ -102,11 +108,13 @@ export class GithubInstallationsController {
         );
         return;
       }
-      const outcome = await this.installations.complete(flow, {
+      const verified = await this.authorization.verifyInstall(flow, {
         installationId: str(installationId),
         code: str(code),
         setupAction: str(setupAction),
       });
+      if (verified !== 'requested') await this.installations.connect(verified);
+      const outcome = verified === 'requested' ? 'requested' : 'installed';
       res.redirect(
         HttpStatus.FOUND,
         `${this.config.webOrigin}/workspaces/${workspaceId}/settings?github=${outcome}`,
@@ -116,15 +124,15 @@ export class GithubInstallationsController {
     }
   }
 
-  @Get('installations')
+  @Get(['connections', 'installations'])
   list(
     @CurrentUser() user: User,
     @Query(new ZodValidationPipe(listInstallationsQuerySchema)) query: ListInstallationsQuery,
-  ): Promise<GithubInstallationList> {
+  ): Promise<GithubConnectionList> {
     return this.installations.list(user.id, query.workspaceId);
   }
 
-  @Get('installations/:id/repositories')
+  @Get(['connections/:id/repositories', 'installations/:id/repositories'])
   listRepositories(
     @CurrentUser() user: User,
     @Param('id', UuidParamPipe) id: string,
@@ -138,7 +146,7 @@ export class GithubInstallationsController {
     @Query(new ZodValidationPipe(listInstallationsQuerySchema)) query: ListInstallationsQuery,
     @Req() req: Request,
   ) {
-    return this.installations.available(
+    return this.authorization.choices(
       user.id,
       query.workspaceId,
       this.cookies.readGithubInstallState(req),
@@ -153,22 +161,23 @@ export class GithubInstallationsController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    await this.installations.connectExisting(
+    const verified = await this.authorization.verifyChoice(
       user.id,
       input.workspaceId,
       input.githubInstallationId,
       this.cookies.readGithubInstallState(req),
     );
+    await this.installations.connect(verified);
     this.cookies.clearGithubInstallState(res);
     return { connected: true };
   }
 
-  @Get('installations/:id/repository-access')
+  @Get(['connections/:id/repository-access', 'installations/:id/repository-access'])
   repositoryAccess(@CurrentUser() user: User, @Param('id', UuidParamPipe) id: string) {
     return this.installations.repositoryAccess(user.id, id);
   }
 
-  @Put('installations/:id/repository-access')
+  @Put(['connections/:id/repository-access', 'installations/:id/repository-access'])
   @HttpCode(HttpStatus.NO_CONTENT)
   async updateRepositoryAccess(
     @CurrentUser() user: User,
@@ -179,7 +188,7 @@ export class GithubInstallationsController {
     await this.installations.updateRepositoryAccess(user.id, id, input.githubRepositoryIds);
   }
 
-  @Delete('installations/:id')
+  @Delete(['connections/:id', 'installations/:id'])
   @HttpCode(HttpStatus.NO_CONTENT)
   async disconnect(@CurrentUser() user: User, @Param('id', UuidParamPipe) id: string) {
     await this.installations.disconnectWorkspace(user.id, id);

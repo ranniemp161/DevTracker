@@ -4,8 +4,8 @@ import type { UserRef } from './project.js';
 export const GITHUB_INSTALLATION_STATUSES = ['ACTIVE', 'SUSPENDED', 'REMOVED'] as const;
 export type GithubInstallationStatus = (typeof GITHUB_INSTALLATION_STATUSES)[number];
 
-/** A workspace connection to a GitHub App installation. `id` is the scoped connection ID. */
-export interface GithubInstallation {
+/** One workspace's connection to a GitHub App installation. `id` is the connection ID. */
+export interface GithubConnection {
   id: string;
   workspaceId: string;
   githubInstallationId: number;
@@ -18,6 +18,9 @@ export interface GithubInstallation {
   suspendedAt: string | null;
 }
 
+/** @deprecated Use `GithubConnection`; removed once the website uses connection names (#121). */
+export type GithubInstallation = GithubConnection;
+
 /** Verified, short-lived choices from the current browser's GitHub authorization. */
 export interface AvailableGithubInstallation {
   githubInstallationId: number;
@@ -29,12 +32,17 @@ export interface GithubRepositoryAccess extends AvailableRepository {
   allowed: boolean;
 }
 
-/** `GET /github/installations?workspaceId=` */
-export interface GithubInstallationList {
+/** `GET /github/connections?workspaceId=` (also served at the deprecated `/github/installations`). */
+export interface GithubConnectionList {
   /** False when the server has no GitHub App credentials; installing is then unavailable. */
   appConfigured: boolean;
-  installations: GithubInstallation[];
+  connections: GithubConnection[];
+  /** @deprecated Same value as `connections`; removed in #121. */
+  installations: GithubConnection[];
 }
+
+/** @deprecated Use `GithubConnectionList`; removed in #121. */
+export type GithubInstallationList = GithubConnectionList;
 
 /** A repository the installation can access, read live from GitHub (§11.3). */
 export interface AvailableRepository {
@@ -52,6 +60,9 @@ export interface AvailableRepository {
 export interface ConnectedRepository {
   /** DevTrack repository ID (used by `DELETE /projects/:id/repositories/:repoId`). */
   id: string;
+  /** The workspace connection this repository is reached through. */
+  connectionId: string;
+  /** @deprecated Same value as `connectionId`; removed in #121. */
   installationId: string;
   installationStatus: GithubInstallationStatus;
   githubRepositoryId: number;

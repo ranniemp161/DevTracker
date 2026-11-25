@@ -24,6 +24,10 @@ export interface ActivityInput extends Scope {
       | 'comment'
       | 'project'
       | 'milestone'
+      /**
+       * A GitHub connection (one workspace's link to an installation); `id` is the connection ID.
+       * The stored name predates the glossary and stays so existing rows keep working (#111).
+       */
       | 'github_installation'
       | 'pull_request'
       | 'repository';
