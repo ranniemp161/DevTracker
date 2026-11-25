@@ -550,6 +550,19 @@ export class GithubInstallationsService {
       });
     }
     // Shared repository history is retained. target() requires an active scoped grant and connection.
+    const repoIds = [...new Set(rows.map((r) => r.repo.id))];
+    if (repoIds.length === 0) return;
+    const stillConnected = await tx
+      .selectDistinct({ id: projectRepositories.repositoryId })
+      .from(projectRepositories)
+      .where(inArray(projectRepositories.repositoryId, repoIds));
+    const keep = new Set(stillConnected.map((r) => r.id));
+    const orphaned = repoIds.filter((id) => !keep.has(id));
+    if (orphaned.length)
+      await tx
+        .update(githubRepositories)
+        .set({ disconnectedAt: new Date() })
+        .where(inArray(githubRepositories.id, orphaned));
   }
 
   async requireForAdmin(userId: string, connectionId: string): Promise<WorkspaceInstallation> {

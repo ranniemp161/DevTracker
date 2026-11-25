@@ -81,6 +81,19 @@ async function install(
   return installation;
 }
 
+/** Runs the connect-existing flow up to GitHub's choice screen. */
+async function authorizeExisting(user: TestUser, ws: string, code = 'existing-code') {
+  const start = await user.browser
+    .get(`/api/v1/github/install?workspaceId=${ws}&mode=connect`)
+    .expect(302);
+  const url = new URL(start.headers.location as string);
+  expect(url.pathname).toBe('/login/oauth/authorize');
+  expect(url.searchParams.get('client_id')).toBe('Iv23li-test-app');
+  expect(url.searchParams.get('redirect_uri')).toBe(`${WEB_ORIGIN}/api/v1/github/install/callback`);
+  const result = await callback(user, { code, state: url.searchParams.get('state')! });
+  expect(redirectOf(result).searchParams.get('github')).toBe('choose');
+}
+
 describe('GitHub App installation flow', () => {
   it('redirects an admin to GitHub with a browser-bound, single-use state', async () => {
     const { owner, ws } = await projectFixture(t);
@@ -551,20 +564,6 @@ describe('project repositories', () => {
 });
 
 describe('shared GitHub workspace connections', () => {
-  async function authorizeExisting(user: TestUser, ws: string, code = 'existing-code') {
-    const start = await user.browser
-      .get(`/api/v1/github/install?workspaceId=${ws}&mode=connect`)
-      .expect(302);
-    const url = new URL(start.headers.location as string);
-    expect(url.pathname).toBe('/login/oauth/authorize');
-    expect(url.searchParams.get('client_id')).toBe('Iv23li-test-app');
-    expect(url.searchParams.get('redirect_uri')).toBe(
-      `${WEB_ORIGIN}/api/v1/github/install/callback`,
-    );
-    const result = await callback(user, { code, state: url.searchParams.get('state')! });
-    expect(redirectOf(result).searchParams.get('github')).toBe('choose');
-  }
-
   it('connects an existing installation after fresh browser-bound GitHub proof; grants start empty', async () => {
     const { owner, outsider, ws } = await projectFixture(t);
     const first = await install(owner, ws);
@@ -767,5 +766,107 @@ describe('shared GitHub workspace connections', () => {
         (r: { githubRepositoryId: number }) => r.githubRepositoryId,
       ),
     ).toEqual([1002]);
+  });
+});
+
+describe('the disconnected mark on a repository', () => {
+  const disconnectedAt = async (githubRepositoryId: number) =>
+    (
+      await t.db
+        .select()
+        .from(githubRepositories)
+        .where(eq(githubRepositories.githubRepositoryId, githubRepositoryId))
+    )[0]!.disconnectedAt;
+
+  const connect = (
+    u: TestUser,
+    project: string,
+    connectionId: string,
+    githubRepositoryId: number,
+  ) =>
+    u.browser
+      .post(`/api/v1/projects/${project}/repositories`)
+      .send({ installationId: connectionId, githubRepositoryId })
+      .expect(201);
+
+  /** A second workspace, owned by `outsider`, connected to installation 111 with 1001 granted. */
+  async function clientWorkspace(outsider: TestUser) {
+    const ws: string = (await outsider.browser.post('/api/v1/workspaces').send({ name: 'Client' }))
+      .body.data.workspace.id;
+    const project: string = (
+      await outsider.browser
+        .post(`/api/v1/workspaces/${ws}/projects`)
+        .send({ name: 'Website', key: 'WEB' })
+        .expect(201)
+    ).body.data.project.id;
+    t.githubApp.codes.set('client-code', [111]);
+    await authorizeExisting(outsider, ws, 'client-code');
+    await outsider.browser
+      .post('/api/v1/github/connections')
+      .send({ workspaceId: ws, githubInstallationId: 111 })
+      .expect(201);
+    const connectionId: string = (
+      await outsider.browser.get(`/api/v1/github/installations?workspaceId=${ws}`).expect(200)
+    ).body.data.installations[0].id;
+    await outsider.browser
+      .put(`/api/v1/github/installations/${connectionId}/repository-access`)
+      .send({ githubRepositoryIds: [1001] })
+      .expect(204);
+    await connect(outsider, project, connectionId, 1001);
+    return { ws, project, connectionId };
+  }
+
+  it('is set when removing a grant removes the last project repository', async () => {
+    const { owner, ws, project } = await projectFixture(t);
+    const inst = await install(owner, ws);
+    await connect(owner, project, inst.id, 1001);
+    await connect(owner, project, inst.id, 1002);
+
+    await owner.browser
+      .put(`/api/v1/github/installations/${inst.id}/repository-access`)
+      .send({ githubRepositoryIds: [1002] })
+      .expect(204);
+    expect(await disconnectedAt(1001)).toBeInstanceOf(Date);
+    expect(await disconnectedAt(1002)).toBeNull();
+
+    // Granting and connecting again clears it.
+    await owner.browser
+      .put(`/api/v1/github/installations/${inst.id}/repository-access`)
+      .send({ githubRepositoryIds: [1001, 1002] })
+      .expect(204);
+    await connect(owner, project, inst.id, 1001);
+    expect(await disconnectedAt(1001)).toBeNull();
+  });
+
+  it('is set for each repository a workspace disconnect leaves without a project', async () => {
+    const { owner, ws, project } = await projectFixture(t);
+    const inst = await install(owner, ws);
+    await connect(owner, project, inst.id, 1001);
+    await connect(owner, project, inst.id, 1002);
+
+    await owner.browser.delete(`/api/v1/github/installations/${inst.id}`).expect(204);
+    expect(await disconnectedAt(1001)).toBeInstanceOf(Date);
+    expect(await disconnectedAt(1002)).toBeInstanceOf(Date);
+  });
+
+  it('is not set while another workspace still has the repository on a project', async () => {
+    const { owner, outsider, ws, project } = await projectFixture(t);
+    const inst = await install(owner, ws);
+    await connect(owner, project, inst.id, 1001);
+    const client = await clientWorkspace(outsider);
+
+    await owner.browser
+      .put(`/api/v1/github/installations/${inst.id}/repository-access`)
+      .send({ githubRepositoryIds: [] })
+      .expect(204);
+    expect(await disconnectedAt(1001)).toBeNull();
+    await owner.browser.delete(`/api/v1/github/installations/${inst.id}`).expect(204);
+    expect(await disconnectedAt(1001)).toBeNull();
+
+    // The client's own disconnect removes the last project repository.
+    await outsider.browser
+      .delete(`/api/v1/github/installations/${client.connectionId}`)
+      .expect(204);
+    expect(await disconnectedAt(1001)).toBeInstanceOf(Date);
   });
 });
