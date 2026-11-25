@@ -89,7 +89,6 @@ export class GithubInstallationsService {
     return {
       appConfigured: this.config.githubApp !== null,
       connections,
-      installations: connections,
     };
   }
 

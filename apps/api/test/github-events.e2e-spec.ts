@@ -803,7 +803,7 @@ describe('GitHub events across workspace connections', () => {
       )
       .expect(302);
     const list = await f.outsider.browser
-      .get(`/api/v1/github/installations?workspaceId=${ws}`)
+      .get(`/api/v1/github/connections?workspaceId=${ws}`)
       .expect(200);
     return {
       f,
@@ -811,7 +811,7 @@ describe('GitHub events across workspace connections', () => {
         ws,
         project,
         owner: f.outsider,
-        connectionId: list.body.data.installations[0].id as string,
+        connectionId: list.body.data.connections[0].id as string,
       },
     };
   }
@@ -827,13 +827,13 @@ describe('GitHub events across workspace connections', () => {
     ).body.data.task;
     expect(secondTask.key).toBe(firstTask.key);
     await other.owner.browser
-      .put(`/api/v1/github/installations/${other.connectionId}/repository-access`)
+      .put(`/api/v1/github/connections/${other.connectionId}/repository-access`)
       .send({ githubRepositoryIds: [1002] })
       .expect(204);
     const secondRepo = (
       await other.owner.browser
         .post(`/api/v1/projects/${other.project}/repositories`)
-        .send({ installationId: other.connectionId, githubRepositoryId: 1002 })
+        .send({ connectionId: other.connectionId, githubRepositoryId: 1002 })
         .expect(201)
     ).body.data.repository;
     await deliver(t, 'pull_request', pullRequestEvent('opened')).expect(202);
@@ -858,7 +858,7 @@ describe('GitHub events across workspace connections', () => {
     );
     expect(activities).toHaveLength(2);
     const visible = await f.owner.browser
-      .get(`/api/v1/github/installations/${f.installationId}/repositories`)
+      .get(`/api/v1/github/connections/${f.connectionId}/repositories`)
       .expect(200);
     expect(
       visible.body.data.every(
@@ -868,17 +868,17 @@ describe('GitHub events across workspace connections', () => {
 
     // Deliberately grant the same repository to both workspaces.
     await other.owner.browser
-      .put(`/api/v1/github/installations/${other.connectionId}/repository-access`)
+      .put(`/api/v1/github/connections/${other.connectionId}/repository-access`)
       .send({ githubRepositoryIds: [1001, 1002] })
       .expect(204);
     const shared = (
       await other.owner.browser
         .post(`/api/v1/projects/${other.project}/repositories`)
-        .send({ installationId: other.connectionId, githubRepositoryId: 1001 })
+        .send({ connectionId: other.connectionId, githubRepositoryId: 1001 })
         .expect(201)
     ).body.data.repository;
     expect(shared.id).toBe(f.repositoryId);
-    expect(shared.installationId).toBe(other.connectionId);
+    expect(shared.connectionId).toBe(other.connectionId);
     await deliver(
       t,
       'pull_request',
@@ -890,7 +890,7 @@ describe('GitHub events across workspace connections', () => {
 
     // Revoking one workspace's repository grant stops its events while the other keeps receiving.
     await f.owner.browser
-      .put(`/api/v1/github/installations/${f.installationId}/repository-access`)
+      .put(`/api/v1/github/connections/${f.connectionId}/repository-access`)
       .send({ githubRepositoryIds: [1002] })
       .expect(204);
     expect(
@@ -900,22 +900,22 @@ describe('GitHub events across workspace connections', () => {
     await deliver(t, 'push', pushEvent([commit(100)]), { deliveryId }).expect(202);
     await deliver(t, 'push', pushEvent([commit(100)]), { deliveryId }).expect(202);
     expect((await activityOf('pushed')).map((a) => a.projectId)).toEqual([other.project]);
-    expect(secondRepo.installationId).toBe(other.connectionId);
+    expect(secondRepo.connectionId).toBe(other.connectionId);
   });
 
   it('disconnects one workspace without uninstalling, preserves history, and handles global lifecycle events', async () => {
     const { f, other } = await sharedInstallation();
     await other.owner.browser
-      .put(`/api/v1/github/installations/${other.connectionId}/repository-access`)
+      .put(`/api/v1/github/connections/${other.connectionId}/repository-access`)
       .send({ githubRepositoryIds: [1001] })
       .expect(204);
     await other.owner.browser
       .post(`/api/v1/projects/${other.project}/repositories`)
-      .send({ installationId: other.connectionId, githubRepositoryId: 1001 })
+      .send({ connectionId: other.connectionId, githubRepositoryId: 1001 })
       .expect(201);
     await devTask(f);
     await deliver(t, 'pull_request', pullRequestEvent('opened')).expect(202);
-    await f.owner.browser.delete(`/api/v1/github/installations/${f.installationId}`).expect(204);
+    await f.owner.browser.delete(`/api/v1/github/connections/${f.connectionId}`).expect(204);
     expect(await t.db.select().from(githubWorkspaceConnections)).toHaveLength(1);
     expect((await t.db.select().from(githubInstallations))[0]!.status).toBe('ACTIVE');
     expect(await t.db.select().from(githubPullRequests)).toHaveLength(1);
@@ -930,9 +930,9 @@ describe('GitHub events across workspace connections', () => {
       installation: { id: GH_INSTALLATION },
     }).expect(202);
     const list = await other.owner.browser
-      .get(`/api/v1/github/installations?workspaceId=${other.ws}`)
+      .get(`/api/v1/github/connections?workspaceId=${other.ws}`)
       .expect(200);
-    expect(list.body.data.installations[0].status).toBe('SUSPENDED');
+    expect(list.body.data.connections[0].status).toBe('SUSPENDED');
     await deliver(t, 'push', pushEvent([commit(102)])).expect(202);
     expect(await activityOf('pushed')).toHaveLength(1);
     await deliver(t, 'installation', {

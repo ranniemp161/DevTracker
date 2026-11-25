@@ -1,9 +1,9 @@
 import { z } from 'zod';
 
-export const listInstallationsQuerySchema = z.object({
+export const listConnectionsQuerySchema = z.object({
   workspaceId: z.uuid({ error: 'Invalid workspace id.' }),
 });
-export type ListInstallationsQuery = z.infer<typeof listInstallationsQuerySchema>;
+export type ListConnectionsQuery = z.infer<typeof listConnectionsQuerySchema>;
 
 const githubIdSchema = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
 
@@ -21,33 +21,15 @@ export const updateGithubRepositoryAccessSchema = z.object({
 });
 export type UpdateGithubRepositoryAccessInput = z.infer<typeof updateGithubRepositoryAccessSchema>;
 
-/**
- * `POST /projects/:id/repositories`. Repositories are identified by GitHub's stable numeric ID.
- * The connection is `connectionId`; the deprecated `installationId` is still accepted (#114) and
- * is removed in #121. Both parse to `connectionId`.
- */
-export const connectRepositorySchema = z
-  .object({
-    connectionId: z.uuid({ error: 'Choose a GitHub connection.' }).optional(),
-    installationId: z.uuid({ error: 'Choose a GitHub connection.' }).optional(),
-    githubRepositoryId: z
-      .number({ error: 'Choose a repository.' })
-      .int({ error: 'Choose a repository.' })
-      .positive({ error: 'Choose a repository.' })
-      .max(Number.MAX_SAFE_INTEGER),
-  })
-  .refine((v) => v.connectionId ?? v.installationId, {
-    error: 'Choose a GitHub connection.',
-    path: ['connectionId'],
-  })
-  .refine((v) => !v.connectionId || !v.installationId || v.connectionId === v.installationId, {
-    error: 'connectionId and installationId must match.',
-    path: ['installationId'],
-  })
-  .transform((v) => ({
-    connectionId: (v.connectionId ?? v.installationId)!,
-    githubRepositoryId: v.githubRepositoryId,
-  }));
+/** `POST /projects/:id/repositories`. Repositories are identified by GitHub's stable numeric ID. */
+export const connectRepositorySchema = z.object({
+  connectionId: z.uuid({ error: 'Choose a GitHub connection.' }),
+  githubRepositoryId: z
+    .number({ error: 'Choose a repository.' })
+    .int({ error: 'Choose a repository.' })
+    .positive({ error: 'Choose a repository.' })
+    .max(Number.MAX_SAFE_INTEGER),
+});
 export type ConnectRepositoryInput = z.infer<typeof connectRepositorySchema>;
 
 /** `POST /tasks/:id/pull-requests`. */

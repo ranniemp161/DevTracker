@@ -70,12 +70,12 @@ async function install(
     state: state!,
   });
   expect(redirectOf(res).searchParams.get('github')).toBe('installed');
-  const list = await u.browser.get(`/api/v1/github/installations?workspaceId=${ws}`).expect(200);
-  const installation = list.body.data.installations.find(
+  const list = await u.browser.get(`/api/v1/github/connections?workspaceId=${ws}`).expect(200);
+  const installation = list.body.data.connections.find(
     (i: { githubInstallationId: number }) => i.githubInstallationId === ghId,
   ) as { id: string; status: string };
   await u.browser
-    .put(`/api/v1/github/installations/${installation.id}/repository-access`)
+    .put(`/api/v1/github/connections/${installation.id}/repository-access`)
     .send({ githubRepositoryIds: t.githubApp.installations.get(ghId)!.repos.map((r) => r.id) })
     .expect(204);
   return installation;
@@ -155,7 +155,7 @@ describe('GitHub App installation flow', () => {
     expect(cookieValue(setCookies(res).get('devtrack_gh_install_state'))).toBe('');
     expect(t.githubApp.revoked).toEqual(['ghu_good-code']);
 
-    const list = await owner.browser.get(`/api/v1/github/installations?workspaceId=${ws}`);
+    const list = await owner.browser.get(`/api/v1/github/connections?workspaceId=${ws}`);
     expect(list.status).toBe(200);
     const connections = [
       expect.objectContaining({
@@ -170,7 +170,6 @@ describe('GitHub App installation flow', () => {
     expect(list.body.data).toEqual({
       appConfigured: true,
       connections,
-      installations: connections,
     });
 
     const [activity] = await t.db
@@ -308,23 +307,22 @@ describe('installations and available repositories', () => {
     const { owner, admin, dev, outsider, ws } = await projectFixture(t);
     await install(owner, ws);
 
-    const res = await admin.browser.get(`/api/v1/github/installations?workspaceId=${ws}`);
+    const res = await admin.browser.get(`/api/v1/github/connections?workspaceId=${ws}`);
     expect(res.status).toBe(200);
-    expect(res.body.data.installations).toHaveLength(1);
-    await dev.browser.get(`/api/v1/github/installations?workspaceId=${ws}`).expect(403);
-    await outsider.browser.get(`/api/v1/github/installations?workspaceId=${ws}`).expect(404);
-    await owner.browser.get('/api/v1/github/installations').expect(400);
+    expect(res.body.data.connections).toHaveLength(1);
+    await dev.browser.get(`/api/v1/github/connections?workspaceId=${ws}`).expect(403);
+    await outsider.browser.get(`/api/v1/github/connections?workspaceId=${ws}`).expect(404);
+    await owner.browser.get('/api/v1/github/connections').expect(400);
   });
 
   it('reports when the GitHub App is not configured', async () => {
     const app = await createTestApp({ githubApp: null });
     try {
       const { owner, ws } = await projectFixture(app);
-      const list = await owner.browser.get(`/api/v1/github/installations?workspaceId=${ws}`);
+      const list = await owner.browser.get(`/api/v1/github/connections?workspaceId=${ws}`);
       expect(list.body.data).toEqual({
         appConfigured: false,
         connections: [],
-        installations: [],
       });
       const start = await owner.browser.get(`/api/v1/github/install?workspaceId=${ws}`).expect(302);
       expect(redirectOf(start).searchParams.get('githubError')).toBe('GITHUB_APP_NOT_CONFIGURED');
@@ -341,10 +339,10 @@ describe('installations and available repositories', () => {
     ]);
     await owner.browser
       .post(`/api/v1/projects/${project}/repositories`)
-      .send({ installationId: inst.id, githubRepositoryId: 1001 })
+      .send({ connectionId: inst.id, githubRepositoryId: 1001 })
       .expect(201);
 
-    const res = await admin.browser.get(`/api/v1/github/installations/${inst.id}/repositories`);
+    const res = await admin.browser.get(`/api/v1/github/connections/${inst.id}/repositories`);
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual([
       {
@@ -359,9 +357,9 @@ describe('installations and available repositories', () => {
     ]);
 
     // Unconnected repository names are only shown to admins.
-    await dev.browser.get(`/api/v1/github/installations/${inst.id}/repositories`).expect(403);
-    await outsider.browser.get(`/api/v1/github/installations/${inst.id}/repositories`).expect(404);
-    await owner.browser.get('/api/v1/github/installations/nope/repositories').expect(404);
+    await dev.browser.get(`/api/v1/github/connections/${inst.id}/repositories`).expect(403);
+    await outsider.browser.get(`/api/v1/github/connections/${inst.id}/repositories`).expect(404);
+    await owner.browser.get('/api/v1/github/connections/nope/repositories').expect(404);
   });
 
   it('refreshes stored names when a repository is renamed on GitHub', async () => {
@@ -369,12 +367,12 @@ describe('installations and available repositories', () => {
     const inst = await install(owner, ws);
     await owner.browser
       .post(`/api/v1/projects/${project}/repositories`)
-      .send({ installationId: inst.id, githubRepositoryId: 1001 })
+      .send({ connectionId: inst.id, githubRepositoryId: 1001 })
       .expect(201);
 
     const gh = t.githubApp.installations.get(111)!;
     gh.repos[0] = repo(1001, 'acme-org/api-v2', { defaultBranch: 'trunk' });
-    await owner.browser.get(`/api/v1/github/installations/${inst.id}/repositories`).expect(200);
+    await owner.browser.get(`/api/v1/github/connections/${inst.id}/repositories`).expect(200);
 
     const connected = await owner.browser.get(`/api/v1/projects/${project}/repositories`);
     expect(connected.body.data[0]).toMatchObject({
@@ -392,7 +390,7 @@ describe('installations and available repositories', () => {
       const inst = await install(owner, ws);
       t.githubApp.installations.get(111)!.unavailable = status;
 
-      const res = await owner.browser.get(`/api/v1/github/installations/${inst.id}/repositories`);
+      const res = await owner.browser.get(`/api/v1/github/connections/${inst.id}/repositories`);
       expect(res.status).toBe(409);
       expect(res.body.error.code).toBe('GITHUB_INSTALLATION_UNAVAILABLE');
       const [row] = await t.db.select().from(githubInstallations);
@@ -400,7 +398,7 @@ describe('installations and available repositories', () => {
 
       // Later calls fail fast without asking GitHub again.
       t.githubApp.installations.get(111)!.unavailable = undefined;
-      await owner.browser.get(`/api/v1/github/installations/${inst.id}/repositories`).expect(409);
+      await owner.browser.get(`/api/v1/github/connections/${inst.id}/repositories`).expect(409);
     },
   );
 });
@@ -412,12 +410,11 @@ describe('project repositories', () => {
 
     const res = await admin.browser
       .post(`/api/v1/projects/${project}/repositories`)
-      .send({ installationId: inst.id, githubRepositoryId: 1001 });
+      .send({ connectionId: inst.id, githubRepositoryId: 1001 });
     expect(res.status).toBe(201);
     expect(res.body.data.repository).toEqual({
       id: expect.any(String),
       connectionId: inst.id,
-      installationId: inst.id,
       installationStatus: 'ACTIVE',
       githubRepositoryId: 1001,
       fullName: 'acme-org/api',
@@ -454,7 +451,7 @@ describe('project repositories', () => {
   it('only lets workspace admins connect repositories', async () => {
     const { owner, dev, outsider, ws, project } = await projectFixture(t);
     const inst = await install(owner, ws);
-    const body = { installationId: inst.id, githubRepositoryId: 1001 };
+    const body = { connectionId: inst.id, githubRepositoryId: 1001 };
     await dev.browser.post(`/api/v1/projects/${project}/repositories`).send(body).expect(403);
     await outsider.browser.post(`/api/v1/projects/${project}/repositories`).send(body).expect(404);
   });
@@ -465,15 +462,15 @@ describe('project repositories', () => {
     const post = (body: unknown) =>
       owner.browser.post(`/api/v1/projects/${project}/repositories`).send(body as object);
 
-    const invalid = await post({ installationId: inst.id, githubRepositoryId: '1001' });
+    const invalid = await post({ connectionId: inst.id, githubRepositoryId: '1001' });
     expect(invalid.status).toBe(400);
 
-    const missing = await post({ installationId: inst.id, githubRepositoryId: 9999 });
+    const missing = await post({ connectionId: inst.id, githubRepositoryId: 9999 });
     expect(missing.status).toBe(403);
     expect(missing.body.error.code).toBe('FORBIDDEN');
 
-    await post({ installationId: inst.id, githubRepositoryId: 1001 }).expect(201);
-    const dup = await post({ installationId: inst.id, githubRepositoryId: 1001 });
+    await post({ connectionId: inst.id, githubRepositoryId: 1001 }).expect(201);
+    const dup = await post({ connectionId: inst.id, githubRepositoryId: 1001 });
     expect(dup.status).toBe(409);
     expect(dup.body.error.code).toBe('REPOSITORY_ALREADY_CONNECTED');
     expect(await t.db.select().from(githubRepositories)).toHaveLength(1);
@@ -488,7 +485,7 @@ describe('project repositories', () => {
 
     const res = await owner.browser
       .post(`/api/v1/projects/${project}/repositories`)
-      .send({ installationId: foreign.id, githubRepositoryId: 1001 });
+      .send({ connectionId: foreign.id, githubRepositoryId: 1001 });
     expect(res.status).toBe(404);
     expect(await t.db.select().from(githubRepositories)).toEqual([]);
   });
@@ -496,7 +493,7 @@ describe('project repositories', () => {
   it('refuses suspended installations and archived projects', async () => {
     const { owner, ws, project } = await projectFixture(t);
     const inst = await install(owner, ws);
-    const body = { installationId: inst.id, githubRepositoryId: 1001 };
+    const body = { connectionId: inst.id, githubRepositoryId: 1001 };
 
     t.githubApp.installations.get(111)!.unavailable = 'SUSPENDED';
     const suspended = await owner.browser
@@ -522,7 +519,7 @@ describe('project repositories', () => {
         .send({ name: 'Mobile', key: 'MOB' })
         .expect(201)
     ).body.data.project.id;
-    const body = { installationId: inst.id, githubRepositoryId: 1001 };
+    const body = { connectionId: inst.id, githubRepositoryId: 1001 };
     const first = await owner.browser
       .post(`/api/v1/projects/${project}/repositories`)
       .send(body)
@@ -534,9 +531,7 @@ describe('project repositories', () => {
       .expect(201);
     expect(again.body.data.repository.id).toBe(repoId);
 
-    const available = await owner.browser.get(
-      `/api/v1/github/installations/${inst.id}/repositories`,
-    );
+    const available = await owner.browser.get(`/api/v1/github/connections/${inst.id}/repositories`);
     expect(available.body.data[0].connectedProjectIds.sort()).toEqual([project, second].sort());
 
     // Members cannot disconnect.
@@ -588,7 +583,7 @@ describe('shared GitHub workspace connections', () => {
       .send({ workspaceId: other, githubInstallationId: 111 })
       .expect(403);
     await outsider.browser
-      .get(`/api/v1/github/installations/${first.id}/repository-access`)
+      .get(`/api/v1/github/connections/${first.id}/repository-access`)
       .expect(404);
     t.githubApp.codes.set('existing-code', [111]);
     t.githubApp.userRepositoryIds.set('existing-code', [1002]);
@@ -618,16 +613,16 @@ describe('shared GitHub workspace connections', () => {
       .send({ workspaceId: other, githubInstallationId: 111 })
       .expect(403);
     const list = await outsider.browser
-      .get(`/api/v1/github/installations?workspaceId=${other}`)
+      .get(`/api/v1/github/connections?workspaceId=${other}`)
       .expect(200);
-    const second: string = list.body.data.installations[0].id;
+    const second: string = list.body.data.connections[0].id;
     expect(second).not.toBe(first.id);
     expect(await t.db.select().from(githubInstallations)).toHaveLength(1);
     expect(
-      (await outsider.browser.get(`/api/v1/github/installations/${second}/repositories`)).body.data,
+      (await outsider.browser.get(`/api/v1/github/connections/${second}/repositories`)).body.data,
     ).toEqual([]);
     const access = await outsider.browser
-      .get(`/api/v1/github/installations/${second}/repository-access`)
+      .get(`/api/v1/github/connections/${second}/repository-access`)
       .expect(200);
     expect(access.body.data).toEqual([
       expect.objectContaining({
@@ -638,23 +633,23 @@ describe('shared GitHub workspace connections', () => {
     ]);
     // The installation can read 1001, but this GitHub user cannot delegate it.
     await outsider.browser
-      .put(`/api/v1/github/installations/${second}/repository-access`)
+      .put(`/api/v1/github/connections/${second}/repository-access`)
       .send({ githubRepositoryIds: [1001] })
       .expect(403);
     await outsider.browser
       .post(`/api/v1/projects/${project}/repositories`)
-      .send({ installationId: second, githubRepositoryId: 1002 })
+      .send({ connectionId: second, githubRepositoryId: 1002 })
       .expect(403);
     await outsider.browser
-      .put(`/api/v1/github/installations/${second}/repository-access`)
+      .put(`/api/v1/github/connections/${second}/repository-access`)
       .send({ githubRepositoryIds: [1002] })
       .expect(204);
     await outsider.browser
       .post(`/api/v1/projects/${project}/repositories`)
-      .send({ installationId: second, githubRepositoryId: 1002 })
+      .send({ connectionId: second, githubRepositoryId: 1002 })
       .expect(201);
     const firstAvailable = await owner.browser
-      .get(`/api/v1/github/installations/${first.id}/repositories`)
+      .get(`/api/v1/github/connections/${first.id}/repositories`)
       .expect(200);
     expect(
       firstAvailable.body.data.every(
@@ -710,7 +705,7 @@ describe('shared GitHub workspace connections', () => {
   it('validates repository allowlists and restricts connection management to workspace admins', async () => {
     const { owner, dev, outsider, ws } = await projectFixture(t);
     const installation = await install(owner, ws);
-    const path = `/api/v1/github/installations/${installation.id}`;
+    const path = `/api/v1/github/connections/${installation.id}`;
     for (const user of [dev, outsider]) {
       const status = user === dev ? 403 : 404;
       await user.browser
@@ -734,7 +729,7 @@ describe('shared GitHub workspace connections', () => {
   it('does not delegate an installer’s ungranted GitHub repository choices to other workspace admins', async () => {
     const { owner, admin, ws } = await projectFixture(t);
     const installation = await install(owner, ws);
-    const path = `/api/v1/github/installations/${installation.id}`;
+    const path = `/api/v1/github/connections/${installation.id}`;
     await owner.browser
       .put(`${path}/repository-access`)
       .send({ githubRepositoryIds: [1001] })
@@ -793,7 +788,7 @@ describe('the disconnected mark on a repository', () => {
   ) =>
     u.browser
       .post(`/api/v1/projects/${project}/repositories`)
-      .send({ installationId: connectionId, githubRepositoryId })
+      .send({ connectionId: connectionId, githubRepositoryId })
       .expect(201);
 
   /** A second workspace, owned by `outsider`, connected to installation 111 with 1001 granted. */
@@ -813,10 +808,10 @@ describe('the disconnected mark on a repository', () => {
       .send({ workspaceId: ws, githubInstallationId: 111 })
       .expect(201);
     const connectionId: string = (
-      await outsider.browser.get(`/api/v1/github/installations?workspaceId=${ws}`).expect(200)
-    ).body.data.installations[0].id;
+      await outsider.browser.get(`/api/v1/github/connections?workspaceId=${ws}`).expect(200)
+    ).body.data.connections[0].id;
     await outsider.browser
-      .put(`/api/v1/github/installations/${connectionId}/repository-access`)
+      .put(`/api/v1/github/connections/${connectionId}/repository-access`)
       .send({ githubRepositoryIds: [1001] })
       .expect(204);
     await connect(outsider, project, connectionId, 1001);
@@ -830,7 +825,7 @@ describe('the disconnected mark on a repository', () => {
     await connect(owner, project, inst.id, 1002);
 
     await owner.browser
-      .put(`/api/v1/github/installations/${inst.id}/repository-access`)
+      .put(`/api/v1/github/connections/${inst.id}/repository-access`)
       .send({ githubRepositoryIds: [1002] })
       .expect(204);
     expect(await disconnectedAt(1001)).toBeInstanceOf(Date);
@@ -838,7 +833,7 @@ describe('the disconnected mark on a repository', () => {
 
     // Granting and connecting again clears it.
     await owner.browser
-      .put(`/api/v1/github/installations/${inst.id}/repository-access`)
+      .put(`/api/v1/github/connections/${inst.id}/repository-access`)
       .send({ githubRepositoryIds: [1001, 1002] })
       .expect(204);
     await connect(owner, project, inst.id, 1001);
@@ -851,7 +846,7 @@ describe('the disconnected mark on a repository', () => {
     await connect(owner, project, inst.id, 1001);
     await connect(owner, project, inst.id, 1002);
 
-    await owner.browser.delete(`/api/v1/github/installations/${inst.id}`).expect(204);
+    await owner.browser.delete(`/api/v1/github/connections/${inst.id}`).expect(204);
     expect(await disconnectedAt(1001)).toBeInstanceOf(Date);
     expect(await disconnectedAt(1002)).toBeInstanceOf(Date);
   });
@@ -863,17 +858,15 @@ describe('the disconnected mark on a repository', () => {
     const client = await clientWorkspace(outsider);
 
     await owner.browser
-      .put(`/api/v1/github/installations/${inst.id}/repository-access`)
+      .put(`/api/v1/github/connections/${inst.id}/repository-access`)
       .send({ githubRepositoryIds: [] })
       .expect(204);
     expect(await disconnectedAt(1001)).toBeNull();
-    await owner.browser.delete(`/api/v1/github/installations/${inst.id}`).expect(204);
+    await owner.browser.delete(`/api/v1/github/connections/${inst.id}`).expect(204);
     expect(await disconnectedAt(1001)).toBeNull();
 
     // The client's own disconnect removes the last project repository.
-    await outsider.browser
-      .delete(`/api/v1/github/installations/${client.connectionId}`)
-      .expect(204);
+    await outsider.browser.delete(`/api/v1/github/connections/${client.connectionId}`).expect(204);
     expect(await disconnectedAt(1001)).toBeInstanceOf(Date);
   });
 });

@@ -887,8 +887,8 @@ Base path:
 |---|---|---|
 | GET | `/github/install` | Start GitHub App installation (`?workspaceId=`; browser redirect) |
 | GET | `/github/install/callback` | Complete installation callback |
-| GET | `/github/installations` | List workspace installations (`?workspaceId=`; returns `{ appConfigured, installations }`, M5) |
-| GET | `/github/installations/:id/repositories` | List available repositories |
+| GET | `/github/connections` | List the workspace's GitHub connections (`?workspaceId=`; returns `{ appConfigured, connections }`, M5; renamed from `/github/installations` in #111) |
+| GET | `/github/connections/:id/repositories` | List available repositories |
 | POST | `/projects/:id/repositories` | Connect selected repository |
 | GET | `/projects/:id/repositories` | List connected repositories |
 | DELETE | `/projects/:id/repositories/:repoId` | Disconnect repository |
