@@ -9,16 +9,12 @@ import {
   githubPullRequests,
   githubRepositories,
   githubReviews,
-  githubWorkspaceConnections,
-  githubWorkspaceRepositories,
   inArray,
   isNull,
   lt,
   lte,
   ne,
   or,
-  projectRepositories,
-  projects,
   sql,
   taskAssignees,
   taskDonePrompts,
@@ -37,6 +33,7 @@ import {
   numbersForProject,
   TaskStatusAutomation,
 } from '../../tasks/task-status-automation.service';
+import { RepositoryAccess, type Target } from '../access/repository-access.service';
 import { GithubChatFeed } from './github-chat-feed.service';
 import {
   installationEventSchema,
@@ -59,18 +56,6 @@ export interface ProcessResult {
 
 type RepoRow = typeof githubRepositories.$inferSelect;
 type PrRow = typeof githubPullRequests.$inferSelect;
-interface TargetProject {
-  id: string;
-  workspaceId: string;
-  key: string;
-  /** GitHub events this project posts to its chat (0014). */
-  chatGithubEvents: string[];
-}
-/** A connected repository and the (non-archived) projects that receive its activity. */
-interface Target {
-  repo: RepoRow;
-  projects: TargetProject[];
-}
 
 const ignored = (reason: string): ProcessResult => ({ status: 'IGNORED', reason });
 const PROCESSED: ProcessResult = { status: 'PROCESSED' };
@@ -98,6 +83,7 @@ export class GithubEventProcessor {
     private readonly projectAccess: ProjectAccessService,
     private readonly chat: GithubChatFeed,
     private readonly automation: TaskStatusAutomation,
+    private readonly access: RepositoryAccess,
   ) {}
 
   /**
@@ -112,7 +98,7 @@ export class GithubEventProcessor {
     githubRepositoryId: number,
     pullRequests: PullRequestPayload[],
   ): Promise<number> {
-    const target = await this.target(tx, githubInstallationId, githubRepositoryId);
+    const target = await this.access.targets(tx, githubInstallationId, githubRepositoryId);
     if (!target) return 0;
     for (const payload of pullRequests) {
       const pr = await this.upsertPullRequest(tx, target.repo, payload);
@@ -161,7 +147,7 @@ export class GithubEventProcessor {
   private async push(tx: Transaction, p: z.infer<typeof pushEventSchema>): Promise<ProcessResult> {
     if (!p.ref.startsWith('refs/heads/')) return ignored('not a branch push');
     if (p.deleted) return ignored('branch deleted');
-    const target = await this.target(tx, p.installation.id, p.repository.id);
+    const target = await this.access.targets(tx, p.installation.id, p.repository.id);
     if (!target) return ignored('repository not connected');
     if (p.commits.length === 0) return ignored('no commits');
 
@@ -251,7 +237,7 @@ export class GithubEventProcessor {
       'converted_to_draft',
     ];
     if (!handled.includes(p.action)) return ignored(`pull_request.${p.action} is not handled`);
-    const target = await this.target(tx, p.installation.id, p.repository.id);
+    const target = await this.access.targets(tx, p.installation.id, p.repository.id);
     if (!target) return ignored('repository not connected');
 
     const pr = await this.upsertPullRequest(tx, target.repo, p.pull_request);
@@ -326,7 +312,7 @@ export class GithubEventProcessor {
     if (!['approved', 'changes_requested', 'commented'].includes(state)) {
       return ignored(`review state ${state} is not handled`);
     }
-    const target = await this.target(tx, p.installation.id, p.repository.id);
+    const target = await this.access.targets(tx, p.installation.id, p.repository.id);
     if (!target) return ignored('repository not connected');
 
     // The review payload's pull request may be older than what we have: only fill gaps.
@@ -387,7 +373,7 @@ export class GithubEventProcessor {
     p: z.infer<typeof releaseEventSchema>,
   ): Promise<ProcessResult> {
     if (p.action !== 'published') return ignored(`release.${p.action} is not handled`);
-    const target = await this.target(tx, p.installation.id, p.repository.id);
+    const target = await this.access.targets(tx, p.installation.id, p.repository.id);
     if (!target) return ignored('repository not connected');
     for (const project of target.projects) {
       const actor = await this.actor(tx, p.sender, project.workspaceId);
@@ -425,7 +411,7 @@ export class GithubEventProcessor {
     p: z.infer<typeof checkSuiteEventSchema>,
   ): Promise<ProcessResult> {
     if (p.action !== 'completed') return ignored(`check_suite.${p.action} is not handled`);
-    const target = await this.target(tx, p.installation.id, p.repository.id);
+    const target = await this.access.targets(tx, p.installation.id, p.repository.id);
     if (!target) return ignored('repository not connected');
     const suite = p.check_suite;
 
@@ -467,7 +453,7 @@ export class GithubEventProcessor {
     // Some apps add a run that is already finished to a suite that already completed (Vercel's
     // preview comments). GitHub sends no new suite result for it, so it must not reopen the suite.
     if (p.check_run.status === 'completed') return ignored('check run was created completed');
-    const target = await this.target(tx, p.installation.id, p.repository.id);
+    const target = await this.access.targets(tx, p.installation.id, p.repository.id);
     if (!target) return ignored('repository not connected');
     const run = p.check_run;
     const startedAt = date(run.started_at) ?? new Date();
@@ -610,11 +596,7 @@ export class GithubEventProcessor {
           .update(githubInstallations)
           .set({ status: 'REMOVED' })
           .where(eq(githubInstallations.id, installation.id));
-        const repos = await tx
-          .select()
-          .from(githubRepositories)
-          .where(eq(githubRepositories.installationId, installation.id));
-        for (const repo of repos) await this.disconnect(tx, repo, 'app_uninstalled');
+        await this.access.revokeOnGitHub(tx, installation, 'all', 'app_uninstalled');
         return PROCESSED;
       }
       case 'suspend':
@@ -641,129 +623,23 @@ export class GithubEventProcessor {
     if (p.action !== 'removed')
       return ignored(`installation_repositories.${p.action} is not handled`);
     if (p.repositories_removed.length === 0) return ignored('no repositories removed');
-    const repos = await tx
-      .select({ repo: githubRepositories })
-      .from(githubRepositories)
-      .innerJoin(githubInstallations, eq(githubInstallations.id, githubRepositories.installationId))
-      .where(
-        and(
-          eq(githubInstallations.githubInstallationId, p.installation.id),
-          inArray(
-            githubRepositories.githubRepositoryId,
-            p.repositories_removed.map((r) => r.id),
-          ),
-        ),
-      );
-    if (repos.length === 0) return ignored('removed repositories were not connected');
-    for (const { repo } of repos) await this.disconnect(tx, repo, 'access_removed');
+    const [installation] = await tx
+      .select()
+      .from(githubInstallations)
+      .where(eq(githubInstallations.githubInstallationId, p.installation.id));
+    const revoked = installation
+      ? await this.access.revokeOnGitHub(
+          tx,
+          installation,
+          p.repositories_removed.map((r) => r.id),
+          'access_removed',
+        )
+      : 0;
+    if (revoked === 0) return ignored('removed repositories were not connected');
     return PROCESSED;
   }
 
-  /**
-   * GitHub no longer lets DevTrack read this repository: disconnect it from every project and
-   * stop accepting its events. The repository row and its history are kept (§11.9).
-   */
-  private async disconnect(tx: Transaction, repo: RepoRow, reason: string): Promise<void> {
-    const connections = await tx
-      .select({ id: githubWorkspaceConnections.id })
-      .from(githubWorkspaceConnections)
-      .where(eq(githubWorkspaceConnections.installationId, repo.installationId));
-    if (connections.length)
-      await tx.delete(githubWorkspaceRepositories).where(
-        and(
-          inArray(
-            githubWorkspaceRepositories.connectionId,
-            connections.map((c) => c.id),
-          ),
-          eq(githubWorkspaceRepositories.githubRepositoryId, repo.githubRepositoryId),
-        ),
-      );
-    const removed = await tx
-      .delete(projectRepositories)
-      .where(eq(projectRepositories.repositoryId, repo.id))
-      .returning({ projectId: projectRepositories.projectId });
-    if (!repo.disconnectedAt) {
-      await tx
-        .update(githubRepositories)
-        .set({ disconnectedAt: new Date() })
-        .where(eq(githubRepositories.id, repo.id));
-    }
-    if (removed.length === 0) return;
-    const affected = await tx
-      .select({ id: projects.id, workspaceId: projects.workspaceId })
-      .from(projects)
-      .where(
-        inArray(
-          projects.id,
-          removed.map((r) => r.projectId),
-        ),
-      );
-    for (const project of affected) {
-      await this.events.activity(tx, {
-        workspaceId: project.workspaceId,
-        projectId: project.id,
-        actor: null,
-        entity: { type: 'project', id: project.id },
-        action: 'project.repository_disconnected',
-        metadata: { repository: { id: repo.id, fullName: repo.fullName }, reason },
-        event: { type: 'project.repository_disconnected', payload: { repositoryId: repo.id } },
-      });
-    }
-  }
-
   // --------------------------------------------------------------- helpers
-
-  /**
-   * The repository, if it is currently connected to at least one project. Activity goes only to
-   * non-archived projects (archived projects are read-only).
-   */
-  private async target(
-    tx: Transaction,
-    githubInstallationId: number,
-    githubRepositoryId: number,
-  ): Promise<Target | null> {
-    const [row] = await tx
-      .select({ repo: githubRepositories })
-      .from(githubRepositories)
-      .innerJoin(githubInstallations, eq(githubInstallations.id, githubRepositories.installationId))
-      .where(
-        and(
-          eq(githubInstallations.githubInstallationId, githubInstallationId),
-          eq(githubInstallations.status, 'ACTIVE'),
-          eq(githubRepositories.githubRepositoryId, githubRepositoryId),
-          isNull(githubRepositories.disconnectedAt),
-        ),
-      );
-    if (!row) return null;
-    const connected = await tx
-      .select({
-        id: projects.id,
-        workspaceId: projects.workspaceId,
-        key: projects.key,
-        chatGithubEvents: projects.chatGithubEvents,
-      })
-      .from(projectRepositories)
-      .innerJoin(projects, eq(projects.id, projectRepositories.projectId))
-      .innerJoin(
-        githubWorkspaceConnections,
-        and(
-          eq(githubWorkspaceConnections.installationId, row.repo.installationId),
-          eq(githubWorkspaceConnections.workspaceId, projects.workspaceId),
-        ),
-      )
-      .innerJoin(
-        githubWorkspaceRepositories,
-        and(
-          eq(githubWorkspaceRepositories.connectionId, githubWorkspaceConnections.id),
-          eq(githubWorkspaceRepositories.githubRepositoryId, row.repo.githubRepositoryId),
-        ),
-      )
-      .where(
-        and(eq(projectRepositories.repositoryId, row.repo.id), ne(projects.status, 'ARCHIVED')),
-      );
-    if (connected.length === 0) return null;
-    return { repo: row.repo, projects: connected };
-  }
 
   /**
    * Inserts or refreshes a pull request. Deliveries can arrive out of order, so an existing row

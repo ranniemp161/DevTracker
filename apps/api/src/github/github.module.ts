@@ -3,6 +3,7 @@ import { AuthModule } from '../auth/auth.module';
 import { ProjectsModule } from '../projects/projects.module';
 import { TasksModule } from '../tasks/tasks.module';
 import { WorkspacesModule } from '../workspaces/workspaces.module';
+import { RepositoryAccess } from './access/repository-access.service';
 import { GithubAppClient } from './github-app.client';
 import { GithubInstallationsController } from './installations/installations.controller';
 import { GithubInstallationsService } from './installations/installations.service';
@@ -30,6 +31,7 @@ import { WebhooksController } from './webhooks/webhooks.controller';
   ],
   providers: [
     GithubAppClient,
+    RepositoryAccess,
     GithubInstallationsService,
     ProjectRepositoriesService,
     PullRequestsService,
