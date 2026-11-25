@@ -19,3 +19,17 @@ Any change to `apps/website` UI **must** follow [`design/SPEC.md`](design/SPEC.m
 ```
 pnpm format && pnpm lint && pnpm typecheck && pnpm --filter @devtrack/website build
 ```
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues in ranniemp161/DevTracker, via the `gh` CLI. See `Docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default role labels (needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix). See `Docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one root `GLOSSARY.md`; decision records in `Docs/decisions/`. See `Docs/agents/domain.md`.
