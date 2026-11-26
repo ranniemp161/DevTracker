@@ -49,3 +49,44 @@ Constraints:
 - **PRs:** one PR per item, based on `main`.
 
 Done: #94 (item 3), #95 and #97 (item 2, including board tasks), #96 (item 1).
+
+## Response sizes on the board page — 2026-11-26 (#110)
+
+Measured on production, signed in, with a one-off console snippet that reads `transferSize` and `decodedBodySize` from `performance.getEntriesByType('resource')`. No code was shipped for it. The buffer covers the whole tab session: sign-in, the board, and two task details opened from it. That is 66 API calls with ~58 KB transferred in total.
+
+| Endpoint                                                                                                                                              | Calls    | Transferred (KB) | Decoded (KB) |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ---------------- | ------------ |
+| `tasks/:id/timeline?kind=all&limit=50`                                                                                                                | 2        | 2.2              | 15.3         |
+| `projects/:id/tasks?limit=200` (board, both sorts)                                                                                                    | 4        | 1.7              | 5.8          |
+| `workspaces/:id/projects`                                                                                                                             | 4        | 1.6              | 5.6          |
+| `tasks/:id/checklist`                                                                                                                                 | 2        | 1.0              | 2.0          |
+| `projects/:id/milestones`                                                                                                                             | 4        | 0.9              | 1.4          |
+| `tasks/:id/time-entries`                                                                                                                              | 2        | 0.7              | 1.3          |
+| `tasks/:id`                                                                                                                                           | 2        | 1.0              | 1.2          |
+| `projects/:id`, `tasks/:id/pull-requests`                                                                                                             | 4, 2     | 1.0–1.1          | 0.8          |
+| `auth/me`                                                                                                                                             | 2        | 0.4–1.0          | 0.1–0.7      |
+| `workspaces/:id/labels`, `chat/unread`                                                                                                                | 4, 5     | 0.9–1.0          | 0.6–0.7      |
+| Every other call (members, repositories, attachments, realtime token, workspace, time in status, unread count, active timer, done prompts, relations) | 1–9 each | 0.4–0.8          | 0.1–0.5      |
+
+**What this shows:**
+
+- **No endpoint is oversized.**
+  - The largest is the task timeline: 15.3 KB decoded, 2.2 KB after compression.
+  - Every board call is under 6 KB decoded and under 2 KB on the wire.
+  - For most calls, response headers weigh more than the body.
+  - No follow-up issues to trim payloads.
+- **Bytes don't matter here; round trips do.**
+  - A typical call takes ~270–670 ms whatever its size, which matches the geography finding above.
+  - A few calls took 3–6 s: `auth/me` 5.7 s (the first call of the session), `tasks/:id/relations` 4.0 s, `chat/unread` 3.5 s and `projects/:id/milestones` 3.2 s. This looks like function cold starts, but it wasn't investigated.
+- **Repeated calls are by design, not overfetching.**
+  - Endpoints that appear 4–9 times were refreshed once per page change.
+  - `useApiQuery` revalidates on mount, the notification bell refreshes its count on each navigation, and the timer and chat unread refresh on focus.
+  - Each refresh is a 0.4–1.7 KB response.
+- **Caveat:** this was a small project. The board's task list grows with every task, so measure it again on a project with a few hundred tasks before relying on these numbers there.
+
+**Verdict on TanStack Query and tRPC:** neither is worth adopting now.
+
+- tRPC changes typing, not payload shape.
+- The payloads are already small.
+- `api-cache.ts` already covers what TanStack Query would add for us: stale-while-revalidate, sharing requests in flight, an LRU cap, and refreshing after writes and realtime events.
+- If TanStack Query is adopted later, put it behind the existing `useApiQuery` interface so its callers don't change.
