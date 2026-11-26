@@ -16,6 +16,8 @@ export const users = pgTable(
     passwordHash: text('password_hash'),
     emailVerifiedAt: timestamptz('email_verified_at'),
     avatarUrl: text('avatar_url'),
+    /** 0023 §7: display only, e.g. "Engineering manager"; it grants nothing. */
+    jobTitle: text('job_title'),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
     updatedAt: timestamptz('updated_at')
       .notNull()

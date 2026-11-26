@@ -32,6 +32,9 @@ import {
   UsersIcon,
 } from '@/components/icons';
 import { Menu, MenuGroup, MenuItem, MenuLink, MenuSeparator } from '@/components/menu';
+import { api, ApiError } from '@/lib/api';
+import { useSession } from './session-context';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Avatar, avatarTone } from '@/components/ui';
 import { CHOOSE_WORKSPACE_PARAM } from '@/lib/last-workspace';
 import {
@@ -562,11 +565,17 @@ function UserRow({ user, onLogout }: { user: PublicUser; onLogout: () => void })
   // The choice lives in localStorage, which the server can't see: read it on the client.
   // The sidebar renders only in the browser (after the session loads), so this is safe.
   const [theme, setTheme] = useState<ThemeChoice>(readThemeChoice);
+  const [editingTitle, setEditingTitle] = useState(false);
 
   return (
     <div className="flex items-center gap-2.5 border-t border-line px-2 pt-3">
       <Avatar name={user.username} url={user.avatarUrl} seed={user.id} size="sm" />
-      <span className="min-w-0 flex-1 truncate text-sm text-fg-secondary">@{user.username}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm text-fg-secondary">@{user.username}</span>
+        {user.jobTitle ? (
+          <span className="block truncate text-xs text-fg-muted">{user.jobTitle}</span>
+        ) : null}
+      </span>
       <Menu
         label="Account"
         align="end"
@@ -589,9 +598,56 @@ function UserRow({ user, onLogout }: { user: PublicUser; onLogout: () => void })
           ))}
         </MenuGroup>
         <MenuSeparator />
+        <MenuItem onSelect={() => setEditingTitle(true)}>Job title…</MenuItem>
         <MenuItem onSelect={onLogout}>Sign out</MenuItem>
       </Menu>
+      {editingTitle ? (
+        <JobTitleDialog current={user.jobTitle} onClose={() => setEditingTitle(false)} />
+      ) : null}
     </div>
+  );
+}
+
+/** Sets or clears the display-only job title (decision record 0023 §7). */
+function JobTitleDialog({ current, onClose }: { current: string | null; onClose: () => void }) {
+  const { reloadUser } = useSession();
+  const [value, setValue] = useState(current ?? '');
+  const [error, setError] = useState<string | null>(null);
+  const inputId = useId();
+
+  async function save() {
+    setError(null);
+    try {
+      await api('/auth/me', { method: 'PATCH', body: { jobTitle: value } });
+      reloadUser();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save your job title.');
+    }
+  }
+
+  return (
+    <ConfirmDialog
+      open
+      title="Job title"
+      tone="primary"
+      confirmLabel="Save"
+      onConfirm={() => void save()}
+      onCancel={onClose}
+    >
+      <label htmlFor={inputId} className="mb-1.5 block text-sm text-fg-secondary">
+        Shown next to your name, for example &ldquo;Engineering manager&rdquo;. It doesn&apos;t
+        change what you can do. Leave it empty to remove it.
+      </label>
+      <input
+        id={inputId}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        maxLength={80}
+        className="h-9 w-full rounded-control border border-line-control bg-surface px-2.5 text-sm focus-visible:border-primary"
+      />
+      {error ? <p className="mt-1.5 text-sm text-danger">{error}</p> : null}
+    </ConfirmDialog>
   );
 }
 

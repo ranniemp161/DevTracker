@@ -30,6 +30,8 @@ export interface WorkspaceMemberUser {
   username: string;
   email: string;
   avatarUrl: string | null;
+  /** Display only (0023 §7). */
+  jobTitle: string | null;
 }
 
 export interface WorkspaceMember {

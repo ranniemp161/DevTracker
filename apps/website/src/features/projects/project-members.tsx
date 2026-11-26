@@ -50,6 +50,9 @@ export function ProjectMembers() {
             <div className="min-w-0 flex-1">
               <p className="flex items-center gap-2 text-sm font-medium">
                 <span className="truncate">@{m.user.username}</span>
+                {m.user.jobTitle ? (
+                  <span className="truncate font-normal text-fg-muted">{m.user.jobTitle}</span>
+                ) : null}
                 {m.role === 'lead' ? <Badge tone="blue">Lead</Badge> : null}
               </p>
               <p className="truncate text-sm text-fg-subtle">{m.user.email}</p>

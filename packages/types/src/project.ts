@@ -62,7 +62,7 @@ export interface Project {
   /** Internal triage is in effect and the viewer isn't a lead or admin: they propose tasks. */
   viewerMustPropose: boolean;
   /** The project's leads (0023 §2), by username. */
-  leads: UserRef[];
+  leads: (UserRef & { jobTitle: string | null })[];
   createdAt: string;
   updatedAt: string;
 }
@@ -71,7 +71,8 @@ export interface Project {
 export type ProjectMemberRole = 'lead' | 'member';
 
 export interface ProjectMember {
-  user: UserRef & { email: string };
+  /** `jobTitle` is display only (0023 §7). */
+  user: UserRef & { email: string; jobTitle: string | null };
   role: ProjectMemberRole;
   addedAt: string;
 }

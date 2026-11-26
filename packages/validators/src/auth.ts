@@ -94,3 +94,14 @@ export function safeRedirectPath(value: unknown, fallback = '/'): string {
   }
   return value;
 }
+
+/** `PATCH /auth/me` (0023 §7): an empty string or null clears the job title. */
+export const updateMeSchema = z.object({
+  jobTitle: z
+    .string()
+    .trim()
+    .max(80, { error: 'Job title must be at most 80 characters.' })
+    .nullable()
+    .transform((v) => v || null),
+});
+export type UpdateMeInput = z.infer<typeof updateMeSchema>;

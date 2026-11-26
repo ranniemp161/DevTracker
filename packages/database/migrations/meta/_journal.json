@@ -183,6 +183,13 @@
       "when": 1795712787614,
       "tag": "0025_task_blocked",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1795714234662,
+      "tag": "0026_job_title",
+      "breakpoints": true
     }
   ]
 }

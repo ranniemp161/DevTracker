@@ -74,8 +74,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   const reloadWorkspaces = usesFallback ? reloadFallback : reloadMe;
   const session = useMemo<Session | null>(
     () =>
-      me.data ? { user: me.data.user, workspaces: workspaceList ?? [], reloadWorkspaces } : null,
-    [me.data, workspaceList, reloadWorkspaces],
+      me.data
+        ? {
+            user: me.data.user,
+            workspaces: workspaceList ?? [],
+            reloadWorkspaces,
+            reloadUser: reloadMe,
+          }
+        : null,
+    [me.data, workspaceList, reloadWorkspaces, reloadMe],
   );
 
   if (me.error && me.error.status !== 401) {

@@ -7,6 +7,8 @@ export interface Session {
   user: PublicUser;
   workspaces: WorkspaceSummary[];
   reloadWorkspaces: () => void;
+  /** Re-reads the signed-in user, e.g. after a profile change. */
+  reloadUser: () => void;
 }
 
 export const SessionContext = createContext<Session | null>(null);
