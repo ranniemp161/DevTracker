@@ -46,8 +46,18 @@ const newRequestCount = sql<number>`(select count(*)::int from ${taskRequests} w
 const creatorColumns = { id: users.id, username: users.username, avatarUrl: users.avatarUrl };
 
 /** What the viewer may do with a project (0023 §2). */
-type Viewer = { canManage: boolean; isWorkspaceAdmin: boolean; canTriage: boolean };
-const ADMIN_VIEWER: Viewer = { canManage: true, isWorkspaceAdmin: true, canTriage: true };
+type Viewer = {
+  canManage: boolean;
+  isWorkspaceAdmin: boolean;
+  canTriage: boolean;
+  mustPropose: boolean;
+};
+const ADMIN_VIEWER: Viewer = {
+  canManage: true,
+  isWorkspaceAdmin: true,
+  canTriage: true,
+  mustPropose: false,
+};
 
 @Injectable()
 export class ProjectsService {
@@ -158,11 +168,12 @@ export class ProjectsService {
         r.project,
         r.creator,
         r.memberCount,
-        {
-          canManage: isWorkspaceAdmin || r.viewerRole === 'lead',
+        viewerOf(
+          isWorkspaceAdmin || r.viewerRole === 'lead',
           isWorkspaceAdmin,
-          canTriage: isWorkspaceAdmin || r.viewerRole === 'lead' || !r.hasLeads,
-        },
+          r.hasLeads,
+          r.project,
+        ),
         { total: r.taskTotal, done: r.taskDone },
         r.newRequestCount,
         leads.get(r.project.id) ?? [],
@@ -189,7 +200,7 @@ export class ProjectsService {
 
     // Only field names (and status values) go into the feed, not description text.
     const changed: string[] = (
-      ['name', 'description', 'status', 'startDate', 'targetDate'] as const
+      ['name', 'description', 'status', 'startDate', 'targetDate', 'internalTriage'] as const
     ).filter((f) => input[f] !== undefined && input[f] !== project[f]);
     const events = input.chatGithubEvents;
     if (events && [...events].sort().join() !== [...project.chatGithubEvents].sort().join()) {
@@ -206,6 +217,7 @@ export class ProjectsService {
             startDate: input.startDate,
             targetDate: input.targetDate,
             chatGithubEvents: input.chatGithubEvents,
+            internalTriage: input.internalTriage,
           })
           .where(eq(projects.id, projectId));
         await this.events.activity(tx, {
@@ -427,11 +439,26 @@ export class ProjectsService {
   }
 }
 
+/** The same rules as `findProjectAccess` (0023 §2–4), for rows read in a list. */
+function viewerOf(
+  canManage: boolean,
+  isWorkspaceAdmin: boolean,
+  hasLeads: boolean,
+  p: ProjectRow,
+): Viewer {
+  return {
+    canManage,
+    isWorkspaceAdmin,
+    canTriage: canManage || !hasLeads,
+    mustPropose: p.internalTriage && hasLeads && !canManage,
+  };
+}
+
 function toProject(
   p: ProjectRow,
   creator: Project['createdBy'],
   memberCount: number,
-  { canManage, isWorkspaceAdmin, canTriage }: Viewer,
+  { canManage, isWorkspaceAdmin, canTriage, mustPropose }: Viewer,
   taskCounts: Project['taskCounts'],
   requestCount: number,
   leads: UserRef[],
@@ -456,6 +483,8 @@ function toProject(
     viewerCanManage: canManage,
     viewerCanManageMembers: isWorkspaceAdmin,
     viewerCanTriage: canTriage,
+    internalTriage: p.internalTriage,
+    viewerMustPropose: mustPropose,
     leads,
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),

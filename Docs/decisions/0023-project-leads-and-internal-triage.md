@@ -41,11 +41,13 @@ There is no "reports to" hierarchy between people. Responsibility attaches to wo
 - **Setting:** `projects.internal_triage boolean NOT NULL DEFAULT false`, changed by leads and Admins in Project settings. Off keeps today's behavior exactly.
 - **It only applies once the project has a lead.** Without a lead every member triages (§4), so members could accept their own proposals and the gate would mean nothing. Settings explains this when the project has no leads, and the API treats the setting as off until there is one.
 - **When it's on:**
-  - Members who aren't leads **propose** tasks instead of creating them. The "New task" control becomes "Propose task" and uses the same form (title, description, labels, attachments), plus a type: Bug or Request.
+  - Members who aren't leads **propose** tasks instead of creating them. The "New task" control becomes "Propose task": a title, an optional description and a type (Bug or Request). Labels and attachments are added afterwards on the task, like on any task. Proposals land in the Backlog column.
   - A proposal creates a `BACKLOG` task with the member as reporter and no assignee, plus a `task_requests` row with `source = 'internal'`, `reporter_user_id` set and status `new`. The type attaches the same "Bug" or "Request" label as the form (0016 §3).
   - Leads, Owners and Admins still create tasks directly.
   - Subtasks of an accepted task, and tasks created by status automation or GitHub, are not proposals.
-- **The API enforces it.** `POST /projects/:id/tasks` from a non-lead member on a project with internal triage returns `403 PROPOSAL_REQUIRED`, and `POST /projects/:id/proposals` is the route for them. The website never relies on hiding the button.
+- **The API enforces it.** `POST /projects/:id/tasks` from a non-lead member on a project with internal triage in effect returns `403 PROPOSAL_REQUIRED`, and `POST /projects/:id/proposals { kind, title, description? }` is the route for them; it returns the new task's id. While internal triage isn't in effect, that route returns `409 INTERNAL_TRIAGE_OFF`, so there is no way to bypass the board or the gate. The website never relies on hiding the button.
+- **What the website reads:** `Project.internalTriage` (the setting) and `Project.viewerMustPropose` (in effect, and the viewer isn't a lead or admin). The setting is changed with `PATCH /projects/:id { internalTriage }`.
+- A proposal's activity entry is `task.created` with the member as actor and `source: 'proposal'`.
 - **Turning it off** leaves open proposals in Triage until someone accepts or declines them. Turning it on changes nothing that already exists.
 
 ## 4. Triage
@@ -56,7 +58,7 @@ There is no "reports to" hierarchy between people. Responsibility attaches to wo
   - Developers who can't triage still help: they comment on a request's task (reproduce it, judge severity, point out duplicates) and the lead decides.
   - A team that rotates triage duty between developers makes the developer on duty a lead for that period. A separate triager role is out of scope (§8) until teams ask for it.
   - The rule is checked on every triage call, so appointing the first lead or removing the last one changes who triages at once.
-- **One list for both sources.** The Triage tab shows form requests and internal proposals together. Each row shows its source: the reporter's name and email for the form (until deleted, 0016 §5), or the member's avatar and name for a proposal. A filter switches between All, Form and Team.
+- **One list for both sources.** The Triage tab shows form requests and internal proposals together. Each row has `source` (`form` or `internal`) and `reporter` (the proposing member, or null). It shows the reporter's name and email for the form (until deleted, 0016 §5), or the member's avatar and name for a proposal. A filter switches between All, Form and Team (`?source=form|internal`).
 - **Accept** works as today: status `accepted`, `triaged_by`, `triaged_at`, and the task moves to To do (0021).
 - **Decline** takes an optional reason (up to 500 characters, stored in `task_requests.decline_reason`) and soft-deletes the task as today (0016 §4). The request row stays.
 - **The Triage tab** appears for anyone who can triage, with the count of `new` items. On a project with leads, other members don't see it. `Project` gains `viewerCanTriage` so the website doesn't have to work out the rule itself.
@@ -97,8 +99,8 @@ There is no "reports to" hierarchy between people. Responsibility attaches to wo
 ## 10. Migration (additive)
 
 - `project_members.role text NOT NULL DEFAULT 'member'` with `CHECK (role IN ('lead', 'member'))` (migration `0022_project_member_roles`).
-- `projects.internal_triage boolean NOT NULL DEFAULT false`.
-- `task_requests`:
+- `projects.internal_triage boolean NOT NULL DEFAULT false` (migration `0023_internal_proposals`).
+- `task_requests` (`0023_internal_proposals`, except `decline_reason`):
   - `source text NOT NULL DEFAULT 'form'` with `CHECK (source IN ('form', 'internal'))`;
   - `reporter_user_id uuid` referencing `users`, set to NULL if the user is deleted;
   - `decline_reason text`;

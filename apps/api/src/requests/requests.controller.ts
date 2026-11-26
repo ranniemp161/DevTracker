@@ -13,9 +13,11 @@ import {
 import type { ProjectIntake, PublicIntakeInfo, RequestReceipt, TaskRequest } from '@devtrack/types';
 import {
   listRequestsQuerySchema,
+  proposeTaskSchema,
   setIntakeSchema,
   submitRequestSchema,
   type ListRequestsQuery,
+  type ProposeTaskInput,
   type SetIntakeInput,
   type SubmitRequestInput,
 } from '@devtrack/validators';
@@ -59,6 +61,17 @@ export class RequestsController {
     @Param('id', UuidParamPipe) id: string,
   ): Promise<{ id: string }> {
     return this.requests.completeUpload(token, id);
+  }
+
+  /** A member's proposal (0023 §3); returns the new task's id. */
+  @Post('projects/:id/proposals')
+  @HttpCode(HttpStatus.CREATED)
+  async propose(
+    @CurrentUser() user: User,
+    @Param('id', UuidParamPipe) projectId: string,
+    @Body(new ZodValidationPipe(proposeTaskSchema)) body: ProposeTaskInput,
+  ): Promise<{ task: { id: string } }> {
+    return { task: await this.requests.propose(user, projectId, body) };
   }
 
   @Get('projects/:id/requests')

@@ -68,6 +68,8 @@ export const projects = pgTable(
     nextMessageSequence: integer('next_message_sequence').notNull().default(1),
     /** 0016: public request form. The token is NULL until the form is first turned on. */
     intakeEnabled: boolean('intake_enabled').notNull().default(false),
+    /** 0023 §3: members propose tasks through Triage; in effect only once there is a lead. */
+    internalTriage: boolean('internal_triage').notNull().default(false),
     intakeToken: text('intake_token').unique('projects_intake_token_unique'),
     /**
      * 0014: GitHub events posted to the project's chat. Keys are validated by the API
@@ -371,6 +373,10 @@ export const taskRequests = pgTable(
       .references(() => projects.id, { onDelete: 'cascade' }),
     kind: text('kind').notNull(),
     status: text('status').notNull().default('new'),
+    /** 0023 §3: `form` (public request form) or `internal` (a member's proposal). */
+    source: text('source').notNull().default('form'),
+    /** The member who proposed it (`internal` only). */
+    reporterUserId: uuid('reporter_user_id').references(() => users.id, { onDelete: 'set null' }),
     reporterName: text('reporter_name'),
     reporterEmail: text('reporter_email'),
     contactDeletedAt: timestamptz('contact_deleted_at'),
@@ -382,5 +388,11 @@ export const taskRequests = pgTable(
     index('task_requests_project_status_idx').on(t.projectId, t.status, t.createdAt),
     check('task_requests_kind_check', sql`${t.kind} IN ('bug', 'request')`),
     check('task_requests_status_check', sql`${t.status} IN ('new', 'accepted', 'declined')`),
+    check('task_requests_source_check', sql`${t.source} IN ('form', 'internal')`),
+    // Contact details exist only for people outside the team (0016 §3).
+    check(
+      'task_requests_internal_no_contact',
+      sql`${t.source} = 'form' OR (${t.reporterName} IS NULL AND ${t.reporterEmail} IS NULL)`,
+    ),
   ],
 );

@@ -57,6 +57,10 @@ export interface Project {
   viewerCanManageMembers: boolean;
   /** May list, accept and decline requests: everyone until the project has a lead (0023 §4). */
   viewerCanTriage: boolean;
+  /** Internal triage setting (0023 §3); in effect only once the project has a lead. */
+  internalTriage: boolean;
+  /** Internal triage is in effect and the viewer isn't a lead or admin: they propose tasks. */
+  viewerMustPropose: boolean;
   /** The project's leads (0023 §2), by username. */
   leads: UserRef[];
   createdAt: string;

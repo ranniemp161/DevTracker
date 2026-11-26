@@ -27,6 +27,10 @@ export interface ProjectAccess {
   isWorkspaceAdmin: boolean;
   /** Everyone with access until the project has a lead; then leads and admins (0023 §4). */
   canTriage: boolean;
+  /** Internal triage is on and the project has a lead (0023 §3). */
+  internalTriageInEffect: boolean;
+  /** Internal triage is in effect and the user isn't a lead or admin: they propose tasks. */
+  mustPropose: boolean;
 }
 
 export interface ProjectAccessOptions {
@@ -60,7 +64,7 @@ export class ProjectAccessService {
     const row = await findProjectAccess(executor, userId, projectId);
 
     if (!row) throw notFound();
-    const { canManage, isWorkspaceAdmin, canTriage } = row;
+    const { canManage, isWorkspaceAdmin, canTriage, internalTriageInEffect, mustPropose } = row;
     if (options.admin && !isWorkspaceAdmin) {
       throw AppException.forbidden('You need to be a workspace admin to do this.');
     }
@@ -86,6 +90,8 @@ export class ProjectAccessService {
       canManage,
       isWorkspaceAdmin,
       canTriage,
+      internalTriageInEffect,
+      mustPropose,
     };
   }
 

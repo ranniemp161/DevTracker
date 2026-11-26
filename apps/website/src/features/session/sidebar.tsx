@@ -507,7 +507,7 @@ function ProjectRow({
                 router.push(`${base}?new=1`);
               }}
             >
-              New task
+              {project.viewerMustPropose ? 'Propose task' : 'New task'}
             </MenuItem>
           )}
           <MenuItem

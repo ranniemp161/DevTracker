@@ -30,20 +30,24 @@ export const requestAttachmentSchema = z
   });
 export type RequestAttachmentInput = z.infer<typeof requestAttachmentSchema>;
 
+const requestKind = z.enum(['bug', 'request'], { error: 'Choose bug or request.' });
+const requestTitle = z
+  .string({ error: 'Title is required.' })
+  .trim()
+  .min(3, { error: 'Title must be at least 3 characters.' })
+  .max(200, { error: 'Title must be at most 200 characters.' });
+const requestDescription = z
+  .string()
+  .trim()
+  .max(5000, { error: 'Description must be at most 5,000 characters.' })
+  .optional()
+  .transform((v) => v || undefined);
+
 /** Public request form submission (decision record 0016). */
 export const submitRequestSchema = z.object({
-  kind: z.enum(['bug', 'request'], { error: 'Choose bug or request.' }),
-  title: z
-    .string({ error: 'Title is required.' })
-    .trim()
-    .min(3, { error: 'Title must be at least 3 characters.' })
-    .max(200, { error: 'Title must be at most 200 characters.' }),
-  description: z
-    .string()
-    .trim()
-    .max(5000, { error: 'Description must be at most 5,000 characters.' })
-    .optional()
-    .transform((v) => v || undefined),
+  kind: requestKind,
+  title: requestTitle,
+  description: requestDescription,
   name: z
     .string()
     .trim()
@@ -66,9 +70,19 @@ export const submitRequestSchema = z.object({
 });
 export type SubmitRequestInput = z.infer<typeof submitRequestSchema>;
 
+/** A member's proposal (decision record 0023 §3). */
+export const proposeTaskSchema = z.object({
+  kind: requestKind,
+  title: requestTitle,
+  description: requestDescription,
+});
+export type ProposeTaskInput = z.infer<typeof proposeTaskSchema>;
+
 export const requestStatusSchema = z.enum(['new', 'accepted', 'declined']);
 export const listRequestsQuerySchema = z.object({
   status: requestStatusSchema.default('new'),
+  /** 0023 §4: only form requests, or only team proposals. Both when left out. */
+  source: z.enum(['form', 'internal']).optional(),
 });
 export type ListRequestsQuery = z.infer<typeof listRequestsQuerySchema>;
 
