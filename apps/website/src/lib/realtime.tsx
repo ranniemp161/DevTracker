@@ -249,6 +249,52 @@ export function useRealtimeRefresh(
   }, [client, debounceMs]);
 }
 
+/**
+ * Like `useRealtimeRefresh`, but hands over what happened: the events matching `match`,
+ * collected for `debounceMs`, or `'all'` after a reconnect (events may have been missed, so
+ * the caller should reload everything). Lets a screen refetch only what an event names.
+ */
+export function useRealtimeEvents(
+  match: (event: RealtimeEvent) => boolean,
+  onBatch: (events: RealtimeEvent[] | 'all') => void,
+  debounceMs = 250,
+): void {
+  const client = useContext(RealtimeContext);
+  const latest = useRef({ match, onBatch });
+  useEffect(() => {
+    latest.current = { match, onBatch };
+  });
+  useEffect(() => {
+    if (!client) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let pending: RealtimeEvent[] | 'all' = [];
+    const flush = () => {
+      timer = null;
+      const batch = pending;
+      pending = [];
+      latest.current.onBatch(batch);
+    };
+    const schedule = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(flush, debounceMs);
+    };
+    const offEvent = client.listen((event) => {
+      if (!latest.current.match(event)) return;
+      if (pending !== 'all') pending.push(event);
+      schedule();
+    });
+    const offReconnect = client.onReconnect(() => {
+      pending = 'all';
+      schedule();
+    });
+    return () => {
+      offEvent();
+      offReconnect();
+      if (timer) clearTimeout(timer);
+    };
+  }, [client, debounceMs]);
+}
+
 /** Returns true if the WebSocket is currently open and ready. */
 export function useRealtimeConnected(): boolean {
   const client = useContext(RealtimeContext);

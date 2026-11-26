@@ -6,7 +6,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { placeBelow, supportsAnchoring, supportsInvokers } from '@/components/menu';
 import { Button } from '@/components/ui';
 import { api, ApiError, apiPage } from '@/lib/api';
-import { useRealtimeRefresh } from '@/lib/realtime';
+import { useRealtimeConnected, useRealtimeRefresh } from '@/lib/realtime';
 import { timeAgo } from './describe-activity';
 
 export function NotificationBell({ align = 'start' }: { align?: 'start' | 'end' }) {
@@ -23,15 +23,23 @@ export function NotificationBell({ align = 'start' }: { align?: 'start' | 'end' 
   const refreshCount = useCallback(() => {
     api<{ count: number }>('/notifications/unread-count').then(
       (r) => setCount(r.count),
-      () => undefined, // transient failures are fine; the next event or navigation retries
+      () => undefined, // transient failures are fine; the next event or reconnect retries
     );
   }, []);
 
-  // Refreshed on navigation, on every notification event for this user (M7), and after a
-  // reconnect. No polling.
+  // Refreshed on mount, on every notification event for this user (M7: `notification.created`
+  // and `notification.read` cover every change), and after a reconnect. No polling. A page
+  // change refreshes it only while realtime is down, so the count can't go stale (#132).
+  const connected = useRealtimeConnected();
   useEffect(() => {
     refreshCount();
-  }, [refreshCount, pathname]);
+  }, [refreshCount]);
+  const lastPath = useRef(pathname);
+  useEffect(() => {
+    if (lastPath.current === pathname) return;
+    lastPath.current = pathname;
+    if (!connected) refreshCount();
+  }, [pathname, connected, refreshCount]);
   useRealtimeRefresh((e) => e.type.startsWith('notification.'), refreshCount);
 
   // The panel is a popover="auto": the browser handles outside clicks and Escape.
