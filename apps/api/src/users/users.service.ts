@@ -14,6 +14,7 @@ export function toPublicUser(user: User): PublicUser {
     email: user.email,
     username: user.username,
     avatarUrl: user.avatarUrl,
+    jobTitle: user.jobTitle,
     emailVerified: user.emailVerifiedAt !== null,
     createdAt: user.createdAt.toISOString(),
   };
@@ -22,6 +23,15 @@ export function toPublicUser(user: User): PublicUser {
 @Injectable()
 export class UsersService {
   constructor(@Inject(DATABASE) private readonly db: Database) {}
+
+  async setJobTitle(id: string, jobTitle: string | null): Promise<User> {
+    const [user] = await this.db
+      .update(users)
+      .set({ jobTitle })
+      .where(eq(users.id, id))
+      .returning();
+    return user!;
+  }
 
   async findById(id: string, executor: Executor = this.db): Promise<User | undefined> {
     const [user] = await executor.select().from(users).where(eq(users.id, id)).limit(1);

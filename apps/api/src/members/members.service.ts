@@ -24,12 +24,18 @@ import {
 
 type MemberRow = {
   membership: typeof workspaceMembers.$inferSelect;
-  user: Pick<typeof users.$inferSelect, 'id' | 'username' | 'email' | 'avatarUrl'>;
+  user: Pick<typeof users.$inferSelect, 'id' | 'username' | 'email' | 'avatarUrl' | 'jobTitle'>;
 };
 
 const memberColumns = {
   membership: workspaceMembers,
-  user: { id: users.id, username: users.username, email: users.email, avatarUrl: users.avatarUrl },
+  user: {
+    id: users.id,
+    username: users.username,
+    email: users.email,
+    avatarUrl: users.avatarUrl,
+    jobTitle: users.jobTitle,
+  },
 };
 
 function toMember(row: MemberRow): WorkspaceMember {

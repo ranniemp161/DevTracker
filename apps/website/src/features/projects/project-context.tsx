@@ -138,7 +138,9 @@ export function ProjectLayout({ children }: { children: ReactNode }) {
                 {p.leads.length > 0 ? (
                   <span className="text-sm text-fg-muted">
                     {p.leads.length === 1 ? 'Lead' : 'Leads'}{' '}
-                    {p.leads.map((l) => `@${l.username}`).join(', ')}
+                    {p.leads
+                      .map((l) => `@${l.username}${l.jobTitle ? ` · ${l.jobTitle}` : ''}`)
+                      .join(', ')}
                   </span>
                 ) : null}
               </>

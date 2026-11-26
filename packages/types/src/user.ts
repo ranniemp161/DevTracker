@@ -6,6 +6,8 @@ export interface PublicUser {
   email: string;
   username: string;
   avatarUrl: string | null;
+  /** Display only (0023 §7). */
+  jobTitle: string | null;
   emailVerified: boolean;
   createdAt: string;
 }

@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Patch,
   HttpCode,
   HttpStatus,
   Inject,
@@ -18,11 +19,13 @@ import {
   registerSchema,
   resetPasswordSchema,
   safeRedirectPath,
+  updateMeSchema,
   verifyEmailSchema,
   type ForgotPasswordInput,
   type LoginInput,
   type RegisterInput,
   type ResetPasswordInput,
+  type UpdateMeInput,
   type VerifyEmailInput,
 } from '@devtrack/validators';
 import type { Request, Response } from 'express';
@@ -32,7 +35,7 @@ import { clientIp } from '../common/http/request-context';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { APP_CONFIG, type AppConfig } from '../config/app-config';
 import { RATE_LIMITS, RateLimitService } from '../rate-limit/rate-limit.service';
-import { toPublicUser, type User } from '../users/users.service';
+import { toPublicUser, UsersService, type User } from '../users/users.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 import { AuthCookiesService } from './auth-cookies.service';
 import { AuthService } from './auth.service';
@@ -59,6 +62,7 @@ export class AuthController {
     private readonly github: GithubOAuthService,
     private readonly rateLimit: RateLimitService,
     private readonly workspaces: WorkspacesService,
+    private readonly users: UsersService,
   ) {}
 
   @Public()
@@ -107,6 +111,16 @@ export class AuthController {
     // Verified users get their workspaces too, so the app shell needs one round trip, not two.
     if (!user.emailVerifiedAt) return { user: toPublicUser(user) };
     return { user: toPublicUser(user), workspaces: await this.workspaces.listForUser(user.id) };
+  }
+
+  /** Your own profile fields (0023 §7: the display-only job title). */
+  @AllowUnverified()
+  @Patch('me')
+  async updateMe(
+    @CurrentUser() user: User,
+    @Body(new ZodValidationPipe(updateMeSchema)) body: UpdateMeInput,
+  ): Promise<{ user: PublicUser }> {
+    return { user: toPublicUser(await this.users.setJobTitle(user.id, body.jobTitle)) };
   }
 
   @Public()

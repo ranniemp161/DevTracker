@@ -79,7 +79,7 @@ There is no "reports to" hierarchy between people. Responsibility attaches to wo
 
 ## 7. Job title (display only)
 
-- `users.job_title text` (up to 80 characters, optional), set in the user's profile.
+- `users.job_title text` (up to 80 characters, optional; migration `0026_job_title`). There is no profile page yet, so it's set from the account menu ("Job title…") through `PATCH /auth/me { jobTitle }`; an empty string or null clears it. It comes back as `jobTitle` on the signed-in user, workspace and project members, and project leads.
 - Shown next to the name in member lists, the project header's leads, and mention suggestions. It grants nothing.
 
 ## 8. Out of scope

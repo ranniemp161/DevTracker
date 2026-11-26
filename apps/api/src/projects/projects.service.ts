@@ -21,7 +21,6 @@ import {
   type Project,
   type ProjectMember,
   type ProjectMemberRole,
-  type UserRef,
 } from '@devtrack/types';
 import {
   PROJECT_KEY_MAX_LENGTH,
@@ -259,6 +258,7 @@ export class ProjectsService {
           username: users.username,
           avatarUrl: users.avatarUrl,
           email: users.email,
+          jobTitle: users.jobTitle,
         },
         role: projectMembers.role,
         addedAt: projectMembers.createdAt,
@@ -397,11 +397,14 @@ export class ProjectsService {
   }
 
   /** Each project's leads (0023 §2), ordered by username. */
-  private async leadsOf(projectIds: string[]): Promise<Map<string, UserRef[]>> {
-    const byProject = new Map<string, UserRef[]>();
+  private async leadsOf(projectIds: string[]): Promise<Map<string, Project['leads']>> {
+    const byProject = new Map<string, Project['leads']>();
     if (projectIds.length === 0) return byProject;
     const rows = await this.db
-      .select({ projectId: projectMembers.projectId, user: creatorColumns })
+      .select({
+        projectId: projectMembers.projectId,
+        user: { ...creatorColumns, jobTitle: users.jobTitle },
+      })
       .from(projectMembers)
       .innerJoin(users, eq(users.id, projectMembers.userId))
       .where(and(inArray(projectMembers.projectId, projectIds), eq(projectMembers.role, 'lead')))
@@ -461,7 +464,7 @@ function toProject(
   { canManage, isWorkspaceAdmin, canTriage, mustPropose }: Viewer,
   taskCounts: Project['taskCounts'],
   requestCount: number,
-  leads: UserRef[],
+  leads: Project['leads'],
 ): Project {
   return {
     id: p.id,

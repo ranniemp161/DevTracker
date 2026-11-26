@@ -108,6 +108,9 @@ function MemberRow({ member, onChanged }: { member: WorkspaceMember; onChanged: 
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">
           @{member.user.username} {isSelf ? <span className="text-fg-subtle">(you)</span> : null}
+          {member.user.jobTitle ? (
+            <span className="font-normal text-fg-muted"> · {member.user.jobTitle}</span>
+          ) : null}
         </p>
         <p className="truncate text-sm text-fg-subtle">{member.user.email}</p>
         {error ? <p className="mt-1 text-sm text-danger">{error}</p> : null}

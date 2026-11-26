@@ -215,6 +215,9 @@ export function ChatComposer({ projectId, members, readOnly, onSend, sending }: 
               }`}
             >
               <span className="font-semibold text-fg">@{m.user.username}</span>
+              {m.user.jobTitle ? (
+                <span className="truncate text-xs text-fg-muted">{m.user.jobTitle}</span>
+              ) : null}
             </button>
           ))}
         </div>
