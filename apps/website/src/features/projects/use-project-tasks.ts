@@ -2,22 +2,9 @@
 
 import type { Task } from '@devtrack/types';
 import { useCallback, useEffect, useMemo, useSyncExternalStore, type SetStateAction } from 'react';
-import { apiPage } from '@/lib/api';
 import { fetchIntoCache, readCache, revalidate, subscribeCache, writeCache } from '@/lib/api-cache';
 import { useRealtimeRefresh } from '@/lib/realtime';
-
-/** Every live task of a project, all pages. */
-async function loadAllTasks(projectId: string): Promise<Task[]> {
-  const all: Task[] = [];
-  let cursor: string | null = null;
-  do {
-    const query: string = cursor ? `&cursor=${encodeURIComponent(cursor)}` : '';
-    const page = await apiPage<Task>(`/projects/${projectId}/tasks?limit=200${query}`);
-    all.push(...page.items);
-    cursor = page.nextCursor;
-  } while (cursor);
-  return all;
-}
+import { loadAllTasks } from './load-all-tasks';
 
 /**
  * Loads every live task of a project, for the Kanban board. Cached like `useApiQuery`:
