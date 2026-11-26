@@ -135,6 +135,12 @@ export function ProjectLayout({ children }: { children: ReactNode }) {
               <>
                 <KeyBadge>{p.key}</KeyBadge>
                 <Badge tone={projectStatusTone(p.status)}>{PROJECT_STATUS_LABEL[p.status]}</Badge>
+                {p.leads.length > 0 ? (
+                  <span className="text-sm text-fg-muted">
+                    {p.leads.length === 1 ? 'Lead' : 'Leads'}{' '}
+                    {p.leads.map((l) => `@${l.username}`).join(', ')}
+                  </span>
+                ) : null}
               </>
             }
           >

@@ -21,13 +21,17 @@ export type ProjectRow = typeof projects.$inferSelect;
 export interface ProjectAccess {
   project: ProjectRow;
   workspaceRole: WorkspaceRole;
-  /** Workspace Owner/Admin: sees every project, may edit, archive and manage members. */
+  /** Workspace Owner/Admin or a lead of this project: may change the project (0023 §2). */
   canManage: boolean;
+  /** Workspace Owner/Admin: sees every project; archives it and manages its people. */
+  isWorkspaceAdmin: boolean;
 }
 
 export interface ProjectAccessOptions {
-  /** Requires workspace Owner/Admin (403 otherwise). */
+  /** Requires a workspace Owner/Admin or a lead of the project (403 otherwise). */
   manage?: boolean;
+  /** Requires a workspace Owner/Admin (403 otherwise), even for project leads. */
+  admin?: boolean;
   /** Rejects archived projects with 409 PROJECT_ARCHIVED (archived = read-only). */
   write?: boolean;
 }
@@ -52,18 +56,21 @@ export class ProjectAccessService {
     const row = await findProjectAccess(executor, userId, projectId);
 
     if (!row) throw notFound();
-    const { canManage } = row;
-    if (options.manage && !canManage) {
-      throw AppException.forbidden('You need to be a workspace admin to manage this project.');
+    const { canManage, isWorkspaceAdmin } = row;
+    if (options.admin && !isWorkspaceAdmin) {
+      throw AppException.forbidden('You need to be a workspace admin to do this.');
     }
-    if ((options.write || options.manage) && row.project.status === 'ARCHIVED') {
+    if (options.manage && !canManage) {
+      throw AppException.forbidden('You need to be a project lead or workspace admin to do this.');
+    }
+    if ((options.write || options.manage || options.admin) && row.project.status === 'ARCHIVED') {
       throw new AppException(
         HttpStatus.CONFLICT,
         ErrorCode.PROJECT_ARCHIVED,
         'This project is archived and read-only.',
       );
     }
-    return { project: row.project, workspaceRole: row.workspaceRole, canManage };
+    return { project: row.project, workspaceRole: row.workspaceRole, canManage, isWorkspaceAdmin };
   }
 
   /**

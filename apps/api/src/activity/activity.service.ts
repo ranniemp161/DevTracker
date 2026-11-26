@@ -80,7 +80,7 @@ function categoryCondition(category: ActivityCategory) {
         projectAction(['repository_connected', 'repository_disconnected']),
       );
     case 'members':
-      return projectAction(['member_added', 'member_removed']);
+      return projectAction(['member_added', 'member_removed', 'member_role_changed']);
   }
 }
 

@@ -87,6 +87,11 @@ export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
 export const addProjectMemberSchema = z.object({ userId: uuid });
 export type AddProjectMemberInput = z.infer<typeof addProjectMemberSchema>;
 
+/** Decision record 0023 §2: Owners and Admins appoint project leads. */
+export const projectMemberRoleSchema = z.enum(['lead', 'member']);
+export const updateProjectMemberSchema = z.object({ role: projectMemberRoleSchema });
+export type UpdateProjectMemberInput = z.infer<typeof updateProjectMemberSchema>;
+
 export const taskStatusSchema = z.enum([
   'BACKLOG',
   'TODO',

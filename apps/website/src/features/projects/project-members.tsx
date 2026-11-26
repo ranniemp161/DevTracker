@@ -3,14 +3,15 @@
 import type { WorkspaceMember } from '@devtrack/types';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Alert, Avatar, Button, SettingsSection } from '@/components/ui';
+import { Alert, Avatar, Badge, Button, SettingsSection } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useApiQuery } from '@/lib/use-api-query';
 import { useProject } from './project-context';
 
 export function ProjectMembers() {
   const { project, members, readOnly, reload, reloadMembers } = useProject();
-  const canManage = project.viewerCanManage && !readOnly;
+  // Adding, removing and appointing leads stay with workspace admins (0023 §2).
+  const canManage = project.viewerCanManageMembers && !readOnly;
   const workspaceMembers = useApiQuery<WorkspaceMember[]>(
     canManage ? `/workspaces/${project.workspaceId}/members` : null,
   );
@@ -39,7 +40,7 @@ export function ProjectMembers() {
     <SettingsSection
       id="members"
       title="Members"
-      description="Workspace members can only see projects they belong to. Workspace admins see every project."
+      description="Workspace members can only see projects they belong to. Workspace admins see every project. Leads manage the project's settings, milestones and request form."
     >
       {error ? <Alert>{error}</Alert> : null}
       <ul className="divide-y divide-line-subtle">
@@ -47,9 +48,29 @@ export function ProjectMembers() {
           <li key={m.user.id} className="flex items-center gap-3 py-2.5">
             <Avatar name={m.user.username} url={m.user.avatarUrl} />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">@{m.user.username}</p>
+              <p className="flex items-center gap-2 text-sm font-medium">
+                <span className="truncate">@{m.user.username}</span>
+                {m.role === 'lead' ? <Badge tone="blue">Lead</Badge> : null}
+              </p>
               <p className="truncate text-sm text-fg-subtle">{m.user.email}</p>
             </div>
+            {canManage ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={busy}
+                onClick={() =>
+                  call(() =>
+                    api(`/projects/${project.id}/members/${m.user.id}`, {
+                      method: 'PATCH',
+                      body: { role: m.role === 'lead' ? 'member' : 'lead' },
+                    }),
+                  )
+                }
+              >
+                {m.role === 'lead' ? 'Remove as lead' : 'Make lead'}
+              </Button>
+            ) : null}
             {canManage ? (
               <Button
                 size="sm"
@@ -97,8 +118,8 @@ export function ProjectMembers() {
 }
 
 /**
- * The /members route. Admins manage members from Settings (#members), so they are sent there;
- * everyone else keeps this read-only list, because project settings are admin-only.
+ * The /members route. Leads and admins have Settings (#members), so they are sent there;
+ * everyone else keeps this read-only list.
  */
 export function ProjectMembersPage() {
   const router = useRouter();

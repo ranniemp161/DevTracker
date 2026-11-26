@@ -108,11 +108,14 @@ export const projectMembers = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    /** Decision record 0023 §2: `lead` or `member`. Leads manage their project. */
+    role: text('role').notNull().default('member'),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
   },
   (t) => [
     unique('project_members_project_user_unique').on(t.projectId, t.userId),
     index('project_members_user_id_idx').on(t.userId),
+    check('project_members_role_check', sql`${t.role} IN ('lead', 'member')`),
   ],
 );
 
