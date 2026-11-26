@@ -66,8 +66,9 @@ There is no "reports to" hierarchy between people. Responsibility attaches to wo
 
 ## 5. Telling the reporter
 
-- An internal proposal's reporter gets a new **`REQUEST_TRIAGED`** notification when it is accepted or declined, carrying the outcome and the decline reason, linking to the task (accepted) or to the proposal record (declined).
-- **My proposals:** the reporter can open `GET /projects/:id/proposals?mine=true` to see their own proposals with status and reason, including declined ones whose task is deleted. Only the reporter and the people who triage can see a declined proposal.
+- An internal proposal's reporter gets a new **`REQUEST_TRIAGED`** notification when it is accepted or declined, unless they triaged it themselves. Accepted: "Accepted: <title>", linking to the task. Declined: "Declined: <title>" with the reason as the body, linking to the project's Triage route.
+- **My proposals:** the reporter can open `GET /projects/:id/proposals?mine=true` (the only mode) to see their own proposals with status and reason, including declined ones whose task is deleted. Only the reporter and the people who triage can see a declined proposal. On the website, the Triage route shows "Your proposals" to people who can't triage, and members who must propose get a "Proposals" tab for it.
+- `POST /requests/:id/decline` takes an optional `{ reason }`; Triage items carry `declineReason`. Migration `0024_proposal_outcomes` adds `task_requests.decline_reason` and the `REQUEST_TRIAGED` notification type.
 - Form reporters are not notified. They have no account, and 0016 never emails them.
 
 ## 6. Blocked tasks reach the lead

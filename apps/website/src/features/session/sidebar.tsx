@@ -300,14 +300,14 @@ function ProjectSubNav({
     { href: `${base}/timesheet`, label: 'Timesheet', icon: <CalendarIcon size={16} /> },
     { href: `${base}/activity`, label: 'Activity', icon: <ActivityIcon size={16} /> },
     // Request form triage (0016); hidden on archived projects and from members who don't triage (0023 §4).
-    ...(project.status === 'ARCHIVED' || !project.viewerCanTriage
+    ...(project.status === 'ARCHIVED' || !(project.viewerCanTriage || project.viewerMustPropose)
       ? []
       : [
           {
             href: `${base}/triage`,
-            label: 'Triage',
+            label: project.viewerCanTriage ? 'Triage' : 'Proposals',
             icon: <InboxIcon size={16} />,
-            count: project.newRequestCount,
+            count: project.viewerCanTriage ? project.newRequestCount : undefined,
           },
         ]),
     // Members stay reachable for everyone; admins get the full settings page.

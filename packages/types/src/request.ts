@@ -24,6 +24,8 @@ export interface TaskRequest {
   contactDeleted: boolean;
   triagedBy: { id: string; username: string } | null;
   triagedAt: string | null;
+  /** Why a lead declined it (0023 §4); null otherwise. */
+  declineReason: string | null;
   createdAt: string;
   /** Completed files the sender attached (0022); empty once the task is gone. */
   attachments: TaskAttachment[];

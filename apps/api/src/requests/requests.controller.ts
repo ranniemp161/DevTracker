@@ -12,10 +12,14 @@ import {
 } from '@nestjs/common';
 import type { ProjectIntake, PublicIntakeInfo, RequestReceipt, TaskRequest } from '@devtrack/types';
 import {
+  declineRequestSchema,
+  listProposalsQuerySchema,
   listRequestsQuerySchema,
   proposeTaskSchema,
   setIntakeSchema,
   submitRequestSchema,
+  type DeclineRequestInput,
+  type ListProposalsQuery,
   type ListRequestsQuery,
   type ProposeTaskInput,
   type SetIntakeInput,
@@ -74,6 +78,16 @@ export class RequestsController {
     return { task: await this.requests.propose(user, projectId, body) };
   }
 
+  /** 0023 §5: the caller's own proposals. `mine=true` is the only mode. */
+  @Get('projects/:id/proposals')
+  proposals(
+    @CurrentUser() user: User,
+    @Param('id', UuidParamPipe) projectId: string,
+    @Query(new ZodValidationPipe(listProposalsQuerySchema)) _query: ListProposalsQuery,
+  ): Promise<TaskRequest[]> {
+    return this.requests.mine(user.id, projectId);
+  }
+
   @Get('projects/:id/requests')
   list(
     @CurrentUser() user: User,
@@ -91,8 +105,12 @@ export class RequestsController {
 
   @Post('requests/:id/decline')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async decline(@CurrentUser() user: User, @Param('id', UuidParamPipe) id: string): Promise<void> {
-    await this.requests.decline(user, id);
+  async decline(
+    @CurrentUser() user: User,
+    @Param('id', UuidParamPipe) id: string,
+    @Body(new ZodValidationPipe(declineRequestSchema)) body: DeclineRequestInput,
+  ): Promise<void> {
+    await this.requests.decline(user, id, body.reason ?? null);
   }
 
   @Put('projects/:id/intake')

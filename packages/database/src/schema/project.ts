@@ -377,6 +377,8 @@ export const taskRequests = pgTable(
     source: text('source').notNull().default('form'),
     /** The member who proposed it (`internal` only). */
     reporterUserId: uuid('reporter_user_id').references(() => users.id, { onDelete: 'set null' }),
+    /** 0023 §4: why it was declined, shown to the proposer. */
+    declineReason: text('decline_reason'),
     reporterName: text('reporter_name'),
     reporterEmail: text('reporter_email'),
     contactDeletedAt: timestamptz('contact_deleted_at'),

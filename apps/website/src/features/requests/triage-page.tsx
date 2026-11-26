@@ -9,6 +9,7 @@ import { useToast } from '@/components/toaster';
 import {
   Alert,
   Avatar,
+  Badge,
   Button,
   EmptyState,
   ErrorState,
@@ -53,12 +54,16 @@ export function TriagePage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [declining, setDeclining] = useState<TaskRequest | null>(null);
+  const [reason, setReason] = useState('');
 
-  async function triage(request: TaskRequest, action: 'accept' | 'decline') {
+  async function triage(request: TaskRequest, action: 'accept' | 'decline', why = '') {
     setBusy(request.id);
     setError(null);
     try {
-      await api(`/requests/${request.id}/${action}`, { method: 'POST' });
+      await api(`/requests/${request.id}/${action}`, {
+        method: 'POST',
+        body: action === 'decline' && why.trim() ? { reason: why.trim() } : undefined,
+      });
       toast.show(
         action === 'accept'
           ? `Accepted ${request.task?.key ?? 'the request'}`
@@ -74,8 +79,8 @@ export function TriagePage() {
   }
 
   if (readOnly) return <Alert tone="info">Archived projects can't triage requests.</Alert>;
-  if (!project.viewerCanTriage)
-    return <Alert tone="info">The project leads triage requests in this project.</Alert>;
+  // People who don't triage see their own proposals here (0023 §5).
+  if (!project.viewerCanTriage) return <MyProposals />;
 
   return (
     <div className="space-y-5">
@@ -181,6 +186,9 @@ export function TriagePage() {
                 {formatDate(r.triagedAt)}
               </p>
             ) : null}
+            {r.declineReason ? (
+              <p className="text-label text-fg-secondary">Reason: {r.declineReason}</p>
+            ) : null}
             {r.status === 'new' ? (
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -212,12 +220,95 @@ export function TriagePage() {
         onConfirm={() => {
           const r = declining;
           setDeclining(null);
-          if (r) void triage(r, 'decline');
+          setReason('');
+          if (r) void triage(r, 'decline', reason);
         }}
-        onCancel={() => setDeclining(null)}
+        onCancel={() => {
+          setDeclining(null);
+          setReason('');
+        }}
       >
-        Its task {declining?.task?.key} will be deleted. The request stays in the Declined list.
+        <p>
+          Its task {declining?.task?.key} will be deleted. The request stays in the Declined list.
+        </p>
+        {declining?.source === 'internal' ? (
+          <label className="mt-3 block text-sm">
+            <span className="mb-1.5 block font-medium text-fg-secondary">
+              Reason for @{declining.reporter?.username ?? 'the proposer'} (optional)
+            </span>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              maxLength={500}
+              rows={3}
+              className="w-full rounded-control border border-line-control bg-surface px-2.5 py-1.5 text-sm"
+            />
+          </label>
+        ) : null}
       </ConfirmDialog>
+    </div>
+  );
+}
+
+const PROPOSAL_STATUS: Record<
+  TaskRequest['status'],
+  { label: string; tone: 'amber' | 'green' | 'red' }
+> = {
+  new: { label: 'Waiting for a lead', tone: 'amber' },
+  accepted: { label: 'Accepted', tone: 'green' },
+  declined: { label: 'Declined', tone: 'red' },
+};
+
+/** A member's own proposals and what became of them (decision record 0023 §5). */
+function MyProposals() {
+  const { project } = useProject();
+  const query = useApiQuery<TaskRequest[]>(`/projects/${project.id}/proposals?mine=true`);
+
+  return (
+    <div className="space-y-5">
+      <p className="text-label text-fg-muted">
+        The project leads triage requests in this project. Here is what happened to the tasks you
+        proposed.
+      </p>
+      {query.error ? <ErrorState message={query.error.message} onRetry={query.reload} /> : null}
+      {!query.data && !query.error ? (
+        <div role="status" aria-label="Loading your proposals" className="space-y-3">
+          <Skeleton className="h-16" />
+        </div>
+      ) : null}
+      {query.data?.length === 0 ? (
+        <EmptyState>You haven&apos;t proposed anything yet.</EmptyState>
+      ) : null}
+      <ul className="space-y-3">
+        {query.data?.map((r) => (
+          <li key={r.id} className="space-y-2 rounded-card border border-line bg-surface p-4">
+            <p className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
+              <Badge tone={PROPOSAL_STATUS[r.status].tone}>{PROPOSAL_STATUS[r.status].label}</Badge>
+              <span>{r.kind === 'bug' ? 'Bug' : 'Request'}</span>
+              <span>{formatDate(r.createdAt)}</span>
+            </p>
+            {r.task ? (
+              <TaskLink
+                href={`/projects/${project.id}/tasks/${r.task.id}`}
+                className="block text-md font-semibold text-fg hover:underline"
+              >
+                {r.task.title}
+              </TaskLink>
+            ) : (
+              <p className="text-md font-semibold text-fg-muted">Task deleted</p>
+            )}
+            {r.triagedBy && r.triagedAt ? (
+              <p className="text-xs text-fg-muted">
+                {r.status === 'accepted' ? 'Accepted' : 'Declined'} by @{r.triagedBy.username} on{' '}
+                {formatDate(r.triagedAt)}
+              </p>
+            ) : null}
+            {r.declineReason ? (
+              <p className="text-label text-fg-secondary">Reason: {r.declineReason}</p>
+            ) : null}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

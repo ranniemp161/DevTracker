@@ -78,6 +78,7 @@ export const NOTIFICATION_TYPES = [
   'MILESTONE_COMPLETED',
   'REQUEST_SUBMITTED',
   'TASK_DONE_PROMPT',
+  'REQUEST_TRIAGED',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
