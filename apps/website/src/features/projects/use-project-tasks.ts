@@ -3,7 +3,9 @@
 import type { Task } from '@devtrack/types';
 import { useCallback, useEffect, useMemo, useSyncExternalStore, type SetStateAction } from 'react';
 import { fetchIntoCache, readCache, revalidate, subscribeCache, writeCache } from '@/lib/api-cache';
-import { useRealtimeRefresh } from '@/lib/realtime';
+import { api, ApiError } from '@/lib/api';
+import { useRealtimeEvents, type RealtimeEvent } from '@/lib/realtime';
+import { applyTaskRefresh, planTaskRefresh } from './board-refresh';
 import { loadAllTasks } from './load-all-tasks';
 
 /**
@@ -36,13 +38,38 @@ export function useProjectTasks(projectId: string) {
     [key],
   );
 
-  // Live updates (M7): any task change in this project refetches the board, and so does a
-  // pull request change, since cards show the CI state of linked PRs (0015).
-  useRealtimeRefresh(
+  // Live updates (M7, #131): a task event refetches only the tasks it names; a pull request
+  // change (cards show linked PRs' CI state, 0015), a big batch or a reconnect reloads all.
+  const refresh = useCallback(
+    async (events: RealtimeEvent[] | 'all') => {
+      const plan = planTaskRefresh(events);
+      if (plan.kind === 'all' || !readCache(key)?.data) return reload();
+      const fetched = new Map<string, Task | null>();
+      try {
+        await Promise.all(
+          plan.fetch.map(async (id) => {
+            try {
+              fetched.set(id, (await api<{ task: Task }>(`/tasks/${id}`)).task);
+            } catch (err) {
+              if (err instanceof ApiError && err.status === 404) fetched.set(id, null);
+              else throw err;
+            }
+          }),
+        );
+      } catch {
+        return reload(); // a failed single fetch falls back to the full reload
+      }
+      // Applied to the list as it is now: optimistic moves made meanwhile are kept.
+      const current = readCache(key)?.data as Task[] | undefined;
+      if (current) writeCache(key, applyTaskRefresh(current, projectId, plan.remove, fetched));
+    },
+    [key, projectId, reload],
+  );
+  useRealtimeEvents(
     (e) =>
       e.projectId === projectId &&
       (e.type.startsWith('task.') || e.type === 'github.pull_request.updated'),
-    reload,
+    (events) => void refresh(events),
   );
 
   const tasks = useMemo(() => (entry?.data as Task[] | null | undefined) ?? null, [entry]);
