@@ -181,7 +181,6 @@ export class ProjectRepositoriesService {
     return rows.map((r) => ({
       id: r.repo.id,
       connectionId: r.connectionId,
-      installationId: r.connectionId,
       installationStatus: r.installationStatus,
       githubRepositoryId: r.repo.githubRepositoryId,
       fullName: r.repo.fullName,

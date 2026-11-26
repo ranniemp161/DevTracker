@@ -1,56 +1,41 @@
 import { describe, expect, it } from 'vitest';
-import {
-  connectRepositorySchema,
-  extractTaskKeys,
-  listInstallationsQuerySchema,
-} from './github.js';
+import { connectRepositorySchema, extractTaskKeys, listConnectionsQuerySchema } from './github.js';
 
-const installationId = '6f1c2a52-6a3c-4b84-9a43-1f1d1c0b6d7e';
+const connectionId = '6f1c2a52-6a3c-4b84-9a43-1f1d1c0b6d7e';
 
 describe('connectRepositorySchema', () => {
   it('accepts a connection UUID and a positive integer repository ID', () => {
-    expect(
-      connectRepositorySchema.parse({ connectionId: installationId, githubRepositoryId: 123 }),
-    ).toEqual({ connectionId: installationId, githubRepositoryId: 123 });
-  });
-
-  it('still accepts the deprecated installationId, as the connection', () => {
-    expect(connectRepositorySchema.parse({ installationId, githubRepositoryId: 123 })).toEqual({
-      connectionId: installationId,
+    expect(connectRepositorySchema.parse({ connectionId, githubRepositoryId: 123 })).toEqual({
+      connectionId,
       githubRepositoryId: 123,
     });
   });
 
-  it('requires a connection and refuses two different ones', () => {
-    expect(connectRepositorySchema.safeParse({ githubRepositoryId: 1 }).success).toBe(false);
+  it('no longer takes the old installationId', () => {
     expect(
-      connectRepositorySchema.safeParse({
-        connectionId: installationId,
-        installationId: '7a1c2a52-6a3c-4b84-9a43-1f1d1c0b6d7e',
-        githubRepositoryId: 1,
-      }).success,
+      connectRepositorySchema.safeParse({ installationId: connectionId, githubRepositoryId: 1 })
+        .success,
     ).toBe(false);
   });
 
   it.each([0, -1, 1.5, '123', null])('rejects repository ID %j', (githubRepositoryId) => {
-    expect(connectRepositorySchema.safeParse({ installationId, githubRepositoryId }).success).toBe(
+    expect(connectRepositorySchema.safeParse({ connectionId, githubRepositoryId }).success).toBe(
       false,
     );
   });
 
   it('rejects a non-UUID connection ID', () => {
-    for (const key of ['connectionId', 'installationId'])
-      expect(
-        connectRepositorySchema.safeParse({ [key]: '42', githubRepositoryId: 1 }).success,
-      ).toBe(false);
+    expect(
+      connectRepositorySchema.safeParse({ connectionId: '42', githubRepositoryId: 1 }).success,
+    ).toBe(false);
   });
 });
 
-describe('listInstallationsQuerySchema', () => {
+describe('listConnectionsQuerySchema', () => {
   it('requires a workspace UUID', () => {
-    expect(listInstallationsQuerySchema.safeParse({}).success).toBe(false);
-    expect(listInstallationsQuerySchema.parse({ workspaceId: installationId })).toEqual({
-      workspaceId: installationId,
+    expect(listConnectionsQuerySchema.safeParse({}).success).toBe(false);
+    expect(listConnectionsQuerySchema.parse({ workspaceId: connectionId })).toEqual({
+      workspaceId: connectionId,
     });
   });
 });

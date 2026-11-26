@@ -3,9 +3,9 @@ import { projectFixture } from './utils/fixtures';
 import { createTestApp, type TestApp } from './utils/test-app';
 
 /**
- * The connection rename's compatibility window (#114): the API serves the glossary's names
- * (`/github/connections`, `connectionId`, `connections`) next to the old installation names, so
- * the website and API keep working whichever deploys first.
+ * Connection names (#111): the API speaks the glossary's names (`/github/connections`,
+ * `connectionId`, `connections`). The old installation names for a connection were served during
+ * the compatibility window (#114) and are gone since #121.
  */
 let t: TestApp;
 beforeAll(async () => {
@@ -44,10 +44,9 @@ async function connected() {
   return f;
 }
 
-describe.each([
-  ['old', '/api/v1/github/installations'],
-  ['new', '/api/v1/github/connections'],
-])('connection routes under the %s path', (_name, base) => {
+describe('connection routes', () => {
+  const base = '/api/v1/github/connections';
+
   it('lists, reads and updates repository access, and disconnects', async () => {
     const { owner, ws } = await connected();
     const list = await owner.browser.get(`${base}?workspaceId=${ws}`).expect(200);
@@ -77,46 +76,59 @@ describe.each([
       [],
     );
   });
+
+  it('no longer serves the old installation paths for a connection', async () => {
+    const { owner, ws } = await connected();
+    const old = '/api/v1/github/installations';
+    await owner.browser.get(`${old}?workspaceId=${ws}`).expect(404);
+    const id: string = (await owner.browser.get(`${base}?workspaceId=${ws}`)).body.data
+      .connections[0].id;
+    await owner.browser.get(`${old}/${id}/repositories`).expect(404);
+    await owner.browser.get(`${old}/${id}/repository-access`).expect(404);
+    await owner.browser.delete(`${old}/${id}`).expect(404);
+  });
 });
 
 describe('connection field names', () => {
-  it('returns the connection list under both connections and installations', async () => {
+  it('returns the connection list under connections only', async () => {
     const { owner, ws } = await connected();
     const res = await owner.browser.get(`/api/v1/github/connections?workspaceId=${ws}`).expect(200);
     expect(res.body.data.connections).toHaveLength(1);
-    expect(res.body.data.installations).toEqual(res.body.data.connections);
+    expect(res.body.data).not.toHaveProperty('installations');
     expect(res.body.data.connections[0]).toMatchObject({
       githubInstallationId: 111,
       accountLogin: 'acme-org',
     });
   });
 
-  it.each(['connectionId', 'installationId'])(
-    'connects a project repository with %s and returns both names',
-    async (field) => {
-      const { owner, ws, project } = await connected();
-      const id: string = (await owner.browser.get(`/api/v1/github/connections?workspaceId=${ws}`))
-        .body.data.connections[0].id;
-      await owner.browser
-        .put(`/api/v1/github/connections/${id}/repository-access`)
-        .send({ githubRepositoryIds: [1001] })
-        .expect(204);
+  it('connects a project repository with connectionId and returns it', async () => {
+    const { owner, ws, project } = await connected();
+    const id: string = (await owner.browser.get(`/api/v1/github/connections?workspaceId=${ws}`))
+      .body.data.connections[0].id;
+    await owner.browser
+      .put(`/api/v1/github/connections/${id}/repository-access`)
+      .send({ githubRepositoryIds: [1001] })
+      .expect(204);
 
-      const res = await owner.browser
-        .post(`/api/v1/projects/${project}/repositories`)
-        .send({ [field]: id, githubRepositoryId: 1001 })
-        .expect(201);
-      expect(res.body.data.repository).toMatchObject({ connectionId: id, installationId: id });
-      const listed = await owner.browser.get(`/api/v1/projects/${project}/repositories`);
-      expect(listed.body.data[0]).toMatchObject({ connectionId: id, installationId: id });
-    },
-  );
-
-  it('refuses a request without a connection', async () => {
-    const { owner, project } = await connected();
     const res = await owner.browser
       .post(`/api/v1/projects/${project}/repositories`)
-      .send({ githubRepositoryId: 1001 });
-    expect(res.status).toBe(400);
+      .send({ connectionId: id, githubRepositoryId: 1001 })
+      .expect(201);
+    expect(res.body.data.repository.connectionId).toBe(id);
+    expect(res.body.data.repository).not.toHaveProperty('installationId');
+    const listed = await owner.browser.get(`/api/v1/projects/${project}/repositories`);
+    expect(listed.body.data[0].connectionId).toBe(id);
+    expect(listed.body.data[0]).not.toHaveProperty('installationId');
   });
+
+  it.each([{}, { installationId: '6f1c2a52-6a3c-4b84-9a43-1f1d1c0b6d7e' }])(
+    'refuses a request without connectionId (%j)',
+    async (extra) => {
+      const { owner, project } = await connected();
+      const res = await owner.browser
+        .post(`/api/v1/projects/${project}/repositories`)
+        .send({ ...extra, githubRepositoryId: 1001 });
+      expect(res.status).toBe(400);
+    },
+  );
 });

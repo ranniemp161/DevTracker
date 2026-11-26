@@ -18,9 +18,6 @@ export interface GithubConnection {
   suspendedAt: string | null;
 }
 
-/** @deprecated Use `GithubConnection`; removed once the website uses connection names (#121). */
-export type GithubInstallation = GithubConnection;
-
 /** Verified, short-lived choices from the current browser's GitHub authorization. */
 export interface AvailableGithubInstallation {
   githubInstallationId: number;
@@ -32,17 +29,12 @@ export interface GithubRepositoryAccess extends AvailableRepository {
   allowed: boolean;
 }
 
-/** `GET /github/connections?workspaceId=` (also served at the deprecated `/github/installations`). */
+/** `GET /github/connections?workspaceId=`. */
 export interface GithubConnectionList {
   /** False when the server has no GitHub App credentials; installing is then unavailable. */
   appConfigured: boolean;
   connections: GithubConnection[];
-  /** @deprecated Same value as `connections`; removed in #121. */
-  installations: GithubConnection[];
 }
-
-/** @deprecated Use `GithubConnectionList`; removed in #121. */
-export type GithubInstallationList = GithubConnectionList;
 
 /** A repository the installation can access, read live from GitHub (§11.3). */
 export interface AvailableRepository {
@@ -62,8 +54,6 @@ export interface ConnectedRepository {
   id: string;
   /** The workspace connection this repository is reached through. */
   connectionId: string;
-  /** @deprecated Same value as `connectionId`; removed in #121. */
-  installationId: string;
   installationStatus: GithubInstallationStatus;
   githubRepositoryId: number;
   fullName: string;

@@ -39,17 +39,17 @@ export async function githubFixture(t: TestApp) {
       `/api/v1/github/install/callback?installation_id=${GH_INSTALLATION}&setup_action=install&code=install-code&state=${state}`,
     )
     .expect(302);
-  const list = await f.owner.browser.get(`/api/v1/github/installations?workspaceId=${f.ws}`);
-  const installationId: string = list.body.data.installations[0].id;
+  const list = await f.owner.browser.get(`/api/v1/github/connections?workspaceId=${f.ws}`);
+  const connectionId: string = list.body.data.connections[0].id;
   await f.owner.browser
-    .put(`/api/v1/github/installations/${installationId}/repository-access`)
+    .put(`/api/v1/github/connections/${connectionId}/repository-access`)
     .send({ githubRepositoryIds: [GH_REPO, 1002] })
     .expect(204);
   const connected = await f.owner.browser
     .post(`/api/v1/projects/${f.project}/repositories`)
-    .send({ installationId, githubRepositoryId: GH_REPO });
+    .send({ connectionId, githubRepositoryId: GH_REPO });
   expect(connected.status).toBe(201);
-  return { ...f, installationId, repositoryId: connected.body.data.repository.id as string };
+  return { ...f, connectionId, repositoryId: connected.body.data.repository.id as string };
 }
 
 /** Sends a signed webhook delivery, as GitHub would. */
