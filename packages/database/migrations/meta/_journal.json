@@ -162,6 +162,13 @@
       "when": 1795702846798,
       "tag": "0022_project_member_roles",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1795707677697,
+      "tag": "0023_internal_proposals",
+      "breakpoints": true
     }
   ]
 }

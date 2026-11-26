@@ -33,6 +33,7 @@ export {
   sql,
 } from 'drizzle-orm';
 export type { SQL } from 'drizzle-orm';
+export { alias } from 'drizzle-orm/pg-core';
 
 export type Database = NodePgDatabase<typeof schema>;
 /** The callback argument of `db.transaction(...)`. */

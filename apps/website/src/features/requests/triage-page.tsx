@@ -8,6 +8,7 @@ import { HeaderActions } from '@/components/page-header';
 import { useToast } from '@/components/toaster';
 import {
   Alert,
+  Avatar,
   Button,
   EmptyState,
   ErrorState,
@@ -29,12 +30,24 @@ const TABS: { value: Tab; label: string }[] = [
   { value: 'declined', label: 'Declined' },
 ];
 
+/** 0023 §4: form requests and team proposals share one list. */
+type SourceTab = 'all' | 'form' | 'internal';
+const SOURCES: { value: SourceTab; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'form', label: 'Form' },
+  { value: 'internal', label: 'Team' },
+];
+
 /** Requests from the public form to accept or decline (0016); who triages follows 0023 §4. */
 export function TriagePage() {
   const { project, readOnly, reload: reloadProject } = useProject();
   const [tab, setTab] = useState<Tab>('new');
+  const [source, setSource] = useState<SourceTab>('all');
+  const sourceQuery = source === 'all' ? '' : `&source=${source}`;
   const query = useApiQuery<TaskRequest[]>(
-    readOnly || !project.viewerCanTriage ? null : `/projects/${project.id}/requests?status=${tab}`,
+    readOnly || !project.viewerCanTriage
+      ? null
+      : `/projects/${project.id}/requests?status=${tab}${sourceQuery}`,
   );
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
@@ -67,6 +80,7 @@ export function TriagePage() {
   return (
     <div className="space-y-5">
       <HeaderActions>
+        <SegmentedControl label="From" value={source} onChange={setSource} options={SOURCES} />
         <SegmentedControl label="Show" value={tab} onChange={setTab} options={TABS} />
       </HeaderActions>
       {!project.intake?.enabled && project.viewerCanManage ? (
@@ -92,7 +106,7 @@ export function TriagePage() {
       {query.data?.length === 0 ? (
         <EmptyState>
           {tab === 'new'
-            ? 'Nothing to triage. New requests from your form will show up here.'
+            ? 'Nothing to triage. New requests from your form and proposals from the team show up here.'
             : `No ${tab} requests yet.`}
         </EmptyState>
       ) : null}
@@ -127,8 +141,17 @@ export function TriagePage() {
               </div>
               {r.task && tab === 'accepted' ? <StatusPill status={r.task.status} /> : null}
             </div>
-            <p className="text-label text-fg-secondary">
-              {r.contactDeleted ? (
+            <p className="flex items-center gap-2 text-label text-fg-secondary">
+              {r.source === 'internal' ? (
+                r.reporter ? (
+                  <>
+                    <Avatar name={r.reporter.username} url={r.reporter.avatarUrl} size="xs" />
+                    Proposed by @{r.reporter.username}
+                  </>
+                ) : (
+                  <span className="text-fg-muted">Proposed by a former member.</span>
+                )
+              ) : r.contactDeleted ? (
                 <span className="text-fg-muted">Contact details deleted after 90 days.</span>
               ) : r.reporterName || r.reporterEmail ? (
                 <>

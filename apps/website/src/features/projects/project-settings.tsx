@@ -27,6 +27,7 @@ export function ProjectSettings() {
       <ProjectMembers />
       {admin ? <ProjectRepositories /> : null}
       <RequestFormCard />
+      <InternalTriageCard />
       <ChatGithubCard />
       {admin ? <ArchiveCard /> : null}
     </div>
@@ -208,6 +209,53 @@ function RequestFormCard() {
       >
         The current link stops working at once. Share the new one with whoever should have it.
       </ConfirmDialog>
+    </SettingsSection>
+  );
+}
+
+/** Internal triage (0023 §3): members propose tasks, and a lead accepts them in Triage. */
+function InternalTriageCard() {
+  const { project, reload } = useProject();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function toggle(on: boolean) {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/projects/${project.id}`, { method: 'PATCH', body: { internalTriage: on } });
+      reload();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not update the setting.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <SettingsSection
+      id="internal-triage"
+      title="Internal triage"
+      description="Members who aren't project leads propose new tasks instead of adding them to the board. A lead accepts or declines each proposal in Triage. Leads and workspace admins still add tasks directly."
+    >
+      <div className="max-w-md space-y-3">
+        {error ? <Alert>{error}</Alert> : null}
+        <label className="flex items-center gap-2.5 text-sm font-medium text-fg">
+          <input
+            type="checkbox"
+            checked={project.internalTriage}
+            disabled={busy}
+            onChange={(e) => void toggle(e.target.checked)}
+          />
+          Members propose new tasks
+        </label>
+        {project.internalTriage && project.leads.length === 0 ? (
+          <Alert tone="info">
+            This has no effect until the project has a lead. Without one, every member triages, so
+            members add tasks directly. Appoint a lead under Members.
+          </Alert>
+        ) : null}
+      </div>
     </SettingsSection>
   );
 }

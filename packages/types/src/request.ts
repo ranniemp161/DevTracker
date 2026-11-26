@@ -5,11 +5,17 @@ import type { TaskStatus } from './project.js';
 export type RequestKind = 'bug' | 'request';
 export type RequestStatus = 'new' | 'accepted' | 'declined';
 
+export type RequestSource = 'form' | 'internal';
+
 export interface TaskRequest {
   id: string;
   projectId: string;
   kind: RequestKind;
   status: RequestStatus;
+  /** 0023 §3: the public form, or a team member's proposal. */
+  source: RequestSource;
+  /** The member who proposed it; null for the form (or if that account was deleted). */
+  reporter: { id: string; username: string; avatarUrl: string | null } | null;
   /** Null once declined (the task is deleted) or if the task was removed. */
   task: { id: string; key: string; title: string; status: TaskStatus } | null;
   /** Null when not given, or after contact details were deleted (90 days, 0016 §5). */

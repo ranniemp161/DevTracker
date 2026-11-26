@@ -70,12 +70,17 @@ export async function findProjectAccess(executor: Executor, userId: string, proj
   const canManage = isWorkspaceAdmin || row.projectRole === 'lead';
   // 0023 §4: everyone triages until the project has a lead; then leads and admins do.
   const canTriage = canManage || !row.hasLeads;
+  // 0023 §3: internal triage counts only once there is a lead; leads and admins never propose.
+  const internalTriageInEffect = row.project.internalTriage && row.hasLeads;
+  const mustPropose = internalTriageInEffect && !canManage;
   return {
     project: row.project,
     workspaceRole: row.workspaceRole,
     canManage,
     isWorkspaceAdmin,
     canTriage,
+    internalTriageInEffect,
+    mustPropose,
   };
 }
 

@@ -73,6 +73,8 @@ export const updateProjectSchema = z
     status: editableProjectStatusSchema.optional(),
     startDate: optionalDate,
     targetDate: optionalDate,
+    /** 0023 §3: members propose tasks through Triage once the project has a lead. */
+    internalTriage: z.boolean().optional(),
     /** 0014: which GitHub events post to the project's chat. */
     chatGithubEvents: z
       .array(chatGithubEventSchema)

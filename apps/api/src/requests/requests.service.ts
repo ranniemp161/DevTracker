@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import {
+  alias,
   and,
   desc,
   eq,
@@ -26,20 +27,23 @@ import {
   type ProjectIntake,
   type PublicIntakeInfo,
   type RequestKind,
+  type RequestSource,
   type RequestUpload,
   type TaskRequest,
 } from '@devtrack/types';
-import type { ListRequestsQuery, SubmitRequestInput } from '@devtrack/validators';
+import type { ListRequestsQuery, ProposeTaskInput, SubmitRequestInput } from '@devtrack/validators';
 import { AppException } from '../common/errors/app.exception';
 import { DATABASE } from '../database/database.module';
 import { EventRecorder, type Actor } from '../events/event-recorder.service';
-import { ProjectAccessService } from '../projects/project-access.service';
+import { ProjectAccessService, type ProjectRow } from '../projects/project-access.service';
 import { RATE_LIMITS, RateLimitService } from '../rate-limit/rate-limit.service';
 import { TaskAttachmentsService } from '../tasks/task-attachments.service';
 import { TaskStatusAutomation } from '../tasks/task-status-automation.service';
 import { TurnstileVerifier } from './turnstile.service';
 
 const DAY = 24 * 60 * 60 * 1000;
+/** The proposing member, joined beside the triager (both are `users`). */
+const reporters = alias(users, 'reporters');
 /** Reporter contact details are deleted this long after the task is done or declined (0016 §5). */
 export const REQUEST_CONTACT_RETENTION_DAYS = 90;
 
@@ -51,6 +55,12 @@ const KIND_LABEL: Record<RequestKind, { name: string; color: string }> = {
 
 const formNotFound = () =>
   new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'This form is not available.');
+const projectArchived = () =>
+  new AppException(
+    HttpStatus.CONFLICT,
+    ErrorCode.PROJECT_ARCHIVED,
+    'This project is archived and read-only.',
+  );
 const requestNotFound = () =>
   new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Request not found.');
 
@@ -95,86 +105,135 @@ export class RequestsService {
     }
 
     return this.db.transaction(async (tx) => {
-      const [allocated] = await tx
-        .update(projects)
-        .set({ nextTaskNumber: sql`${projects.nextTaskNumber} + 1` })
-        .where(and(eq(projects.id, project.id), ne(projects.status, 'ARCHIVED')))
-        .returning({ number: sql<number>`${projects.nextTaskNumber} - 1` });
-      if (!allocated) throw formNotFound();
+      const taskId = await this.createRequest(tx, project, input, {
+        actor: null,
+        reporterName: input.name ?? null,
+        reporterEmail: input.email ?? null,
+      });
+      if (!taskId) throw formNotFound();
+      return this.attachments.prepareForRequest(tx, taskId, files);
+    });
+  }
 
-      const [task] = await tx
-        .insert(tasks)
-        .values({
-          projectId: project.id,
-          taskNumber: allocated.number,
-          title: input.title,
-          description: input.description ?? null,
-          status: 'BACKLOG',
-          priority: 'MEDIUM',
-          reporterId: null,
-        })
-        .returning();
-      const labelId = await this.kindLabel(tx, project.workspaceId, input.kind);
-      await tx.insert(taskLabels).values({ taskId: task!.id, labelId });
+  /**
+   * A member's proposal (0023 §3): only while internal triage is in effect, which means the
+   * setting is on and the project has a lead. The task's reporter is the member.
+   */
+  async propose(actor: Actor, projectId: string, input: ProposeTaskInput): Promise<{ id: string }> {
+    const { project, internalTriageInEffect } = await this.access.require(actor.id, projectId, {
+      write: true,
+    });
+    if (!internalTriageInEffect) {
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        ErrorCode.INTERNAL_TRIAGE_OFF,
+        'This project takes new tasks directly; there is nothing to propose to.',
+      );
+    }
+    return this.db.transaction(async (tx) => {
+      const taskId = await this.createRequest(tx, project, input, { actor });
+      if (!taskId) throw projectArchived();
+      return { id: taskId };
+    });
+  }
 
-      const [request] = await tx
-        .insert(taskRequests)
-        .values({
-          taskId: task!.id,
-          projectId: project.id,
-          kind: input.kind,
-          reporterName: input.name ?? null,
-          reporterEmail: input.email ?? null,
-        })
-        .returning({ id: taskRequests.id });
+  /**
+   * Creates a request's Backlog task, its kind label, the request row, the activity entry and
+   * the notification to the people who triage. Returns null if the project was archived meanwhile.
+   */
+  private async createRequest(
+    tx: Transaction,
+    project: Pick<ProjectRow, 'id' | 'key' | 'workspaceId'>,
+    input: { kind: RequestKind; title: string; description?: string },
+    from:
+      { actor: null; reporterName: string | null; reporterEmail: string | null } | { actor: Actor },
+  ): Promise<string | null> {
+    const [allocated] = await tx
+      .update(projects)
+      .set({ nextTaskNumber: sql`${projects.nextTaskNumber} + 1` })
+      .where(and(eq(projects.id, project.id), ne(projects.status, 'ARCHIVED')))
+      .returning({ number: sql<number>`${projects.nextTaskNumber} - 1` });
+    if (!allocated) return null;
 
-      const key = `${project.key}-${task!.taskNumber}`;
-      await this.events.activity(tx, {
+    const [task] = await tx
+      .insert(tasks)
+      .values({
+        projectId: project.id,
+        taskNumber: allocated.number,
+        title: input.title,
+        description: input.description ?? null,
+        status: 'BACKLOG',
+        priority: 'MEDIUM',
+        reporterId: from.actor?.id ?? null,
+      })
+      .returning();
+    const labelId = await this.kindLabel(tx, project.workspaceId, input.kind);
+    await tx.insert(taskLabels).values({ taskId: task!.id, labelId });
+
+    const [request] = await tx
+      .insert(taskRequests)
+      .values({
+        taskId: task!.id,
+        projectId: project.id,
+        kind: input.kind,
+        ...(from.actor
+          ? { source: 'internal', reporterUserId: from.actor.id }
+          : { source: 'form', reporterName: from.reporterName, reporterEmail: from.reporterEmail }),
+      })
+      .returning({ id: taskRequests.id });
+
+    const key = `${project.key}-${task!.taskNumber}`;
+    await this.events.activity(tx, {
+      workspaceId: project.workspaceId,
+      projectId: project.id,
+      taskId: task!.id,
+      entity: { type: 'task', id: task!.id },
+      actor: from.actor,
+      action: 'task.created',
+      // Never the reporter's contact details.
+      metadata: {
+        key,
+        title: task!.title,
+        status: 'BACKLOG',
+        source: from.actor ? 'proposal' : 'request_form',
+      },
+      event: { type: 'task.created', payload: { taskId: task!.id, status: 'BACKLOG' } },
+    });
+
+    // 0023 §4: the project's leads hear about it; without leads, the workspace's admins do.
+    const leads = await tx
+      .select({ id: projectMembers.userId })
+      .from(projectMembers)
+      .where(and(eq(projectMembers.projectId, project.id), eq(projectMembers.role, 'lead')));
+    const managers =
+      leads.length > 0
+        ? leads
+        : await tx
+            .select({ id: workspaceMembers.userId })
+            .from(workspaceMembers)
+            .where(
+              and(
+                eq(workspaceMembers.workspaceId, project.workspaceId),
+                inArray(workspaceMembers.role, ['OWNER', 'ADMIN']),
+              ),
+            );
+    const what = input.kind === 'bug' ? 'bug report' : 'request';
+    // A proposal never notifies its own reporter (the actor is skipped).
+    await this.events.notify(
+      tx,
+      from.actor,
+      managers.map((m) => ({
+        userId: m.id,
         workspaceId: project.workspaceId,
         projectId: project.id,
-        taskId: task!.id,
-        entity: { type: 'task', id: task!.id },
-        actor: null,
-        action: 'task.created',
-        // Never the reporter's contact details.
-        metadata: { key, title: task!.title, status: 'BACKLOG', source: 'request_form' },
-        event: { type: 'task.created', payload: { taskId: task!.id, status: 'BACKLOG' } },
-      });
-
-      // 0023 §4: the project's leads hear about it; without leads, the workspace's admins do.
-      const leads = await tx
-        .select({ id: projectMembers.userId })
-        .from(projectMembers)
-        .where(and(eq(projectMembers.projectId, project.id), eq(projectMembers.role, 'lead')));
-      const managers =
-        leads.length > 0
-          ? leads
-          : await tx
-              .select({ id: workspaceMembers.userId })
-              .from(workspaceMembers)
-              .where(
-                and(
-                  eq(workspaceMembers.workspaceId, project.workspaceId),
-                  inArray(workspaceMembers.role, ['OWNER', 'ADMIN']),
-                ),
-              );
-      const what = input.kind === 'bug' ? 'bug report' : 'request';
-      await this.events.notify(
-        tx,
-        null,
-        managers.map((m) => ({
-          userId: m.id,
-          workspaceId: project.workspaceId,
-          projectId: project.id,
-          type: 'REQUEST_SUBMITTED' as const,
-          title: `New ${what} in ${project.key}: ${truncate(input.title, 120)}`,
-          body: null,
-          resourceType: 'task_request',
-          resourceId: request!.id,
-        })),
-      );
-      return this.attachments.prepareForRequest(tx, task!.id, files);
-    });
+        type: 'REQUEST_SUBMITTED' as const,
+        title: `New ${what} in ${project.key}: ${truncate(input.title, 120)}`,
+        body: null,
+        resourceType: 'task_request',
+        resourceId: request!.id,
+      })),
+    );
+    return task!.id;
   }
 
   /** Completes one file a sender declared on this form (0022 §3). */
@@ -198,22 +257,39 @@ export class RequestsService {
           deletedAt: tasks.deletedAt,
         },
         triager: { id: users.id, username: users.username },
+        reporter: {
+          id: reporters.id,
+          username: reporters.username,
+          avatarUrl: reporters.avatarUrl,
+        },
       })
       .from(taskRequests)
       .innerJoin(tasks, eq(tasks.id, taskRequests.taskId))
       .leftJoin(users, eq(users.id, taskRequests.triagedBy))
-      .where(and(eq(taskRequests.projectId, projectId), eq(taskRequests.status, query.status)))
+      .leftJoin(reporters, eq(reporters.id, taskRequests.reporterUserId))
+      .where(
+        and(
+          eq(taskRequests.projectId, projectId),
+          eq(taskRequests.status, query.status),
+          query.source ? eq(taskRequests.source, query.source) : undefined,
+        ),
+      )
       .orderBy(desc(taskRequests.createdAt))
       .limit(200);
     const files = await this.attachments.completedFor(
       rows.filter((r) => !r.task.deletedAt).map((r) => r.task.id),
     );
 
-    return rows.map(({ request: r, task, triager }) => ({
+    return rows.map(({ request: r, task, triager, reporter }) => ({
       id: r.id,
       projectId: r.projectId,
       kind: r.kind as RequestKind,
       status: r.status as TaskRequest['status'],
+      source: r.source as RequestSource,
+      reporter:
+        reporter?.id && reporter.username
+          ? { id: reporter.id, username: reporter.username, avatarUrl: reporter.avatarUrl }
+          : null,
       task: task.deletedAt
         ? null
         : {

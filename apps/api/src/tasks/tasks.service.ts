@@ -100,7 +100,16 @@ export class TasksService {
    * the project serializes concurrent creators; numbers are never reused (§7.3, M3 rule 4).
    */
   async create(actor: Actor, projectId: string, input: CreateTaskInput): Promise<Task> {
-    const { project } = await this.projectAccess.require(actor.id, projectId, { write: true });
+    const { project, mustPropose } = await this.projectAccess.require(actor.id, projectId, {
+      write: true,
+    });
+    if (mustPropose) {
+      throw new AppException(
+        HttpStatus.FORBIDDEN,
+        ErrorCode.PROPOSAL_REQUIRED,
+        'This project uses internal triage: propose the task and a project lead will review it.',
+      );
+    }
     const assigneeIds = input.assigneeIds ?? [];
     await this.assertProjectMembers(projectId, assigneeIds);
     const milestoneId = input.milestoneId

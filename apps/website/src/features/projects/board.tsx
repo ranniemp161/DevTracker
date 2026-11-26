@@ -1,6 +1,6 @@
 'use client';
 
-import { TASK_STATUSES, type Task, type TaskStatus } from '@devtrack/types';
+import { TASK_STATUSES, type RequestKind, type Task, type TaskStatus } from '@devtrack/types';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   memo,
@@ -23,6 +23,7 @@ import {
   ErrorState,
   IconButton,
   PriorityIcon,
+  SegmentedControl,
   Skeleton,
   StatusDot,
 } from '@/components/ui';
@@ -58,7 +59,10 @@ export function Board() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const wantsNew = searchParams.get('new') === '1' && !readOnly;
-  const addingIn = chosenColumn ?? (wantsNew ? 'TODO' : null);
+  // 0023 §3: with internal triage in effect, members propose, and proposals land in Backlog.
+  const propose = project.viewerMustPropose;
+  const newColumn: TaskStatus = propose ? 'BACKLOG' : 'TODO';
+  const addingIn = chosenColumn ?? (wantsNew ? newColumn : null);
   function stopAdding() {
     setAddingIn(null);
     if (wantsNew) {
@@ -87,7 +91,7 @@ export function Board() {
 
   // `N` new task in To do, `/` jumps to the task search (`?` lists all shortcuts).
   useShortcuts([
-    { key: 'n', run: () => !readOnly && startAdding('TODO') },
+    { key: 'n', run: () => !readOnly && startAdding(newColumn) },
     {
       key: '/',
       run: () =>
@@ -169,9 +173,9 @@ export function Board() {
           <Button
             variant="primary"
             icon={<PlusIcon size={15} />}
-            onClick={() => startAdding('TODO')}
+            onClick={() => startAdding(newColumn)}
           >
-            New task
+            {propose ? 'Propose task' : 'New task'}
           </Button>
         )}
       </HeaderActions>
@@ -246,10 +250,12 @@ export function Board() {
                   <StatusDot status={status} />
                   <h2 className="text-label font-semibold text-fg">{TASK_STATUS_LABEL[status]}</h2>
                   <span className="text-xs text-fg-muted">{column.length}</span>
-                  {readOnly ? null : (
+                  {readOnly || (propose && status !== 'BACKLOG') ? null : (
                     <IconButton
                       size="sm"
-                      aria-label={`Add task to ${TASK_STATUS_LABEL[status]}`}
+                      aria-label={
+                        propose ? 'Propose a task' : `Add task to ${TASK_STATUS_LABEL[status]}`
+                      }
                       onClick={() => startAdding(status)}
                       className="ml-auto"
                     >
@@ -261,6 +267,7 @@ export function Board() {
                   {addingIn === status && !readOnly ? (
                     <ColumnQuickAdd
                       status={status}
+                      propose={propose}
                       onCancel={stopAdding}
                       onCreated={(t) => {
                         setTasks((c) => [t, ...(c ?? [])]);
@@ -481,16 +488,28 @@ const TaskCard = memo(function TaskCard({
   );
 });
 
-/** Inline quick-add in a column; the task is created with that column's status. */
+const PROPOSAL_KINDS: { value: RequestKind; label: string }[] = [
+  { value: 'bug', label: 'Bug' },
+  { value: 'request', label: 'Request' },
+];
+
+/**
+ * Inline quick-add in a column; the task is created with that column's status. As a proposal
+ * (0023 §3) it also takes a type and a description, and goes to Triage as a Backlog task.
+ */
 function ColumnQuickAdd({
   status,
+  propose,
   onCreated,
   onCancel,
 }: {
   status: TaskStatus;
+  propose: boolean;
   onCreated: (task: Task) => void;
   onCancel: () => void;
 }) {
+  const [kind, setKind] = useState<RequestKind>('bug');
+  const [description, setDescription] = useState('');
   const { project } = useProject();
   const draftKey = `devtrack_task_draft_${project.id}`;
   const input = useRef<HTMLInputElement>(null);
@@ -523,10 +542,19 @@ function ColumnQuickAdd({
     setPending(true);
     setError(null);
     try {
-      const { task } = await api<{ task: Task }>(`/projects/${project.id}/tasks`, {
-        body: { title, status },
-      });
+      let task: Task;
+      if (propose) {
+        const created = await api<{ task: { id: string } }>(`/projects/${project.id}/proposals`, {
+          body: { kind, title, description: description || undefined },
+        });
+        ({ task } = await api<{ task: Task }>(`/tasks/${created.task.id}`));
+      } else {
+        ({ task } = await api<{ task: Task }>(`/projects/${project.id}/tasks`, {
+          body: { title, status },
+        }));
+      }
       handleTitleChange('');
+      setDescription('');
       onCreated(task);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not create the task.');
@@ -549,10 +577,28 @@ function ColumnQuickAdd({
         id={`quick-add-${status}`}
         value={title}
         onChange={(e) => handleTitleChange(e.target.value)}
-        placeholder="Task title"
+        placeholder={propose ? 'What should the team do?' : 'Task title'}
         maxLength={200}
         className="h-8 w-full rounded-control border pointer-coarse:h-11 border-line-control bg-surface px-2.5 text-sm placeholder:text-fg-subtle focus-visible:border-primary"
       />
+      {propose ? (
+        <>
+          <label className="sr-only" htmlFor={`quick-add-${status}-description`}>
+            Description
+          </label>
+          <textarea
+            id={`quick-add-${status}-description`}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Details (optional)"
+            maxLength={5000}
+            rows={3}
+            className="w-full rounded-control border border-line-control bg-surface px-2.5 py-1.5 text-sm placeholder:text-fg-subtle focus-visible:border-primary"
+          />
+          <SegmentedControl label="Type" value={kind} onChange={setKind} options={PROPOSAL_KINDS} />
+          <p className="text-xs text-fg-muted">A project lead reviews proposals in Triage.</p>
+        </>
+      ) : null}
       {error ? (
         <p role="alert" className="text-xs text-danger">
           {error}
@@ -569,7 +615,7 @@ function ColumnQuickAdd({
           loading={pending}
           disabled={!title.trim()}
         >
-          {pending ? 'Adding…' : 'Add task'}
+          {propose ? (pending ? 'Sending…' : 'Propose') : pending ? 'Adding…' : 'Add task'}
         </Button>
       </div>
     </form>
