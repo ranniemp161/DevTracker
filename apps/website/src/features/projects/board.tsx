@@ -1,9 +1,17 @@
 'use client';
 
 import { TASK_STATUSES, type Task, type TaskStatus } from '@devtrack/types';
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useRef, useState, type DragEvent, type FormEvent, type RefObject } from 'react';
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type DragEvent,
+  type FormEvent,
+  type RefObject,
+} from 'react';
 import { AlertIcon, CalendarIcon, ChecklistIcon, PlusIcon } from '@/components/icons';
 import { ChecksBadge } from '../github/checks-badge';
 import { HeaderActions } from '@/components/page-header';
@@ -26,6 +34,7 @@ import { useProject } from './project-context';
 import { filterTask, TaskFilterBar, useTaskFilters } from './task-filters';
 import { TaskStatusMenu } from './task-status-menu';
 import { useProjectTasks } from './use-project-tasks';
+import { TaskLink } from '@/components/task-link';
 
 const byPriorityThenAge = (a: Task, b: Task) =>
   PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority] || a.createdAt.localeCompare(b.createdAt);
@@ -130,6 +139,15 @@ export function Board() {
       await moveTask(taskId, previous, { isUndo: true });
     }
   }
+
+  // Cards are memoized, so they get one stable callback that always runs the latest moveTask.
+  const moveTaskRef = useRef(moveTask);
+  useEffect(() => {
+    moveTaskRef.current = moveTask;
+  });
+  const onMoveCard = useCallback((taskId: string, status: TaskStatus) => {
+    void moveTaskRef.current(taskId, status);
+  }, []);
 
   function onDrop(e: DragEvent, status: TaskStatus) {
     e.preventDefault();
@@ -261,7 +279,7 @@ export function Board() {
                         key={task.id}
                         task={task}
                         draggable={!readOnly}
-                        onMove={moveTask}
+                        onMove={onMoveCard}
                         readOnly={readOnly}
                       />
                     ))}
@@ -347,7 +365,8 @@ function BoardSkeleton() {
   );
 }
 
-function TaskCard({
+/** Memoized: moving one card or dragging over a column doesn't re-render the others (#128). */
+const TaskCard = memo(function TaskCard({
   task,
   draggable,
   onMove,
@@ -373,7 +392,7 @@ function TaskCard({
         e.dataTransfer.setData('text/devtrack-task', task.id);
         e.dataTransfer.effectAllowed = 'move';
       }}
-      className={`relative flex flex-col gap-2.5 rounded-card border border-line bg-surface p-3.5 shadow-card transition-colors hover:border-line-control ${
+      className={`card-offscreen-lazy relative flex flex-col gap-2.5 rounded-card border border-line bg-surface p-3.5 shadow-card transition-colors hover:border-line-control ${
         task.status === 'DONE' ? 'opacity-75' : ''
       }`}
     >
@@ -407,12 +426,12 @@ function TaskCard({
         </div>
       </div>
       {/* Stretched link: the whole card opens the task, the status menu sits above it. */}
-      <Link
+      <TaskLink
         href={`/projects/${project.id}/tasks/${task.id}`}
         className="line-clamp-3 rounded-chip text-sm leading-snug font-medium text-fg after:absolute after:inset-0 after:rounded-card"
       >
         {task.title}
-      </Link>
+      </TaskLink>
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
         <PriorityIcon priority={task.priority} />
         {shownLabels.map((l) => (
@@ -460,7 +479,7 @@ function TaskCard({
       ) : null}
     </li>
   );
-}
+});
 
 /** Inline quick-add in a column; the task is created with that column's status. */
 function ColumnQuickAdd({

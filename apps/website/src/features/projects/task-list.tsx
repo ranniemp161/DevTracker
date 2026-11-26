@@ -1,7 +1,6 @@
 'use client';
 
 import type { Task } from '@devtrack/types';
-import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Fragment, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { CalendarIcon, ChevronRightIcon, MyTasksIcon } from '@/components/icons';
@@ -32,6 +31,7 @@ import {
 } from './task-list-status';
 import { selectionState, toggleAll, toggleOne } from './task-selection';
 import { localWorkDate } from './task-timer';
+import { TaskLink } from '@/components/task-link';
 
 /** Row checkbox props; omitted when the viewer can't edit (read-only project). */
 interface RowSelect {
@@ -413,12 +413,12 @@ function TaskRow({
       ) : null}
       <td className="px-4 py-2.5 font-mono text-xs whitespace-nowrap text-fg-muted">{t.key}</td>
       <td className="px-4 py-2.5">
-        <Link
+        <TaskLink
           href={`/projects/${projectId}/tasks/${t.id}`}
           className="font-medium text-fg hover:underline"
         >
           {t.title}
-        </Link>
+        </TaskLink>
         {t.labels.length > 0 ? (
           <div className="mt-1 flex flex-wrap gap-1">
             {t.labels.map((l) => (
@@ -476,7 +476,7 @@ function StackedRow({
           />
         </span>
       ) : null}
-      <Link
+      <TaskLink
         href={`/projects/${projectId}/tasks/${t.id}`}
         className="flex min-w-0 flex-1 items-center gap-2 rounded-control px-1 py-3 hover:bg-surface-sunken"
       >
@@ -528,7 +528,7 @@ function StackedRow({
         <span className="shrink-0 text-fg-muted">
           <ChevronRightIcon size={16} />
         </span>
-      </Link>
+      </TaskLink>
     </li>
   );
 }

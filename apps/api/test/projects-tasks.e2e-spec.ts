@@ -404,6 +404,14 @@ describe('tasks', () => {
     expect(await filter('priority=URGENT')).toEqual(['DEV-5']);
     expect(await filter(`assigneeId=${dev.id}`)).toEqual(['DEV-3']);
 
+    // The board relies on this (#128): a cursor from an unfiltered page continues under a
+    // status filter, so the rest of a large project loads for every status at once.
+    expect(await filter(`status=TODO&cursor=${page1.body.meta.nextCursor}`)).toEqual([
+      'DEV-3',
+      'DEV-1',
+    ]);
+    expect(await filter(`status=DONE&cursor=${page1.body.meta.nextCursor}`)).toEqual(['DEV-2']);
+
     expect((await dev.browser.get(`/api/v1/projects/${project}/tasks?cursor=garbage`)).status).toBe(
       400,
     );

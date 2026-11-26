@@ -1,7 +1,6 @@
 'use client';
 
 import type { RelatedTask, TaskRelationKind, WorkspaceSearchResponse } from '@devtrack/types';
-import Link from 'next/link';
 import { useEffect, useId, useRef, useState } from 'react';
 import { SearchIcon, XIcon } from '@/components/icons';
 import { Button, IconButton, SegmentedControl, Skeleton, StatusDot } from '@/components/ui';
@@ -10,6 +9,7 @@ import { useRealtimeRefresh } from '@/lib/realtime';
 import { useApiQuery } from '@/lib/use-api-query';
 import { useProject } from './project-context';
 import { TASK_STATUS_LABEL } from './labels';
+import { TaskLink } from '@/components/task-link';
 
 const GROUPS: { kind: TaskRelationKind; title: string }[] = [
   { kind: 'BLOCKED_BY', title: 'Blocked by' },
@@ -90,14 +90,14 @@ export function TaskRelations({ taskId, onChanged }: { taskId: string; onChanged
                       <StatusDot status={r.task.status} />
                       <span className="sr-only">{TASK_STATUS_LABEL[r.task.status]}</span>
                       <span className="shrink-0 font-mono text-xs text-fg-muted">{r.task.key}</span>
-                      <Link
+                      <TaskLink
                         href={`/projects/${r.task.projectId}/tasks/${r.task.id}`}
                         className={`min-w-0 flex-1 truncate text-sm hover:underline ${
                           r.task.status === 'DONE' ? 'text-fg-subtle line-through' : 'text-fg'
                         }`}
                       >
                         {r.task.title}
-                      </Link>
+                      </TaskLink>
                       {r.task.projectId !== project.id ? (
                         <span className="hidden shrink-0 text-xs text-fg-subtle sm:inline">
                           {r.task.projectName}
