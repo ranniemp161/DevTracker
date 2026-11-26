@@ -1,13 +1,13 @@
 'use client';
 
 import type { ProjectTimesheetRow } from '@devtrack/types';
-import Link from 'next/link';
 import { useState } from 'react';
 import { Button, EmptyState, ErrorState, Skeleton } from '@/components/ui';
 import { useApiQuery } from '@/lib/use-api-query';
 import { formatDate, formatMinutes } from './labels';
 import { useProject } from './project-context';
 import { localWorkDate } from './task-timer';
+import { TaskLink } from '@/components/task-link';
 
 function currentPeriod() {
   const to = localWorkDate();
@@ -208,7 +208,7 @@ export function ProjectTimesheet() {
                       {rows.map((row) => (
                         <tr key={`${row.taskId}:${row.user?.id ?? 'deleted'}`}>
                           <th scope="row" className="px-3 py-2.5 font-medium sm:px-4">
-                            <Link
+                            <TaskLink
                               href={`/projects/${project.id}/tasks/${row.taskId}`}
                               className="hover:underline"
                             >
@@ -216,7 +216,7 @@ export function ProjectTimesheet() {
                                 {project.key}-{row.taskNumber}
                               </span>
                               {row.taskTitle}
-                            </Link>
+                            </TaskLink>
                             <span className="mt-0.5 block text-xs font-normal text-fg-muted sm:hidden print:hidden">
                               {row.user?.username ?? 'Deleted user'}
                             </span>

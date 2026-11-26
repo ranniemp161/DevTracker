@@ -1,7 +1,6 @@
 'use client';
 
 import type { MyTask, MyTasksResponse, TaskStatus } from '@devtrack/types';
-import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { HeaderActions } from '@/components/page-header';
 import { useToast } from '@/components/toaster';
@@ -13,6 +12,7 @@ import { useWorkspace } from '../workspaces/workspace-context';
 import { formatDate, TASK_STATUS_LABEL } from './labels';
 import { DUE_GROUP_LABEL, groupByDue, localDate } from './my-tasks-groups';
 import { TaskStatusMenu } from './task-status-menu';
+import { TaskLink } from '@/components/task-link';
 
 /** Open tasks assigned to me in this workspace, grouped by when they're due. */
 export function MyTasksPage() {
@@ -107,12 +107,12 @@ export function MyTasksPage() {
                 <li key={t.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
                   <TaskStatusMenu status={t.status} onSelect={(s) => void setStatus(t, s)} />
                   <span className="font-mono text-xs whitespace-nowrap text-fg-muted">{t.key}</span>
-                  <Link
+                  <TaskLink
                     href={`/projects/${t.project.id}/tasks/${t.id}`}
                     className="min-w-0 flex-1 truncate font-medium text-fg hover:underline"
                   >
                     {t.title}
-                  </Link>
+                  </TaskLink>
                   <span className="text-label text-fg-muted">{t.project.name}</span>
                   <PriorityIcon priority={t.priority} />
                   <span

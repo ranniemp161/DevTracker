@@ -1,7 +1,6 @@
 'use client';
 
 import { TASK_STATUSES, type Task, type TaskStatus } from '@devtrack/types';
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState, type DragEvent, type FormEvent, type RefObject } from 'react';
 import { AlertIcon, CalendarIcon, ChecklistIcon, PlusIcon } from '@/components/icons';
@@ -26,6 +25,7 @@ import { useProject } from './project-context';
 import { filterTask, TaskFilterBar, useTaskFilters } from './task-filters';
 import { TaskStatusMenu } from './task-status-menu';
 import { useProjectTasks } from './use-project-tasks';
+import { TaskLink } from '@/components/task-link';
 
 const byPriorityThenAge = (a: Task, b: Task) =>
   PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority] || a.createdAt.localeCompare(b.createdAt);
@@ -407,12 +407,12 @@ function TaskCard({
         </div>
       </div>
       {/* Stretched link: the whole card opens the task, the status menu sits above it. */}
-      <Link
+      <TaskLink
         href={`/projects/${project.id}/tasks/${task.id}`}
         className="line-clamp-3 rounded-chip text-sm leading-snug font-medium text-fg after:absolute after:inset-0 after:rounded-card"
       >
         {task.title}
-      </Link>
+      </TaskLink>
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
         <PriorityIcon priority={task.priority} />
         {shownLabels.map((l) => (

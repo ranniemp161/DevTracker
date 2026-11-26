@@ -2,7 +2,6 @@
 
 import type { ActivityEntry } from '@devtrack/types';
 import type { ActivityCategory } from '@devtrack/validators';
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
@@ -19,6 +18,7 @@ import { apiPage, ApiError } from '@/lib/api';
 import { useRealtimeRefresh } from '@/lib/realtime';
 import { activityKind, type ActivityKind } from './activity-kind';
 import { actorLabel, describeActivity, timeAgo } from './describe-activity';
+import { TaskLink } from '@/components/task-link';
 
 /** Newest-first activity list with "Load more". Pass `taskId` for a single task's history. */
 export function ActivityFeed({
@@ -114,12 +114,12 @@ export function ActivityFeed({
                         {e.action === 'task.deleted' ? (
                           <span className="font-mono text-xs font-medium">{e.task.key}</span>
                         ) : (
-                          <Link
+                          <TaskLink
                             href={`/projects/${projectId}/tasks/${e.task.id}`}
                             className="font-mono text-xs font-medium text-primary hover:underline"
                           >
                             {e.task.key}
-                          </Link>
+                          </TaskLink>
                         )}
                       </>
                     ) : null}

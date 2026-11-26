@@ -19,6 +19,7 @@ import { api, ApiError } from '@/lib/api';
 import { useApiQuery } from '@/lib/use-api-query';
 import { formatDate } from '../projects/labels';
 import { useProject } from '../projects/project-context';
+import { TaskLink } from '@/components/task-link';
 
 type Tab = 'new' | 'accepted' | 'declined';
 const TABS: { value: Tab; label: string }[] = [
@@ -111,12 +112,12 @@ export function TriagePage() {
                   <span>{formatDate(r.createdAt)}</span>
                 </p>
                 {r.task ? (
-                  <Link
+                  <TaskLink
                     href={`/projects/${project.id}/tasks/${r.task.id}`}
                     className="block text-md font-semibold text-fg hover:underline"
                   >
                     {r.task.title}
-                  </Link>
+                  </TaskLink>
                 ) : (
                   <p className="text-md font-semibold text-fg-muted">Task deleted</p>
                 )}

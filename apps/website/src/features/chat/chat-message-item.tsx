@@ -1,7 +1,6 @@
 'use client';
 
 import type { ProjectMessage, PublicUser } from '@devtrack/types';
-import Link from 'next/link';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   AlertIcon,
@@ -15,6 +14,7 @@ import { Avatar, Button, StatusDot } from '@/components/ui';
 import { api } from '@/lib/api';
 import type { CreateChatMessageInput } from '@devtrack/validators';
 import { TASK_STATUS_LABEL } from '../projects/labels';
+import { TaskLink } from '@/components/task-link';
 
 export interface OptimisticChatMessage extends ProjectMessage {
   status?: 'sending' | 'failed' | 'sent';
@@ -322,7 +322,7 @@ export function ChatMessageItem({
         {/* Linked task badge */}
         {!message.deleted && message.task ? (
           <div className="mt-2">
-            <Link
+            <TaskLink
               href={`/projects/${message.projectId}/tasks/${message.task.id}`}
               className="flex max-w-md items-center gap-3 rounded-card border border-line bg-surface-sunken px-3 py-2 transition-colors hover:border-line-control"
             >
@@ -337,7 +337,7 @@ export function ChatMessageItem({
                 </span>
               </span>
               <ChevronRightIcon size={14} className="shrink-0 text-fg-subtle" />
-            </Link>
+            </TaskLink>
           </div>
         ) : null}
 

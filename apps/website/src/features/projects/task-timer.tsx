@@ -1,13 +1,13 @@
 'use client';
 
 import type { ActiveTaskTimer } from '@devtrack/types';
-import Link from 'next/link';
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { useToast } from '@/components/toaster';
 import { Button } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useApiQuery } from '@/lib/use-api-query';
+import { TaskLink } from '@/components/task-link';
 
 const activePath = '/time-tracker/active';
 
@@ -133,12 +133,12 @@ function RunningTimer({
           {elapsed}
         </span>
         {timer.projectId ? (
-          <Link
+          <TaskLink
             href={`/projects/${timer.projectId}/tasks/${timer.taskId}`}
             className="min-w-0 flex-1 truncate text-sm text-fg-secondary hover:underline"
           >
             {timer.taskTitle}
-          </Link>
+          </TaskLink>
         ) : (
           <span className="min-w-0 flex-1 truncate text-sm text-fg-secondary">
             Task unavailable
