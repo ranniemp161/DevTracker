@@ -153,3 +153,27 @@ This used a temporary project, "Perf test (delete me)", in the owner's personal 
   - Searching and clearing the filter re-render in frames of up to 250 ms, without blocking tasks over 50 ms.
 - **The pages load one after another.** Each 200 tasks adds a ~350 ms round.
 - **Follow-up:** #128 (render cost and serial pages).
+
+### After #127 and #128 — 2026-11-26 (PR #129, production)
+
+Measured the same way in the built-in browser. The 300-task test was rerun on a temporary project in the owner's personal workspace, and then the project was deleted.
+
+**In-app navigation (#127):** project and workspace pages are now static shells (`X-Nextjs-Prerender: 1`, `X-Vercel-Cache: HIT`). Links prefetch them in full, and task links prefetch only on hover, focus or touch.
+
+| Navigation                       | Before: first API call starts | After                                                     |
+| -------------------------------- | ----------------------------- | --------------------------------------------------------- |
+| Projects → board                 | ~300 ms (waits for `?_rsc=`)  | 18 ms                                                     |
+| Task → board (cached)            | ~360 ms                       | 41 ms                                                     |
+| Board → task, not prefetched yet | ~330 ms                       | 140 ms (the `?_rsc=` comes from the edge cache in ~70 ms) |
+
+**Board with 300 tasks (#128):**
+
+|                                       | Before                                    | After                                                   |
+| ------------------------------------- | ----------------------------------------- | ------------------------------------------------------- |
+| Longest main-thread block on load     | ~430 ms (one 485 ms frame)                | 8 ms (longest frame 58 ms), no long tasks               |
+| DOM nodes                             | ~13,000                                   | ~5,400                                                  |
+| Task-list requests                    | 2 pages in series; +1 round per 200 tasks | 1 page, then every status at once: 2 rounds at any size |
+| Moving a card (menu or drag and drop) | re-renders all 300 cards                  | no frame over 50 ms                                     |
+| Task-page prefetches from the board   | —                                         | 0 until a card is hovered                               |
+
+Checked by hand on the test board: the status menu (its items render on focus, it opens, and it moves the card), and drag and drop between columns.
