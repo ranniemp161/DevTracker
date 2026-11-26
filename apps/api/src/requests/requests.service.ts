@@ -16,6 +16,7 @@ import {
   taskRequests,
   tasks,
   users,
+  projectMembers,
   workspaceMembers,
   type Database,
   type Transaction,
@@ -140,15 +141,23 @@ export class RequestsService {
         event: { type: 'task.created', payload: { taskId: task!.id, status: 'BACKLOG' } },
       });
 
-      const managers = await tx
-        .select({ id: workspaceMembers.userId })
-        .from(workspaceMembers)
-        .where(
-          and(
-            eq(workspaceMembers.workspaceId, project.workspaceId),
-            inArray(workspaceMembers.role, ['OWNER', 'ADMIN']),
-          ),
-        );
+      // 0023 §4: the project's leads hear about it; without leads, the workspace's admins do.
+      const leads = await tx
+        .select({ id: projectMembers.userId })
+        .from(projectMembers)
+        .where(and(eq(projectMembers.projectId, project.id), eq(projectMembers.role, 'lead')));
+      const managers =
+        leads.length > 0
+          ? leads
+          : await tx
+              .select({ id: workspaceMembers.userId })
+              .from(workspaceMembers)
+              .where(
+                and(
+                  eq(workspaceMembers.workspaceId, project.workspaceId),
+                  inArray(workspaceMembers.role, ['OWNER', 'ADMIN']),
+                ),
+              );
       const what = input.kind === 'bug' ? 'bug report' : 'request';
       await this.events.notify(
         tx,
@@ -177,7 +186,7 @@ export class RequestsService {
   // ----------------------------------------------------------------- triage
 
   async list(userId: string, projectId: string, query: ListRequestsQuery): Promise<TaskRequest[]> {
-    const { project } = await this.access.require(userId, projectId, { write: true });
+    const { project } = await this.access.require(userId, projectId, { triage: true });
     const rows = await this.db
       .select({
         request: taskRequests,
@@ -335,7 +344,7 @@ export class RequestsService {
       .from(taskRequests)
       .where(eq(taskRequests.id, requestId));
     if (!request) throw requestNotFound();
-    const { project } = await this.access.require(userId, request.projectId, { write: true });
+    const { project } = await this.access.require(userId, request.projectId, { triage: true });
     if (request.status !== 'new') {
       throw new AppException(
         HttpStatus.CONFLICT,

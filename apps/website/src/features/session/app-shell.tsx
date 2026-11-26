@@ -538,7 +538,7 @@ function ProjectMoreLinks({
   const links = [
     { href: `${base}/milestones`, label: 'Milestones', icon: FlagIcon },
     { href: `${base}/activity`, label: 'Activity', icon: ActivityIcon },
-    ...(project.status === 'ARCHIVED'
+    ...(project.status === 'ARCHIVED' || !project.viewerCanTriage
       ? []
       : [
           {

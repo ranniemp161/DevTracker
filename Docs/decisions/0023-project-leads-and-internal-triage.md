@@ -39,6 +39,7 @@ There is no "reports to" hierarchy between people. Responsibility attaches to wo
 ## 3. Internal triage (per-project setting)
 
 - **Setting:** `projects.internal_triage boolean NOT NULL DEFAULT false`, changed by leads and Admins in Project settings. Off keeps today's behavior exactly.
+- **It only applies once the project has a lead.** Without a lead every member triages (§4), so members could accept their own proposals and the gate would mean nothing. Settings explains this when the project has no leads, and the API treats the setting as off until there is one.
 - **When it's on:**
   - Members who aren't leads **propose** tasks instead of creating them. The "New task" control becomes "Propose task" and uses the same form (title, description, labels, attachments), plus a type: Bug or Request.
   - A proposal creates a `BACKLOG` task with the member as reporter and no assignee, plus a `task_requests` row with `source = 'internal'`, `reporter_user_id` set and status `new`. The type attaches the same "Bug" or "Request" label as the form (0016 §3).
@@ -49,11 +50,16 @@ There is no "reports to" hierarchy between people. Responsibility attaches to wo
 
 ## 4. Triage
 
-- **Who triages (supersedes 0016 §4):** the project's leads, plus workspace Owners and Admins. A project with no leads is triaged by Owners and Admins only, which matches who manages it today.
+- **Who triages (supersedes 0016 §4), decided by whether the project has a lead (user answer, 2026-11-26):**
+  - **No leads:** everyone who can edit tasks in the project triages, exactly as in 0016. This fits small teams where whoever is free triages.
+  - **One or more leads:** only the project's leads and workspace Owners/Admins triage. This is the PM-style workflow, where the lead decides what gets done and who does it.
+  - Developers who can't triage still help: they comment on a request's task (reproduce it, judge severity, point out duplicates) and the lead decides.
+  - A team that rotates triage duty between developers makes the developer on duty a lead for that period. A separate triager role is out of scope (§8) until teams ask for it.
+  - The rule is checked on every triage call, so appointing the first lead or removing the last one changes who triages at once.
 - **One list for both sources.** The Triage tab shows form requests and internal proposals together. Each row shows its source: the reporter's name and email for the form (until deleted, 0016 §5), or the member's avatar and name for a proposal. A filter switches between All, Form and Team.
 - **Accept** works as today: status `accepted`, `triaged_by`, `triaged_at`, and the task moves to To do (0021).
 - **Decline** takes an optional reason (up to 500 characters, stored in `task_requests.decline_reason`) and soft-deletes the task as today (0016 §4). The request row stays.
-- **The Triage tab** appears for anyone who can triage, with the count of `new` items. Members who can't triage don't see it.
+- **The Triage tab** appears for anyone who can triage, with the count of `new` items. On a project with leads, other members don't see it. `Project` gains `viewerCanTriage` so the website doesn't have to work out the rule itself.
 - **Who is told about new items (supersedes 0016 §3 recipients):** `REQUEST_SUBMITTED` goes to the project's leads. If the project has no leads, it goes to the workspace Owners and Admins who are project members, as today. A proposal never notifies its own reporter.
 
 ## 5. Telling the reporter
@@ -79,6 +85,7 @@ There is no "reports to" hierarchy between people. Responsibility attaches to wo
 - Approvals for anything other than new tasks (for example, a lead approving a status change).
 - A reporting hierarchy between people.
 - Letting leads add or remove project members. This can be reopened if teams ask for it.
+- A separate triager role for developers on triage duty (§4).
 
 ## 9. Open questions (defaults used above)
 
@@ -99,7 +106,7 @@ There is no "reports to" hierarchy between people. Responsibility attaches to wo
 - `users.job_title text`.
 - The `notification_type` enum gains `REQUEST_TRIAGED` and `TASK_BLOCKED`.
 
-No existing data changes meaning: every project starts with no leads and internal triage off. The one behavior change for existing projects is that members who aren't Admins stop triaging form requests (§4). The migration runs against the shared database only after the user approves the SQL.
+No existing data changes meaning: every project starts with no leads and internal triage off. Existing projects keep today's triage behavior until someone appoints a lead (§4). The migration runs against the shared database only after the user approves the SQL.
 
 ## 11. Build order (one PR each)
 

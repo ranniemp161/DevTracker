@@ -8,6 +8,7 @@ import {
   projectMembers,
   projects,
   sessions,
+  sql,
   users,
   type Executor,
 } from '@devtrack/database';
@@ -30,6 +31,9 @@ export async function findWorkspaceAccess(executor: Executor, userId: string, wo
   return row ?? null;
 }
 
+/** True when the outer query's project has at least one lead (0023 §4). */
+export const projectHasLeads = sql<boolean>`exists (select 1 from ${projectMembers} where ${projectMembers.projectId} = ${projects.id} and ${projectMembers.role} = 'lead')`;
+
 export async function findProjectAccess(executor: Executor, userId: string, projectId: string) {
   if (!isUuid(projectId)) return null;
   const [row] = await executor
@@ -38,6 +42,7 @@ export async function findProjectAccess(executor: Executor, userId: string, proj
       workspaceRole: workspaceMembers.role,
       projectMembershipId: projectMembers.id,
       projectRole: projectMembers.role,
+      hasLeads: projectHasLeads,
     })
     .from(projects)
     .innerJoin(
@@ -63,7 +68,15 @@ export async function findProjectAccess(executor: Executor, userId: string, proj
   if (!isWorkspaceAdmin && !row.projectMembershipId) return null;
   // Decision record 0023 §2: a lead manages their own project, never others.
   const canManage = isWorkspaceAdmin || row.projectRole === 'lead';
-  return { project: row.project, workspaceRole: row.workspaceRole, canManage, isWorkspaceAdmin };
+  // 0023 §4: everyone triages until the project has a lead; then leads and admins do.
+  const canTriage = canManage || !row.hasLeads;
+  return {
+    project: row.project,
+    workspaceRole: row.workspaceRole,
+    canManage,
+    isWorkspaceAdmin,
+    canTriage,
+  };
 }
 
 export async function findActiveSession(executor: Executor, sessionId: string) {

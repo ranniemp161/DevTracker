@@ -55,6 +55,8 @@ export interface Project {
   viewerCanManage: boolean;
   /** Workspace Owners/Admins only: may archive, manage members and appoint leads (0023 §2). */
   viewerCanManageMembers: boolean;
+  /** May list, accept and decline requests: everyone until the project has a lead (0023 §4). */
+  viewerCanTriage: boolean;
   /** The project's leads (0023 §2), by username. */
   leads: UserRef[];
   createdAt: string;
