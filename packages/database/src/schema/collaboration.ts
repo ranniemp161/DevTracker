@@ -95,6 +95,7 @@ export const notificationType = pgEnum('notification_type', [
   'MILESTONE_COMPLETED',
   'REQUEST_SUBMITTED',
   'TASK_DONE_PROMPT',
+  'REQUEST_TRIAGED',
 ]);
 
 /** Architecture §8.2 — notifications. `project_id` (M4 addition) lets clients build links. */

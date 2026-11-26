@@ -86,5 +86,24 @@ export const listRequestsQuerySchema = z.object({
 });
 export type ListRequestsQuery = z.infer<typeof listRequestsQuerySchema>;
 
+/** Declining takes an optional reason for the proposer (0023 §4). */
+export const declineRequestSchema = z
+  .object({
+    reason: z
+      .string()
+      .trim()
+      .max(500, { error: 'Reason must be at most 500 characters.' })
+      .optional()
+      .transform((v) => v || undefined),
+  })
+  .default({ reason: undefined });
+export type DeclineRequestInput = z.infer<typeof declineRequestSchema>;
+
+/** 0023 §5: `GET /projects/:id/proposals?mine=true`; there is no list of everyone's. */
+export const listProposalsQuerySchema = z.object({
+  mine: z.literal('true', { error: 'Only your own proposals can be listed (mine=true).' }),
+});
+export type ListProposalsQuery = z.infer<typeof listProposalsQuerySchema>;
+
 export const setIntakeSchema = z.object({ enabled: z.boolean() });
 export type SetIntakeInput = z.infer<typeof setIntakeSchema>;

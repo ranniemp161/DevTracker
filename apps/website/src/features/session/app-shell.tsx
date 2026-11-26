@@ -538,14 +538,14 @@ function ProjectMoreLinks({
   const links = [
     { href: `${base}/milestones`, label: 'Milestones', icon: FlagIcon },
     { href: `${base}/activity`, label: 'Activity', icon: ActivityIcon },
-    ...(project.status === 'ARCHIVED' || !project.viewerCanTriage
+    ...(project.status === 'ARCHIVED' || !(project.viewerCanTriage || project.viewerMustPropose)
       ? []
       : [
           {
             href: `${base}/triage`,
-            label: 'Triage',
+            label: project.viewerCanTriage ? 'Triage' : 'Proposals',
             icon: InboxIcon,
-            count: project.newRequestCount,
+            count: project.viewerCanTriage ? project.newRequestCount : undefined,
           },
         ]),
     project.viewerCanManage

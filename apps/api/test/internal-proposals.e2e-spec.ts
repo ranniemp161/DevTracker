@@ -196,3 +196,153 @@ describe('turning internal triage off', () => {
     expect((await propose(dev, project)).status).toBe(409);
   });
 });
+
+const notes = async (u: U, type: string) =>
+  (
+    (await u.browser.get('/api/v1/notifications').expect(200)).body.data as {
+      type: string;
+      title: string;
+      body: string | null;
+      link: string | null;
+    }[]
+  ).filter((n) => n.type === type);
+
+const requestIdFor = async (lead: U, project: string, title: string) =>
+  (await requestsFor(lead, project)).find((r) => r.task?.title === title)!.id;
+
+describe('telling the proposer (0023 §5)', () => {
+  it('sends the outcome to the proposer, never to the lead or for form requests', async () => {
+    const { owner, lead, dev, project } = await gated();
+    const kept = (await propose(dev, project, { title: 'Keep sessions alive' }).expect(201)).body
+      .data.task.id as string;
+    await propose(dev, project, { title: 'Rewrite in Rust' }).expect(201);
+
+    await lead.browser
+      .post(`/api/v1/requests/${await requestIdFor(lead, project, 'Keep sessions alive')}/accept`)
+      .expect(204);
+    await lead.browser
+      .post(`/api/v1/requests/${await requestIdFor(lead, project, 'Rewrite in Rust')}/decline`)
+      .send({ reason: 'Not this quarter.' })
+      .expect(204);
+
+    const outcomes = await notes(dev, 'REQUEST_TRIAGED');
+    expect(outcomes.map(({ title, body, link }) => ({ title, body, link })).reverse()).toEqual([
+      {
+        title: 'Accepted: Keep sessions alive',
+        body: null,
+        link: `/projects/${project}/tasks/${kept}`,
+      },
+      {
+        title: 'Declined: Rewrite in Rust',
+        body: 'Not this quarter.',
+        link: `/projects/${project}/triage`,
+      },
+    ]);
+    expect(await notes(lead, 'REQUEST_TRIAGED')).toEqual([]);
+
+    // A form request has no account to tell.
+    const form = await owner.browser
+      .put(`/api/v1/projects/${project}/intake`)
+      .send({ enabled: true })
+      .expect(200);
+    await t
+      .http()
+      .post(`/api/v1/public/requests/${form.body.data.intake.token}`)
+      .set('x-devtrack-client-ip', '203.0.113.1')
+      .set('x-devtrack-proxy-secret', TEST_PROXY_SECRET)
+      .send({ kind: 'bug', title: 'From a client' })
+      .expect(202);
+    await lead.browser
+      .post(`/api/v1/requests/${await requestIdFor(lead, project, 'From a client')}/accept`)
+      .expect(204);
+    for (const u of [owner, lead, dev]) {
+      expect((await notes(u, 'REQUEST_TRIAGED')).length).toBe(u === dev ? 2 : 0);
+    }
+  });
+});
+
+describe('decline reason (0023 §4)', () => {
+  it('is optional, at most 500 characters, and shown on declined items', async () => {
+    const { lead, dev, project } = await gated();
+    await propose(dev, project, { title: 'First idea' }).expect(201);
+    await propose(dev, project, { title: 'Second idea' }).expect(201);
+    const first = await requestIdFor(lead, project, 'First idea');
+    const second = await requestIdFor(lead, project, 'Second idea');
+
+    const tooLong = await lead.browser
+      .post(`/api/v1/requests/${first}/decline`)
+      .send({ reason: 'x'.repeat(501) });
+    expect(tooLong.status).toBe(400);
+
+    await lead.browser
+      .post(`/api/v1/requests/${first}/decline`)
+      .send({ reason: '  Duplicate of DEV-1.  ' })
+      .expect(204);
+    await lead.browser.post(`/api/v1/requests/${second}/decline`).expect(204);
+
+    const declined = await lead.browser
+      .get(`/api/v1/projects/${project}/requests?status=declined`)
+      .expect(200);
+    expect(
+      Object.fromEntries(
+        (declined.body.data as { id: string; declineReason: string | null }[]).map((r) => [
+          r.id,
+          r.declineReason,
+        ]),
+      ),
+    ).toEqual({ [first]: 'Duplicate of DEV-1.', [second]: null });
+  });
+});
+
+describe('my proposals (0023 §5)', () => {
+  it("shows members their own proposals, declined ones included, and nobody else's", async () => {
+    const { owner, lead, dev, project } = await gated();
+    // A second member on DEV.
+    const other = await verifiedUser(t, 'other');
+    const ws = (await owner.browser.get(`/api/v1/projects/${project}`).expect(200)).body.data
+      .project.workspaceId as string;
+    await owner.browser
+      .post(`/api/v1/workspaces/${ws}/invitations`)
+      .send({ email: other.email, role: 'MEMBER' })
+      .expect(201);
+    await other.browser
+      .post('/api/v1/invitations/accept')
+      .send({ token: t.mailer.lastToken(other.email, 'invited you') })
+      .expect(200);
+    await owner.browser
+      .post(`/api/v1/projects/${project}/members`)
+      .send({ userId: other.id })
+      .expect(201);
+
+    await propose(dev, project, { title: 'Dark mode', kind: 'request' }).expect(201);
+    await propose(dev, project, { title: 'Blink tag' }).expect(201);
+    await propose(other, project, { title: 'Not yours' }).expect(201);
+    await lead.browser
+      .post(`/api/v1/requests/${await requestIdFor(lead, project, 'Blink tag')}/decline`)
+      .send({ reason: 'No.' })
+      .expect(204);
+
+    const mine = (u: U) =>
+      u.browser.get(`/api/v1/projects/${project}/proposals?mine=true`).expect(200);
+    const devs = (await mine(dev)).body.data as {
+      status: string;
+      kind: string;
+      task: { title: string } | null;
+      declineReason: string | null;
+    }[];
+    expect(
+      devs.map((r) => ({
+        status: r.status,
+        title: r.task?.title ?? null,
+        reason: r.declineReason,
+      })),
+    ).toEqual([
+      { status: 'declined', title: null, reason: 'No.' },
+      { status: 'new', title: 'Dark mode', reason: null },
+    ]);
+    expect(((await mine(other)).body.data as unknown[]).length).toBe(1);
+
+    // The full list stays with the people who triage.
+    expect((await other.browser.get(`/api/v1/projects/${project}/requests`)).status).toBe(403);
+  });
+});

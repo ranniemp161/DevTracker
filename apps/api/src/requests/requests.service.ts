@@ -20,6 +20,7 @@ import {
   projectMembers,
   workspaceMembers,
   type Database,
+  type SQL,
   type Transaction,
 } from '@devtrack/database';
 import {
@@ -246,6 +247,29 @@ export class RequestsService {
 
   async list(userId: string, projectId: string, query: ListRequestsQuery): Promise<TaskRequest[]> {
     const { project } = await this.access.require(userId, projectId, { triage: true });
+    return this.load(project, [
+      eq(taskRequests.status, query.status),
+      query.source ? eq(taskRequests.source, query.source) : undefined,
+    ]);
+  }
+
+  /**
+   * 0023 §5: a member's own proposals in every status, declined ones included. Anyone on the
+   * project may ask, and sees only their own.
+   */
+  async mine(userId: string, projectId: string): Promise<TaskRequest[]> {
+    const { project } = await this.access.require(userId, projectId);
+    return this.load(project, [
+      eq(taskRequests.source, 'internal'),
+      eq(taskRequests.reporterUserId, userId),
+    ]);
+  }
+
+  private async load(
+    project: Pick<ProjectRow, 'id' | 'key'>,
+    conditions: (SQL | undefined)[],
+  ): Promise<TaskRequest[]> {
+    const projectId = project.id;
     const rows = await this.db
       .select({
         request: taskRequests,
@@ -267,13 +291,7 @@ export class RequestsService {
       .innerJoin(tasks, eq(tasks.id, taskRequests.taskId))
       .leftJoin(users, eq(users.id, taskRequests.triagedBy))
       .leftJoin(reporters, eq(reporters.id, taskRequests.reporterUserId))
-      .where(
-        and(
-          eq(taskRequests.projectId, projectId),
-          eq(taskRequests.status, query.status),
-          query.source ? eq(taskRequests.source, query.source) : undefined,
-        ),
-      )
+      .where(and(eq(taskRequests.projectId, projectId), ...conditions))
       .orderBy(desc(taskRequests.createdAt))
       .limit(200);
     const files = await this.attachments.completedFor(
@@ -304,6 +322,7 @@ export class RequestsService {
       triagedBy:
         triager?.id && triager.username ? { id: triager.id, username: triager.username } : null,
       triagedAt: r.triagedAt?.toISOString() ?? null,
+      declineReason: r.declineReason,
       createdAt: r.createdAt.toISOString(),
       attachments: task.deletedAt ? [] : (files.get(task.id) ?? []),
     }));
@@ -320,18 +339,20 @@ export class RequestsService {
       await this.automation.advanceByIds(tx, project, [request.taskId], 'TODO', {
         trigger: 'request',
       });
+      await this.tellReporter(tx, actor, project, request, 'accepted', null);
     });
   }
 
   /** Declining soft-deletes the task (0003); the request row stays for the form's history. */
-  async decline(actor: Actor, requestId: string): Promise<void> {
+  async decline(actor: Actor, requestId: string, reason: string | null): Promise<void> {
     const { request, project } = await this.requireNew(actor.id, requestId);
     await this.db.transaction(async (tx) => {
       const now = new Date();
       await tx
         .update(taskRequests)
-        .set({ status: 'declined', triagedBy: actor.id, triagedAt: now })
+        .set({ status: 'declined', triagedBy: actor.id, triagedAt: now, declineReason: reason })
         .where(eq(taskRequests.id, request.id));
+      await this.tellReporter(tx, actor, project, request, 'declined', reason);
       const [task] = await tx
         .update(tasks)
         .set({ deletedAt: now })
@@ -412,6 +433,39 @@ export class RequestsService {
       );
     if (!project) throw formNotFound();
     return project;
+  }
+
+  /**
+   * 0023 §5: a proposal's member hears the outcome (the actor is skipped). Form reporters have
+   * no account, so they hear nothing.
+   */
+  private async tellReporter(
+    tx: Transaction,
+    actor: Actor,
+    project: Pick<ProjectRow, 'id' | 'workspaceId'>,
+    request: Pick<typeof taskRequests.$inferSelect, 'id' | 'taskId' | 'reporterUserId'>,
+    outcome: 'accepted' | 'declined',
+    reason: string | null,
+  ): Promise<void> {
+    if (!request.reporterUserId) return;
+    const [task] = await tx
+      .select({ title: tasks.title })
+      .from(tasks)
+      .where(eq(tasks.id, request.taskId));
+    const title = truncate(task?.title ?? 'your proposal', 120);
+    await this.events.notify(tx, actor, [
+      {
+        userId: request.reporterUserId,
+        workspaceId: project.workspaceId,
+        projectId: project.id,
+        type: 'REQUEST_TRIAGED',
+        title: outcome === 'accepted' ? `Accepted: ${title}` : `Declined: ${title}`,
+        body: reason,
+        // Accepted: the task. Declined: the task is gone, so the proposal list.
+        resourceType: outcome === 'accepted' ? 'task' : 'task_request',
+        resourceId: outcome === 'accepted' ? request.taskId : request.id,
+      },
+    ]);
   }
 
   private async requireNew(userId: string, requestId: string) {
