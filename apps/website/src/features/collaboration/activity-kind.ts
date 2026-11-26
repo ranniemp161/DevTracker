@@ -9,7 +9,12 @@ export function activityKind(entry: ActivityEntry): ActivityKind {
   if (entity === 'comment') return 'comment';
   if (entity === 'pull_request' || entity === 'repository') return 'repo';
   if (entity === 'project') {
-    if (action === 'member_added' || action === 'member_removed') return 'member';
+    if (
+      action === 'member_added' ||
+      action === 'member_removed' ||
+      action === 'member_role_changed'
+    )
+      return 'member';
     if (action === 'repository_connected' || action === 'repository_disconnected') return 'repo';
     if (action === 'created') return 'create';
     return 'other';

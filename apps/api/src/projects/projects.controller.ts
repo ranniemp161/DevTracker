@@ -16,8 +16,10 @@ import {
   createProjectSchema,
   listProjectsQuerySchema,
   projectKeySchema,
+  updateProjectMemberSchema,
   updateProjectSchema,
   type AddProjectMemberInput,
+  type UpdateProjectMemberInput,
   type CreateProjectInput,
   type UpdateProjectInput,
 } from '@devtrack/validators';
@@ -99,6 +101,16 @@ export class ProjectsController {
     @Body(new ZodValidationPipe(addProjectMemberSchema)) body: AddProjectMemberInput,
   ): Promise<{ member: ProjectMember }> {
     return { member: await this.projects.addMember(user, id, body.userId.toLowerCase()) };
+  }
+
+  @Patch('projects/:id/members/:userId')
+  async updateMember(
+    @CurrentUser() user: User,
+    @Param('id', UuidParamPipe) id: string,
+    @Param('userId', UuidParamPipe) userId: string,
+    @Body(new ZodValidationPipe(updateProjectMemberSchema)) body: UpdateProjectMemberInput,
+  ): Promise<{ member: ProjectMember }> {
+    return { member: await this.projects.setMemberRole(user, id, userId, body.role) };
   }
 
   @Delete('projects/:id/members/:userId')

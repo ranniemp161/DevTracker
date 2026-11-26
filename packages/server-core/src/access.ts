@@ -37,6 +37,7 @@ export async function findProjectAccess(executor: Executor, userId: string, proj
       project: projects,
       workspaceRole: workspaceMembers.role,
       projectMembershipId: projectMembers.id,
+      projectRole: projectMembers.role,
     })
     .from(projects)
     .innerJoin(
@@ -58,9 +59,11 @@ export async function findProjectAccess(executor: Executor, userId: string, proj
     .limit(1);
 
   if (!row) return null;
-  const canManage = hasAtLeastRole(row.workspaceRole, 'ADMIN');
-  if (!canManage && !row.projectMembershipId) return null;
-  return { project: row.project, workspaceRole: row.workspaceRole, canManage };
+  const isWorkspaceAdmin = hasAtLeastRole(row.workspaceRole, 'ADMIN');
+  if (!isWorkspaceAdmin && !row.projectMembershipId) return null;
+  // Decision record 0023 §2: a lead manages their own project, never others.
+  const canManage = isWorkspaceAdmin || row.projectRole === 'lead';
+  return { project: row.project, workspaceRole: row.workspaceRole, canManage, isWorkspaceAdmin };
 }
 
 export async function findActiveSession(executor: Executor, sessionId: string) {

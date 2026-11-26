@@ -17,16 +17,18 @@ import { useProject } from './project-context';
 export function ProjectSettings() {
   const { project, readOnly } = useProject();
   if (!project.viewerCanManage)
-    return <Alert>Only workspace admins can change project settings.</Alert>;
+    return <Alert>Only project leads and workspace admins can change project settings.</Alert>;
   if (readOnly) return <Alert tone="info">Archived projects cannot be edited.</Alert>;
+  // Leads change their project; people, repositories and archiving stay with admins (0023 §2).
+  const admin = project.viewerCanManageMembers;
   return (
     <div>
       <GeneralCard />
       <ProjectMembers />
-      <ProjectRepositories />
+      {admin ? <ProjectRepositories /> : null}
       <RequestFormCard />
       <ChatGithubCard />
-      <ArchiveCard />
+      {admin ? <ArchiveCard /> : null}
     </div>
   );
 }

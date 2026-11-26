@@ -16,7 +16,13 @@ import {
   type Database,
   type SQL,
 } from '@devtrack/database';
-import { ErrorCode, type Project, type ProjectMember } from '@devtrack/types';
+import {
+  ErrorCode,
+  type Project,
+  type ProjectMember,
+  type ProjectMemberRole,
+  type UserRef,
+} from '@devtrack/types';
 import {
   PROJECT_KEY_MAX_LENGTH,
   type CreateProjectInput,
@@ -37,6 +43,10 @@ const taskDone = sql<number>`(select count(*)::int from ${tasks} where ${tasks.p
 /** Untriaged public-form requests (0016). */
 const newRequestCount = sql<number>`(select count(*)::int from ${taskRequests} where ${taskRequests.projectId} = ${projects.id} and ${taskRequests.status} = 'new')`;
 const creatorColumns = { id: users.id, username: users.username, avatarUrl: users.avatarUrl };
+
+/** What the viewer may do with a project (0023 §2). */
+type Viewer = { canManage: boolean; isWorkspaceAdmin: boolean };
+const ADMIN_VIEWER: Viewer = { canManage: true, isWorkspaceAdmin: true };
 
 @Injectable()
 export class ProjectsService {
@@ -86,7 +96,7 @@ export class ProjectsService {
       }
       throw err;
     }
-    return this.load(created.id, true);
+    return this.load(created.id, ADMIN_VIEWER);
   }
 
   async suggestKey(userId: string, workspaceId: string, base: string) {
@@ -107,11 +117,11 @@ export class ProjectsService {
   /** Admins see every project; Members see the projects they belong to (M3 rule 1). */
   async list(userId: string, workspaceId: string, includeArchived: boolean): Promise<Project[]> {
     const { membership } = await this.workspaceAccess.require(userId, workspaceId);
-    const canManage = hasAtLeastRole(membership.role, 'ADMIN');
+    const isWorkspaceAdmin = hasAtLeastRole(membership.role, 'ADMIN');
 
     const conditions: SQL[] = [eq(projects.workspaceId, workspaceId)];
     if (!includeArchived) conditions.push(ne(projects.status, 'ARCHIVED'));
-    if (!canManage) {
+    if (!isWorkspaceAdmin) {
       conditions.push(
         inArray(
           projects.id,
@@ -130,30 +140,37 @@ export class ProjectsService {
         taskTotal,
         taskDone,
         newRequestCount,
+        viewerRole: projectMembers.role,
       })
       .from(projects)
       .leftJoin(users, eq(users.id, projects.createdBy))
+      .leftJoin(
+        projectMembers,
+        and(eq(projectMembers.projectId, projects.id), eq(projectMembers.userId, userId)),
+      )
       .where(and(...conditions))
       .orderBy(asc(projects.name));
+    const leads = await this.leadsOf(rows.map((r) => r.project.id));
     return rows.map((r) =>
       toProject(
         r.project,
         r.creator,
         r.memberCount,
-        canManage,
+        { canManage: isWorkspaceAdmin || r.viewerRole === 'lead', isWorkspaceAdmin },
         { total: r.taskTotal, done: r.taskDone },
         r.newRequestCount,
+        leads.get(r.project.id) ?? [],
       ),
     );
   }
 
   async get(userId: string, projectId: string): Promise<Project> {
-    const { canManage } = await this.access.require(userId, projectId);
-    return this.load(projectId, canManage);
+    return this.load(projectId, await this.access.require(userId, projectId));
   }
 
   async update(actor: Actor, projectId: string, input: UpdateProjectInput): Promise<Project> {
-    const { project } = await this.access.require(actor.id, projectId, { manage: true });
+    const access = await this.access.require(actor.id, projectId, { manage: true });
+    const { project } = access;
 
     // Validate the resulting date range against the stored values, too.
     const startDate = input.startDate !== undefined ? input.startDate : project.startDate;
@@ -198,12 +215,12 @@ export class ProjectsService {
         });
       });
     }
-    return this.load(projectId, true);
+    return this.load(projectId, access);
   }
 
   /** M3 rule 3: DELETE archives; archived projects are read-only. */
   async archive(actor: Actor, projectId: string): Promise<void> {
-    const { project } = await this.access.require(actor.id, projectId, { manage: true });
+    const { project } = await this.access.require(actor.id, projectId, { admin: true });
     await this.db.transaction(async (tx) => {
       await tx.update(projects).set({ status: 'ARCHIVED' }).where(eq(projects.id, projectId));
       await this.events.activity(tx, {
@@ -225,19 +242,63 @@ export class ProjectsService {
           avatarUrl: users.avatarUrl,
           email: users.email,
         },
+        role: projectMembers.role,
         addedAt: projectMembers.createdAt,
       })
       .from(projectMembers)
       .innerJoin(users, eq(users.id, projectMembers.userId))
       .where(eq(projectMembers.projectId, projectId))
       .orderBy(asc(users.username));
-    return rows.map((r) => ({ user: r.user, addedAt: r.addedAt.toISOString() }));
+    return rows.map((r) => ({
+      user: r.user,
+      role: r.role as ProjectMemberRole,
+      addedAt: r.addedAt.toISOString(),
+    }));
+  }
+
+  /** Decision record 0023 §2: only Owners and Admins appoint leads. */
+  async setMemberRole(
+    actor: Actor,
+    projectId: string,
+    targetUserId: string,
+    role: ProjectMemberRole,
+  ): Promise<ProjectMember> {
+    const { project } = await this.access.require(actor.id, projectId, { admin: true });
+    await this.db.transaction(async (tx) => {
+      const [previous] = await tx
+        .select({ role: projectMembers.role })
+        .from(projectMembers)
+        .where(
+          and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, targetUserId)),
+        )
+        .for('update');
+      if (!previous) throw AppException.notFound('Member not found.');
+      if (previous.role === role) return;
+      await tx
+        .update(projectMembers)
+        .set({ role })
+        .where(
+          and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, targetUserId)),
+        );
+      const [person] = await tx
+        .select({ id: users.id, username: users.username })
+        .from(users)
+        .where(eq(users.id, targetUserId));
+      await this.events.activity(tx, {
+        ...projectScope(project),
+        actor,
+        action: 'project.member_role_changed',
+        metadata: { user: person ?? null, role: { from: previous.role, to: role } },
+      });
+    });
+    const members = await this.listMembers(actor.id, projectId);
+    return members.find((m) => m.user.id === targetUserId)!;
   }
 
   /** Only existing workspace members can be added to a project (M3 rule 2). */
   async addMember(actor: Actor, projectId: string, targetUserId: string): Promise<ProjectMember> {
     const actorId = actor.id;
-    const { project } = await this.access.require(actorId, projectId, { manage: true });
+    const { project } = await this.access.require(actorId, projectId, { admin: true });
     const [inWorkspace] = await this.db
       .select({ id: workspaceMembers.id })
       .from(workspaceMembers)
@@ -284,7 +345,7 @@ export class ProjectsService {
 
   /** Removing someone from a project also unassigns them from its tasks (M3 rule 7). */
   async removeMember(actor: Actor, projectId: string, targetUserId: string): Promise<void> {
-    const { project } = await this.access.require(actor.id, projectId, { manage: true });
+    const { project } = await this.access.require(actor.id, projectId, { admin: true });
     await this.db.transaction(async (tx) => {
       await tx
         .delete(taskAssignees)
@@ -317,7 +378,25 @@ export class ProjectsService {
     });
   }
 
-  private async load(projectId: string, canManage: boolean): Promise<Project> {
+  /** Each project's leads (0023 §2), ordered by username. */
+  private async leadsOf(projectIds: string[]): Promise<Map<string, UserRef[]>> {
+    const byProject = new Map<string, UserRef[]>();
+    if (projectIds.length === 0) return byProject;
+    const rows = await this.db
+      .select({ projectId: projectMembers.projectId, user: creatorColumns })
+      .from(projectMembers)
+      .innerJoin(users, eq(users.id, projectMembers.userId))
+      .where(and(inArray(projectMembers.projectId, projectIds), eq(projectMembers.role, 'lead')))
+      .orderBy(asc(users.username));
+    for (const r of rows) {
+      const list = byProject.get(r.projectId) ?? [];
+      list.push(r.user);
+      byProject.set(r.projectId, list);
+    }
+    return byProject;
+  }
+
+  private async load(projectId: string, viewer: Viewer): Promise<Project> {
     const [row] = await this.db
       .select({
         project: projects,
@@ -334,9 +413,10 @@ export class ProjectsService {
       row!.project,
       row!.creator,
       row!.memberCount,
-      canManage,
+      viewer,
       { total: row!.taskTotal, done: row!.taskDone },
       row!.newRequestCount,
+      (await this.leadsOf([projectId])).get(projectId) ?? [],
     );
   }
 }
@@ -345,9 +425,10 @@ function toProject(
   p: ProjectRow,
   creator: Project['createdBy'],
   memberCount: number,
-  canManage: boolean,
+  { canManage, isWorkspaceAdmin }: Viewer,
   taskCounts: Project['taskCounts'],
   requestCount: number,
+  leads: UserRef[],
 ): Project {
   return {
     id: p.id,
@@ -367,6 +448,8 @@ function toProject(
       : null,
     newRequestCount: requestCount,
     viewerCanManage: canManage,
+    viewerCanManageMembers: isWorkspaceAdmin,
+    leads,
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
   };

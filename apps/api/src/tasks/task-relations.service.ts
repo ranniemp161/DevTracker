@@ -178,7 +178,7 @@ export class TaskRelationsService {
       eq(projects.workspaceId, access.project.workspaceId),
       isNull(tasks.deletedAt),
     ];
-    if (!access.canManage) {
+    if (!access.isWorkspaceAdmin) {
       visible.push(
         inArray(
           projects.id,

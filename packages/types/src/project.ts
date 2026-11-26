@@ -51,14 +51,22 @@ export interface Project {
   intake: ProjectIntake | null;
   /** Untriaged requests from the public form (0016). */
   newRequestCount: number;
-  /** True for workspace Owners/Admins: may edit, archive and manage members. */
+  /** Workspace Owners/Admins and this project's leads: may change the project (0023 §2). */
   viewerCanManage: boolean;
+  /** Workspace Owners/Admins only: may archive, manage members and appoint leads (0023 §2). */
+  viewerCanManageMembers: boolean;
+  /** The project's leads (0023 §2), by username. */
+  leads: UserRef[];
   createdAt: string;
   updatedAt: string;
 }
 
+/** Decision record 0023 §2. */
+export type ProjectMemberRole = 'lead' | 'member';
+
 export interface ProjectMember {
   user: UserRef & { email: string };
+  role: ProjectMemberRole;
   addedAt: string;
 }
 

@@ -38,6 +38,7 @@ export type ActivityAction =
   | 'project.archived'
   | 'project.member_added'
   | 'project.member_removed'
+  | 'project.member_role_changed'
   | 'project.repository_connected'
   | 'project.repository_disconnected'
   | 'github_installation.installed'

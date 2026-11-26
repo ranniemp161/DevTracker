@@ -99,6 +99,10 @@ export function describeActivity(entry: ActivityEntry): string {
       return `added @${user ?? 'someone'} to the project`;
     case 'project.member_removed':
       return `removed @${user ?? 'someone'} from the project`;
+    case 'project.member_role_changed':
+      return (m.role as { to?: string } | undefined)?.to === 'lead'
+        ? `made @${user ?? 'someone'} a project lead`
+        : `removed @${user ?? 'someone'} as project lead`;
     case 'project.repository_connected':
       return `connected repository ${repoName(m)}`;
     case 'project.repository_disconnected':

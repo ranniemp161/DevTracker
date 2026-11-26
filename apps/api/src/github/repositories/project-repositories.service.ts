@@ -59,7 +59,7 @@ export class ProjectRepositoriesService {
     projectId: string,
     input: ConnectRepositoryInput,
   ): Promise<ConnectedRepository> {
-    const { project } = await this.access.require(actor.id, projectId, { manage: true });
+    const { project } = await this.access.require(actor.id, projectId, { admin: true });
 
     const installation = await this.installations.requireForAdmin(actor.id, input.connectionId);
     const connection = installation.ref;
@@ -104,7 +104,7 @@ export class ProjectRepositoriesService {
     projectId: string,
     repositoryId: string,
   ): Promise<{ imported: number }> {
-    const { project } = await this.access.require(userId, projectId, { manage: true });
+    const { project } = await this.access.require(userId, projectId, { admin: true });
     if (!isUuid(repositoryId)) throw notConnected();
     const [row] = await this.db
       .select({ repo: githubRepositories, installation: githubInstallations })
@@ -142,7 +142,7 @@ export class ProjectRepositoriesService {
   }
 
   async disconnect(actor: Actor, projectId: string, repositoryId: string): Promise<void> {
-    const { project } = await this.access.require(actor.id, projectId, { manage: true });
+    const { project } = await this.access.require(actor.id, projectId, { admin: true });
     if (!isUuid(repositoryId)) throw notConnected();
 
     await this.db.transaction((tx) =>
