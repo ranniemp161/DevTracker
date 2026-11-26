@@ -96,6 +96,30 @@ export class ProjectAccessService {
   }
 
   /**
+   * Who answers for the project (0023 §4, §6): its leads, or the workspace's Owners/Admins when
+   * it has none. Used for new requests and blocked tasks.
+   */
+  async responsible(
+    project: Pick<ProjectRow, 'id' | 'workspaceId'>,
+    executor: Executor = this.db,
+  ): Promise<{ id: string }[]> {
+    const leads = await executor
+      .select({ id: projectMembers.userId })
+      .from(projectMembers)
+      .where(and(eq(projectMembers.projectId, project.id), eq(projectMembers.role, 'lead')));
+    if (leads.length > 0) return leads;
+    return executor
+      .select({ id: workspaceMembers.userId })
+      .from(workspaceMembers)
+      .where(
+        and(
+          eq(workspaceMembers.workspaceId, project.workspaceId),
+          inArray(workspaceMembers.role, ['OWNER', 'ADMIN']),
+        ),
+      );
+  }
+
+  /**
    * Everyone who can access the project: its members plus the workspace's Owner/Admins.
    * Optionally narrowed to the given usernames (for `@mentions`, M4 rule 2).
    */

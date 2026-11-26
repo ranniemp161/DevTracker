@@ -96,6 +96,7 @@ export const notificationType = pgEnum('notification_type', [
   'REQUEST_SUBMITTED',
   'TASK_DONE_PROMPT',
   'REQUEST_TRIAGED',
+  'TASK_BLOCKED',
 ]);
 
 /** Architecture §8.2 — notifications. `project_id` (M4 addition) lets clients build links. */

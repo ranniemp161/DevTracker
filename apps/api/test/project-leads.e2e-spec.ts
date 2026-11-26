@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestApp, TEST_PROXY_SECRET, verifiedUser, type TestApp } from './utils/test-app';
 
 /** Decision record 0023 §2: project leads. */
@@ -304,5 +304,94 @@ describe('who hears about new requests (0023 §4)', () => {
     expect(await told(admin)).toEqual([before]);
     expect(await told(lead)).toEqual([after]);
     expect(await told(dev)).toEqual([]);
+  });
+});
+
+const blockedNotes = async (u: U) =>
+  (
+    (await u.browser.get('/api/v1/notifications').expect(200)).body.data as {
+      type: string;
+      title: string;
+      body: string | null;
+      link: string | null;
+    }[]
+  ).filter((n) => n.type === 'TASK_BLOCKED');
+
+const newTask = async (u: U, project: string, title: string) =>
+  (await u.browser.post(`/api/v1/projects/${project}/tasks`).send({ title }).expect(201)).body.data
+    .task as { id: string; key: string };
+
+const moveTo = (u: U, taskId: string, status: string) =>
+  u.browser.patch(`/api/v1/tasks/${taskId}/status`).send({ status }).expect(200);
+
+describe('blocked tasks reach the lead (0023 §6)', () => {
+  it('tells the leads, or the admins when there are none, but never the person who moved it', async () => {
+    const { owner, admin, lead, dev, project } = await setup();
+
+    // No leads: the workspace's Owner and Admin hear about it.
+    const first = await newTask(dev, project, 'Waiting on the API key');
+    await moveTo(dev, first.id, 'BLOCKED');
+    expect((await blockedNotes(owner)).map((n) => n.title)).toEqual([
+      `@dev marked ${first.key} as blocked`,
+    ]);
+    expect(await blockedNotes(admin)).toHaveLength(1);
+
+    // With a lead: only the lead does.
+    await setRole(owner, project, lead.id, 'lead').expect(200);
+    const second = await newTask(dev, project, 'Waiting on design');
+    await moveTo(dev, second.id, 'BLOCKED');
+    expect(await blockedNotes(lead)).toMatchObject([
+      {
+        type: 'TASK_BLOCKED',
+        title: `@dev marked ${second.key} as blocked`,
+        body: 'Waiting on design',
+        link: `/projects/${project}/tasks/${second.id}`,
+      },
+    ]);
+    expect(await blockedNotes(owner)).toHaveLength(1);
+    expect(await blockedNotes(dev)).toEqual([]);
+
+    // A lead who blocks a task themselves isn't told.
+    const third = await newTask(lead, project, 'Lead blocks it');
+    await moveTo(lead, third.id, 'BLOCKED');
+    expect(await blockedNotes(lead)).toHaveLength(1);
+  });
+});
+
+describe('blocking tasks in bulk (0023 §6)', () => {
+  it('tells the lead once per task', async () => {
+    const { owner, lead, dev, project } = await setup();
+    await setRole(owner, project, lead.id, 'lead').expect(200);
+    const a = await newTask(dev, project, 'Bulk one');
+    const b = await newTask(dev, project, 'Bulk two');
+
+    await dev.browser
+      .patch(`/api/v1/projects/${project}/tasks/bulk`)
+      .send({ taskIds: [a.id, b.id], status: 'BLOCKED' })
+      .expect(200);
+    expect((await blockedNotes(lead)).map((n) => n.body).sort()).toEqual(['Bulk one', 'Bulk two']);
+  });
+});
+
+describe('blocking the same task again (0023 §6)', () => {
+  it('sends one notification an hour per task', async () => {
+    const { owner, lead, dev, project } = await setup();
+    await setRole(owner, project, lead.id, 'lead').expect(200);
+    const task = await newTask(dev, project, 'Flaky dependency');
+
+    await moveTo(dev, task.id, 'BLOCKED');
+    await moveTo(dev, task.id, 'IN_PROGRESS');
+    await moveTo(dev, task.id, 'BLOCKED');
+    expect(await blockedNotes(lead)).toHaveLength(1);
+
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(Date.now() + 61 * 60 * 1000);
+      await moveTo(dev, task.id, 'IN_PROGRESS');
+      await moveTo(dev, task.id, 'BLOCKED');
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(await blockedNotes(lead)).toHaveLength(2);
   });
 });
