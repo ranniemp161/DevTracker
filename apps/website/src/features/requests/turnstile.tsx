@@ -13,6 +13,7 @@ interface TurnstileApi {
       'expired-callback': () => void;
       'error-callback': () => void;
       theme?: 'auto' | 'light' | 'dark';
+      size?: 'normal' | 'flexible' | 'compact';
     },
   ) => string;
   reset: (id: string) => void;
@@ -40,6 +41,17 @@ function loadScript(): Promise<void> {
     document.head.appendChild(script);
   });
   return scriptLoading;
+}
+
+/**
+ * The theme the page actually shows: the user's choice (`data-theme` on <html>) or, without
+ * one, the system's. Turnstile's own `auto` only follows the system, so it showed a light
+ * widget on a dark page when someone picked dark in DevTrack.
+ */
+function pageTheme(): 'light' | 'dark' {
+  const chosen = document.documentElement.dataset.theme;
+  if (chosen === 'light' || chosen === 'dark') return chosen;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
 /** Site key for Cloudflare Turnstile; without it (local development) no widget is shown. */
@@ -71,7 +83,8 @@ export function Turnstile({
         if (cancelled || !box.current || !window.turnstile) return;
         widget.current = window.turnstile.render(box.current, {
           sitekey: TURNSTILE_SITE_KEY,
-          theme: 'auto',
+          theme: pageTheme(),
+          size: 'flexible',
           callback: (token) => onTokenRef.current(token),
           'expired-callback': () => onTokenRef.current(null),
           'error-callback': () => onTokenRef.current(null),
@@ -89,5 +102,5 @@ export function Turnstile({
     if (resetKey > 0 && widget.current) window.turnstile?.reset(widget.current);
   }, [resetKey]);
 
-  return TURNSTILE_SITE_KEY ? <div ref={box} className="min-h-16" /> : null;
+  return TURNSTILE_SITE_KEY ? <div ref={box} className="min-h-16 w-full" /> : null;
 }

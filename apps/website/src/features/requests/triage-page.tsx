@@ -20,6 +20,7 @@ import { useApiQuery } from '@/lib/use-api-query';
 import { formatDate } from '../projects/labels';
 import { useProject } from '../projects/project-context';
 import { TaskLink } from '@/components/task-link';
+import { AttachmentGrid } from '../projects/attachment-grid';
 
 type Tab = 'new' | 'accepted' | 'declined';
 const TABS: { value: Tab; label: string }[] = [
@@ -146,6 +147,9 @@ export function TriagePage() {
                 <span className="text-fg-muted">No contact details given.</span>
               )}
             </p>
+            {r.task && r.attachments.length > 0 ? (
+              <AttachmentGrid taskId={r.task.id} attachments={r.attachments} compact />
+            ) : null}
             {r.triagedBy && r.triagedAt ? (
               <p className="text-xs text-fg-muted">
                 {r.status === 'accepted' ? 'Accepted' : 'Declined'} by @{r.triagedBy.username} on{' '}

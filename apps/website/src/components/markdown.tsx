@@ -18,10 +18,16 @@ export function Markdown({
   children,
   mentions,
   className = '',
+  imagesAsLinks = false,
 }: {
   children: string;
   mentions?: ReadonlySet<string>;
   className?: string;
+  /**
+   * Shows images as links instead of loading them, for Markdown written by people outside
+   * the team (request form files, 0022), so opening it never contacts their servers.
+   */
+  imagesAsLinks?: boolean;
 }) {
   const mark = (nodes: ReactNode) => (mentions?.size ? highlightMentions(nodes, mentions) : nodes);
   const components: Components = {
@@ -33,6 +39,16 @@ export function Markdown({
         {children}
       </a>
     ),
+    ...(imagesAsLinks
+      ? {
+          img: ({ src, alt }) =>
+            typeof src === 'string' && src ? (
+              <a href={src} target="_blank" rel="noopener noreferrer">
+                {alt ? `Image: ${alt}` : 'Image'}
+              </a>
+            ) : null,
+        }
+      : {}),
     // Task-list boxes are read-only here; the checklist (0018) is the interactive version.
     input: ({ type, checked }) =>
       type === 'checkbox' ? (
