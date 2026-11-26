@@ -31,6 +31,6 @@ import { TasksService } from './tasks.service';
     TaskStatusAutomation,
     TaskDonePrompts,
   ],
-  exports: [TaskAccessService, TaskStatusAutomation, TaskDonePrompts],
+  exports: [TaskAccessService, TaskStatusAutomation, TaskDonePrompts, TaskAttachmentsService],
 })
 export class TasksModule {}

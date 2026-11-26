@@ -10,7 +10,7 @@ import {
   Query,
   Req,
 } from '@nestjs/common';
-import type { ProjectIntake, PublicIntakeInfo, TaskRequest } from '@devtrack/types';
+import type { ProjectIntake, PublicIntakeInfo, RequestReceipt, TaskRequest } from '@devtrack/types';
 import {
   listRequestsQuerySchema,
   setIntakeSchema,
@@ -46,9 +46,19 @@ export class RequestsController {
     @Param('token') token: string,
     @Body(new ZodValidationPipe(submitRequestSchema)) body: SubmitRequestInput,
     @Req() req: Request,
-  ): Promise<{ received: true }> {
-    await this.requests.submit(token, body, clientIp(req));
-    return { received: true };
+  ): Promise<RequestReceipt> {
+    const uploads = await this.requests.submit(token, body, clientIp(req));
+    return { received: true, uploads };
+  }
+
+  /** Confirms one uploaded file (0022 §3). The attachment id is the capability. */
+  @Public()
+  @Post('public/requests/:token/attachments/:id/complete')
+  completeUpload(
+    @Param('token') token: string,
+    @Param('id', UuidParamPipe) id: string,
+  ): Promise<{ id: string }> {
+    return this.requests.completeUpload(token, id);
   }
 
   @Get('projects/:id/requests')

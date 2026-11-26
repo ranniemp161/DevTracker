@@ -25,6 +25,7 @@ import {
   type ProjectIntake,
   type PublicIntakeInfo,
   type RequestKind,
+  type RequestUpload,
   type TaskRequest,
 } from '@devtrack/types';
 import type { ListRequestsQuery, SubmitRequestInput } from '@devtrack/validators';
@@ -33,6 +34,7 @@ import { DATABASE } from '../database/database.module';
 import { EventRecorder, type Actor } from '../events/event-recorder.service';
 import { ProjectAccessService } from '../projects/project-access.service';
 import { RATE_LIMITS, RateLimitService } from '../rate-limit/rate-limit.service';
+import { TaskAttachmentsService } from '../tasks/task-attachments.service';
 import { TaskStatusAutomation } from '../tasks/task-status-automation.service';
 import { TurnstileVerifier } from './turnstile.service';
 
@@ -61,28 +63,37 @@ export class RequestsService {
     private readonly rateLimit: RateLimitService,
     private readonly turnstile: TurnstileVerifier,
     private readonly automation: TaskStatusAutomation,
+    private readonly attachments: TaskAttachmentsService,
   ) {}
 
   // ------------------------------------------------------------ public form
 
   async form(token: string): Promise<PublicIntakeInfo> {
     const project = await this.openForm(token);
-    return { projectName: project.name };
+    return { projectName: project.name, uploadsEnabled: this.attachments.uploadsEnabled };
   }
 
-  async submit(token: string, input: SubmitRequestInput, ip: string): Promise<void> {
+  /**
+   * Creates the request's task. Returns one presigned upload per declared file (0022), or
+   * none for the honeypot or when media storage isn't configured.
+   */
+  async submit(token: string, input: SubmitRequestInput, ip: string): Promise<RequestUpload[]> {
     const project = await this.openForm(token);
     await this.rateLimit.consume(RATE_LIMITS.requestSubmitPerIp, ip);
     await this.rateLimit.consume(RATE_LIMITS.requestSubmitPerForm, project.id);
     // Honeypot: look accepted, store nothing.
-    if (input.website) return;
+    if (input.website) return [];
     if (!(await this.turnstile.verify(input.turnstileToken, ip))) {
       throw AppException.validation([
         { path: 'turnstileToken', message: 'Please complete the check and try again.' },
       ]);
     }
+    const files = this.attachments.uploadsEnabled ? input.attachments : [];
+    for (let i = 0; i < files.length; i++) {
+      await this.rateLimit.consume(RATE_LIMITS.requestFilesPerIp, ip);
+    }
 
-    await this.db.transaction(async (tx) => {
+    return this.db.transaction(async (tx) => {
       const [allocated] = await tx
         .update(projects)
         .set({ nextTaskNumber: sql`${projects.nextTaskNumber} + 1` })
@@ -153,7 +164,14 @@ export class RequestsService {
           resourceId: request!.id,
         })),
       );
+      return this.attachments.prepareForRequest(tx, task!.id, files);
     });
+  }
+
+  /** Completes one file a sender declared on this form (0022 §3). */
+  async completeUpload(token: string, attachmentId: string): Promise<{ id: string }> {
+    const project = await this.openForm(token);
+    return this.attachments.completeForRequest(project.id, attachmentId);
   }
 
   // ----------------------------------------------------------------- triage
@@ -178,6 +196,9 @@ export class RequestsService {
       .where(and(eq(taskRequests.projectId, projectId), eq(taskRequests.status, query.status)))
       .orderBy(desc(taskRequests.createdAt))
       .limit(200);
+    const files = await this.attachments.completedFor(
+      rows.filter((r) => !r.task.deletedAt).map((r) => r.task.id),
+    );
 
     return rows.map(({ request: r, task, triager }) => ({
       id: r.id,
@@ -199,6 +220,7 @@ export class RequestsService {
         triager?.id && triager.username ? { id: triager.id, username: triager.username } : null,
       triagedAt: r.triagedAt?.toISOString() ?? null,
       createdAt: r.createdAt.toISOString(),
+      attachments: task.deletedAt ? [] : (files.get(task.id) ?? []),
     }));
   }
 
