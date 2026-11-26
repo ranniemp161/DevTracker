@@ -1,4 +1,6 @@
+import { readFile } from 'node:fs/promises';
 import { Controller, Get, Post } from '@nestjs/common';
+import { inject } from 'vitest';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import { createTestDatabase } from '@devtrack/database/testing';
@@ -218,12 +220,18 @@ class ProtectedTestController {
   }
 }
 
+/** The run's migrated database from the global setup, read once per test file. */
+let snapshotFile: Promise<Blob> | null = null;
+function sharedSnapshot(): Promise<Blob> {
+  return (snapshotFile ??= readFile(inject('testDatabaseSnapshot')).then((b) => new Blob([b])));
+}
+
 export async function createTestApp(
   overrides: Partial<AppConfig> = {},
   options: { gateway?: boolean } = {},
 ) {
   const config = testConfig(overrides);
-  const database = await createTestDatabase();
+  const database = await createTestDatabase({ snapshot: await sharedSnapshot() });
   const mailer = new CapturingMailer();
   const github = new FakeGithubOAuthClient();
   const githubApp = new FakeGithubAppClient();

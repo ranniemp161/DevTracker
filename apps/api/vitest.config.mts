@@ -5,6 +5,8 @@ export default defineConfig({
   test: {
     include: ['src/**/*.spec.ts', 'test/**/*.e2e-spec.ts'],
     setupFiles: ['./test/setup.ts'],
+    // Migrates one test database per run; every test app starts from a copy of it.
+    globalSetup: ['./test/global-setup.ts'],
     testTimeout: 30_000,
     hookTimeout: 60_000,
   },
