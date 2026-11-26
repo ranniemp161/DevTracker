@@ -36,6 +36,8 @@ export const RATE_LIMITS = {
   // 0016: public request forms.
   requestSubmitPerIp: { name: 'request-submit:ip', limit: 5, windowSeconds: 3600 },
   requestSubmitPerForm: { name: 'request-submit:form', limit: 100, windowSeconds: 86400 },
+  // 0022: files declared on public request forms, counted per file.
+  requestFilesPerIp: { name: 'request-media:ip', limit: 20, windowSeconds: 3600 },
 } as const satisfies Record<string, RateLimitRule>;
 
 /**

@@ -7,6 +7,7 @@ import { PaperclipIcon, SpinnerIcon } from '@/components/icons';
 import { Skeleton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useApiQuery } from '@/lib/use-api-query';
+import { AttachmentGrid } from './attachment-grid';
 import { useProject } from './project-context';
 
 export function TaskAttachments({ taskId }: { taskId: string }) {
@@ -117,36 +118,7 @@ export function TaskAttachments({ taskId }: { taskId: string }) {
       ) : !attachments ? (
         <Skeleton className="h-24" />
       ) : attachments.length ? (
-        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {attachments.map((attachment) => (
-            <li key={attachment.id} className="min-w-0">
-              <a
-                href={attachment.url}
-                target="_blank"
-                rel="noreferrer"
-                className="group block overflow-hidden rounded-card border border-line bg-surface transition-colors hover:border-line-control"
-              >
-                {attachment.contentType.startsWith('image/') ? (
-                  // The signed private URL goes directly to the media origin.
-                  <img
-                    src={attachment.url}
-                    alt=""
-                    loading="lazy"
-                    referrerPolicy="no-referrer"
-                    className="aspect-video w-full bg-surface-muted object-cover"
-                  />
-                ) : (
-                  <span className="flex aspect-video w-full items-center justify-center bg-surface-muted text-fg-muted">
-                    <PaperclipIcon size={20} />
-                  </span>
-                )}
-                <span className="block truncate px-2.5 py-2 text-label text-fg-secondary group-hover:text-fg">
-                  {attachment.name}
-                </span>
-              </a>
-            </li>
-          ))}
-        </ul>
+        <AttachmentGrid taskId={taskId} attachments={attachments} />
       ) : (
         <p className="text-sm text-fg-subtle">No attachments yet.</p>
       )}

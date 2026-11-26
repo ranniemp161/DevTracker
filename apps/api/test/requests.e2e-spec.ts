@@ -53,7 +53,7 @@ describe('public request form (0016)', () => {
     expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
 
     const info = await t.http().get(`/api/v1/public/requests/${token}`).expect(200);
-    expect(info.body.data).toEqual({ projectName: expect.any(String) });
+    expect(info.body.data).toEqual({ projectName: expect.any(String), uploadsEnabled: false });
     await t
       .http()
       .get(`/api/v1/public/requests/${'x'.repeat(43)}`)
@@ -69,7 +69,7 @@ describe('public request form (0016)', () => {
       email: 'dana@example.com',
     });
     expect(res.status).toBe(202);
-    expect(res.body.data).toEqual({ received: true });
+    expect(res.body.data).toEqual({ received: true, uploads: [] });
 
     const [task] = await t.db.select().from(tasks).where(eq(tasks.projectId, f.project));
     expect(task).toMatchObject({

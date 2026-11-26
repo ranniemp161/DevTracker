@@ -25,6 +25,17 @@ export class TaskAttachmentsController {
     return this.attachments.prepare(user.id, taskId, body);
   }
 
+  /** The text of a Markdown attachment, for its rendered preview (0022 §5). */
+  @Get(':id/content')
+  @Header('Cache-Control', 'private, no-store')
+  content(
+    @CurrentUser() user: User,
+    @Param('taskId', UuidParamPipe) taskId: string,
+    @Param('id', UuidParamPipe) id: string,
+  ) {
+    return this.attachments.markdown(user.id, taskId, id);
+  }
+
   @Post(':id/complete')
   complete(
     @CurrentUser() user: User,
