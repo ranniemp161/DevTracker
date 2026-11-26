@@ -132,3 +132,24 @@ Each page was loaded fresh, so every number is that page's alone. Then a few in-
   - The `[id]` routes have no `loading.tsx`, so their links can't prefetch anything ahead of the click.
   - Removing this wait would help more than trimming any response. Follow-up: https://github.com/ranniemp161/DevTracker/issues/127.
 - **The cache works as intended.** Cached pages appear without a loading state, refresh in the background in a single round, and fetch fewer calls (board 4 instead of 11).
+
+### Board with 300 tasks — 2026-11-26
+
+This used a temporary project, "Perf test (delete me)", in the owner's personal workspace. It had 300 generated tasks across all statuses and priorities, each with a ~240-character description. The project was archived afterwards. Archiving is a soft delete, so its rows stay in the database.
+
+|                                 | 2 tasks                            | 300 tasks                                               |
+| ------------------------------- | ---------------------------------- | ------------------------------------------------------- |
+| Task list response              | 1.8 KB decoded, 1.1 KB transferred | 166 + 83 KB decoded, 8.7 + 4.8 KB transferred (2 pages) |
+| Rounds before the board is full | 3                                  | 4 (the second page waits for the first)                 |
+| Last call done                  | 2.4 s                              | 2.3 s                                                   |
+| Longest main-thread block       | none over 50 ms                    | ~430 ms (one 485 ms frame), ~13,000 DOM nodes           |
+
+- **The payload is not oversized.**
+  - It works out to ~830 bytes per task, and compression brings it to ~45 bytes on the wire.
+  - `description` is ~28% of each task. The board's free-text search uses it, so it isn't overfetched.
+- **CPU cost is rendering, not requests.**
+  - Parsing a task-list response takes ~0.01 ms.
+  - Drawing 300 cards blocks the main thread for ~430 ms on a 12-core desktop, and longer on a phone.
+  - Searching and clearing the filter re-render in frames of up to 250 ms, without blocking tasks over 50 ms.
+- **The pages load one after another.** Each 200 tasks adds a ~350 ms round.
+- **Follow-up:** #128 (render cost and serial pages).
