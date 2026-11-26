@@ -29,12 +29,12 @@ const TABS: { value: Tab; label: string }[] = [
   { value: 'declined', label: 'Declined' },
 ];
 
-/** Requests from the public form, for task editors to accept or decline (decision record 0016). */
+/** Requests from the public form to accept or decline (0016); who triages follows 0023 §4. */
 export function TriagePage() {
   const { project, readOnly, reload: reloadProject } = useProject();
   const [tab, setTab] = useState<Tab>('new');
   const query = useApiQuery<TaskRequest[]>(
-    readOnly ? null : `/projects/${project.id}/requests?status=${tab}`,
+    readOnly || !project.viewerCanTriage ? null : `/projects/${project.id}/requests?status=${tab}`,
   );
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
@@ -61,6 +61,8 @@ export function TriagePage() {
   }
 
   if (readOnly) return <Alert tone="info">Archived projects can't triage requests.</Alert>;
+  if (!project.viewerCanTriage)
+    return <Alert tone="info">The project leads triage requests in this project.</Alert>;
 
   return (
     <div className="space-y-5">

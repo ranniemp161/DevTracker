@@ -34,6 +34,7 @@ import { EventRecorder, type Actor } from '../events/event-recorder.service';
 import { isUniqueViolation } from '../database/pg-errors';
 import { WorkspaceAccessService } from '../workspaces/workspace-access.service';
 import { hasAtLeastRole } from '../workspaces/workspace-policy';
+import { projectHasLeads } from '@devtrack/server-core';
 import { ProjectAccessService, type ProjectRow } from './project-access.service';
 
 const memberCount = sql<number>`(select count(*)::int from ${projectMembers} where ${projectMembers.projectId} = ${projects.id})`;
@@ -45,8 +46,8 @@ const newRequestCount = sql<number>`(select count(*)::int from ${taskRequests} w
 const creatorColumns = { id: users.id, username: users.username, avatarUrl: users.avatarUrl };
 
 /** What the viewer may do with a project (0023 §2). */
-type Viewer = { canManage: boolean; isWorkspaceAdmin: boolean };
-const ADMIN_VIEWER: Viewer = { canManage: true, isWorkspaceAdmin: true };
+type Viewer = { canManage: boolean; isWorkspaceAdmin: boolean; canTriage: boolean };
+const ADMIN_VIEWER: Viewer = { canManage: true, isWorkspaceAdmin: true, canTriage: true };
 
 @Injectable()
 export class ProjectsService {
@@ -141,6 +142,7 @@ export class ProjectsService {
         taskDone,
         newRequestCount,
         viewerRole: projectMembers.role,
+        hasLeads: projectHasLeads,
       })
       .from(projects)
       .leftJoin(users, eq(users.id, projects.createdBy))
@@ -156,7 +158,11 @@ export class ProjectsService {
         r.project,
         r.creator,
         r.memberCount,
-        { canManage: isWorkspaceAdmin || r.viewerRole === 'lead', isWorkspaceAdmin },
+        {
+          canManage: isWorkspaceAdmin || r.viewerRole === 'lead',
+          isWorkspaceAdmin,
+          canTriage: isWorkspaceAdmin || r.viewerRole === 'lead' || !r.hasLeads,
+        },
         { total: r.taskTotal, done: r.taskDone },
         r.newRequestCount,
         leads.get(r.project.id) ?? [],
@@ -425,7 +431,7 @@ function toProject(
   p: ProjectRow,
   creator: Project['createdBy'],
   memberCount: number,
-  { canManage, isWorkspaceAdmin }: Viewer,
+  { canManage, isWorkspaceAdmin, canTriage }: Viewer,
   taskCounts: Project['taskCounts'],
   requestCount: number,
   leads: UserRef[],
@@ -449,6 +455,7 @@ function toProject(
     newRequestCount: requestCount,
     viewerCanManage: canManage,
     viewerCanManageMembers: isWorkspaceAdmin,
+    viewerCanTriage: canTriage,
     leads,
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),

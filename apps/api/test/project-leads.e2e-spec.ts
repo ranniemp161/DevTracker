@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { createTestApp, verifiedUser, type TestApp } from './utils/test-app';
+import { createTestApp, TEST_PROXY_SECRET, verifiedUser, type TestApp } from './utils/test-app';
 
 /** Decision record 0023 §2: project leads. */
 let t: TestApp;
@@ -200,5 +200,109 @@ describe('leaving a project', () => {
 
     expect((await roles(owner, project)).lead).toBe('member');
     expect((await lead.browser.patch(p).send({ name: 'Mine' })).status).toBe(403);
+  });
+});
+
+/** Turns DEV's request form on and sends one bug report; returns its title. */
+async function sendRequest(owner: U, project: string, title: string, ip = '203.0.113.1') {
+  const form = await owner.browser
+    .put(`/api/v1/projects/${project}/intake`)
+    .send({ enabled: true })
+    .expect(200);
+  await t
+    .http()
+    .post(`/api/v1/public/requests/${form.body.data.intake.token}`)
+    .set('x-devtrack-client-ip', ip)
+    .set('x-devtrack-proxy-secret', TEST_PROXY_SECRET)
+    .send({ kind: 'bug', title })
+    .expect(202);
+  return title;
+}
+
+const openRequests = (u: U, project: string) =>
+  u.browser.get(`/api/v1/projects/${project}/requests`);
+
+describe('triage once a project has a lead (0023 §4)', () => {
+  it('lets every member triage until a lead is appointed, then only leads and admins', async () => {
+    const { owner, lead, dev, project } = await setup();
+    await sendRequest(owner, project, 'First bug');
+    await sendRequest(owner, project, 'Second bug', '203.0.113.2');
+    await sendRequest(owner, project, 'Third bug', '203.0.113.3');
+    const ids = Object.fromEntries(
+      (
+        (await openRequests(owner, project).expect(200)).body.data as {
+          id: string;
+          task: { title: string };
+        }[]
+      ).map((r) => [r.task.title, r.id]),
+    );
+
+    // No leads: a developer triages, as in 0016.
+    await openRequests(dev, project).expect(200);
+    await dev.browser.post(`/api/v1/requests/${ids['First bug']}/accept`).expect(204);
+
+    // A lead is appointed: now only the lead (and admins) triage.
+    await setRole(owner, project, lead.id, 'lead').expect(200);
+    expect((await openRequests(dev, project)).status).toBe(403);
+    expect((await dev.browser.post(`/api/v1/requests/${ids['Second bug']}/accept`)).status).toBe(
+      403,
+    );
+    expect((await dev.browser.post(`/api/v1/requests/${ids['Second bug']}/decline`)).status).toBe(
+      403,
+    );
+    await openRequests(lead, project).expect(200);
+    await lead.browser.post(`/api/v1/requests/${ids['Second bug']}/accept`).expect(204);
+
+    // The last lead steps down: everyone triages again.
+    await setRole(owner, project, lead.id, 'member').expect(200);
+    await dev.browser.post(`/api/v1/requests/${ids['Third bug']}/decline`).expect(204);
+  });
+});
+
+describe('viewerCanTriage (0023 §4)', () => {
+  it('follows the lead rule on the project and in the project list', async () => {
+    const { owner, lead, dev, ws, project } = await setup();
+    const flag = async (u: U) => {
+      const one = (await u.browser.get(`/api/v1/projects/${project}`).expect(200)).body.data.project
+        .viewerCanTriage;
+      const listed = (
+        (await u.browser.get(`/api/v1/workspaces/${ws}/projects`).expect(200)).body.data as {
+          id: string;
+          viewerCanTriage: boolean;
+        }[]
+      ).find((p) => p.id === project)!.viewerCanTriage;
+      expect(listed).toBe(one);
+      return one;
+    };
+
+    expect([await flag(owner), await flag(lead), await flag(dev)]).toEqual([true, true, true]);
+    await setRole(owner, project, lead.id, 'lead').expect(200);
+    expect([await flag(owner), await flag(lead), await flag(dev)]).toEqual([true, true, false]);
+  });
+});
+
+describe('who hears about new requests (0023 §4)', () => {
+  it('tells Owners and Admins while there are no leads, and only the leads once there are', async () => {
+    const { owner, admin, lead, dev, project } = await setup();
+    const told = async (u: U) =>
+      (
+        (await u.browser.get('/api/v1/notifications').expect(200)).body.data as {
+          type: string;
+          title: string;
+        }[]
+      )
+        .filter((n) => n.type === 'REQUEST_SUBMITTED')
+        .map((n) => n.title);
+
+    await sendRequest(owner, project, 'Before a lead');
+    await setRole(owner, project, lead.id, 'lead').expect(200);
+    await sendRequest(owner, project, 'After a lead', '203.0.113.2');
+
+    const before = 'New bug report in DEV: Before a lead';
+    const after = 'New bug report in DEV: After a lead';
+    expect(await told(owner)).toEqual([before]);
+    expect(await told(admin)).toEqual([before]);
+    expect(await told(lead)).toEqual([after]);
+    expect(await told(dev)).toEqual([]);
   });
 });

@@ -299,8 +299,8 @@ function ProjectSubNav({
     { href: `${base}/milestones`, label: 'Milestones', icon: <FlagIcon size={16} /> },
     { href: `${base}/timesheet`, label: 'Timesheet', icon: <CalendarIcon size={16} /> },
     { href: `${base}/activity`, label: 'Activity', icon: <ActivityIcon size={16} /> },
-    // Request form triage (0016); hidden on archived projects, which are read-only.
-    ...(project.status === 'ARCHIVED'
+    // Request form triage (0016); hidden on archived projects and from members who don't triage (0023 §4).
+    ...(project.status === 'ARCHIVED' || !project.viewerCanTriage
       ? []
       : [
           {

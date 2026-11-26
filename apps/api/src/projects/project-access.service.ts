@@ -25,6 +25,8 @@ export interface ProjectAccess {
   canManage: boolean;
   /** Workspace Owner/Admin: sees every project; archives it and manages its people. */
   isWorkspaceAdmin: boolean;
+  /** Everyone with access until the project has a lead; then leads and admins (0023 §4). */
+  canTriage: boolean;
 }
 
 export interface ProjectAccessOptions {
@@ -32,6 +34,8 @@ export interface ProjectAccessOptions {
   manage?: boolean;
   /** Requires a workspace Owner/Admin (403 otherwise), even for project leads. */
   admin?: boolean;
+  /** Requires `canTriage` (403 otherwise). */
+  triage?: boolean;
   /** Rejects archived projects with 409 PROJECT_ARCHIVED (archived = read-only). */
   write?: boolean;
 }
@@ -56,21 +60,33 @@ export class ProjectAccessService {
     const row = await findProjectAccess(executor, userId, projectId);
 
     if (!row) throw notFound();
-    const { canManage, isWorkspaceAdmin } = row;
+    const { canManage, isWorkspaceAdmin, canTriage } = row;
     if (options.admin && !isWorkspaceAdmin) {
       throw AppException.forbidden('You need to be a workspace admin to do this.');
     }
     if (options.manage && !canManage) {
       throw AppException.forbidden('You need to be a project lead or workspace admin to do this.');
     }
-    if ((options.write || options.manage || options.admin) && row.project.status === 'ARCHIVED') {
+    if (options.triage && !canTriage) {
+      throw AppException.forbidden('Only the project leads triage requests in this project.');
+    }
+    if (
+      (options.write || options.manage || options.admin || options.triage) &&
+      row.project.status === 'ARCHIVED'
+    ) {
       throw new AppException(
         HttpStatus.CONFLICT,
         ErrorCode.PROJECT_ARCHIVED,
         'This project is archived and read-only.',
       );
     }
-    return { project: row.project, workspaceRole: row.workspaceRole, canManage, isWorkspaceAdmin };
+    return {
+      project: row.project,
+      workspaceRole: row.workspaceRole,
+      canManage,
+      isWorkspaceAdmin,
+      canTriage,
+    };
   }
 
   /**
