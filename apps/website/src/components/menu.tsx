@@ -62,6 +62,7 @@ export function Menu({
   align = 'start',
   menuClassName = '',
   disabled = false,
+  deferItems = false,
   children,
 }: {
   /** Shows the trigger but blocks opening, e.g. while a save is in flight. */
@@ -74,6 +75,11 @@ export function Menu({
   /** Which edge of the trigger the menu lines up with. */
   align?: 'start' | 'end';
   menuClassName?: string;
+  /**
+   * Renders the items only once the user reaches for the trigger (pointer, focus or touch),
+   * for menus repeated many times on one screen, such as one per board card (#128).
+   */
+  deferItems?: boolean;
   children: ReactNode;
 }) {
   const id = useId();
@@ -83,6 +89,10 @@ export function Menu({
   const enterOnOpen = useRef(false);
   const typeahead = useRef({ text: '', at: 0 });
   const [open, setOpen] = useState(false);
+  const [armed, setArmed] = useState(!deferItems);
+  const arm = () => {
+    if (!armed) setArmed(true);
+  };
 
   const items = () => [...(menuRef.current?.querySelectorAll<HTMLElement>(itemSelector) ?? [])];
 
@@ -199,6 +209,18 @@ export function Menu({
         {...triggerProps}
         onClick={onTriggerClick}
         onKeyDown={onTriggerKeyDown}
+        onPointerEnter={(e) => {
+          arm();
+          triggerProps?.onPointerEnter?.(e);
+        }}
+        onPointerDown={(e) => {
+          arm();
+          triggerProps?.onPointerDown?.(e);
+        }}
+        onFocus={(e) => {
+          arm();
+          triggerProps?.onFocus?.(e);
+        }}
         className={triggerClassName}
       >
         {trigger}
@@ -211,7 +233,7 @@ export function Menu({
         className={`anchored-popover ${align === 'end' ? 'anchored-popover-end' : ''} min-w-48 rounded-card border border-line bg-surface p-1 text-fg shadow-overlay ${menuClassName}`}
       >
         <div role="menu" aria-label={label} onKeyDown={onMenuKeyDown}>
-          {children}
+          {armed ? children : null}
         </div>
       </div>
     </MenuContext.Provider>

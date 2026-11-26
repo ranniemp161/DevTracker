@@ -20,6 +20,7 @@ export function TaskStatusMenu({
       triggerProps={{ 'aria-label': `Status: ${TASK_STATUS_LABEL[status]}. Change status` }}
       triggerClassName="touch-target inline-flex size-6.5 items-center justify-center rounded-chip transition-colors hover:bg-surface-muted aria-expanded:bg-surface-muted"
       menuClassName="w-44"
+      deferItems
       trigger={<StatusDot status={status} className="size-2.5" />}
     >
       {TASK_STATUSES.map((s) => (

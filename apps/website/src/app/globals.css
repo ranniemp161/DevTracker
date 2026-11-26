@@ -47,6 +47,14 @@ body {
   }
 }
 
+/* Board cards: the browser skips layout and paint for cards out of view, so a board of
+   hundreds of tasks doesn't lay out every card on load (#128). `auto` remembers each card's
+   real height once it has been shown; 7.5rem is a typical card before that. */
+@utility card-offscreen-lazy {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 7.5rem;
+}
+
 /* Task detail: main column + fixed-width properties panel (design/SPEC.md §5). */
 /* Task page context rail: sticks to the top of the scrolling page and scrolls on its own. */
 @utility task-rail {
