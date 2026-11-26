@@ -79,6 +79,7 @@ export const NOTIFICATION_TYPES = [
   'REQUEST_SUBMITTED',
   'TASK_DONE_PROMPT',
   'REQUEST_TRIAGED',
+  'TASK_BLOCKED',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 

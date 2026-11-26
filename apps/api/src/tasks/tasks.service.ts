@@ -6,6 +6,7 @@ import {
   desc,
   eq,
   githubPullRequests,
+  gt,
   ilike,
   inArray,
   isNotNull,
@@ -15,6 +16,7 @@ import {
   milestones,
   ne,
   notInArray,
+  notifications,
   or,
   projectMembers,
   projects,
@@ -62,6 +64,8 @@ const userRef = { id: users.id, username: users.username, avatarUrl: users.avata
 const taskRowFields = { task: tasks, reporter: userRef };
 /** "My tasks" returns at most this many; the view says "100+" beyond it. */
 const MY_TASKS_LIMIT = 100;
+/** 0023 §6: a task blocked again within this window doesn't notify a second time. */
+const BLOCKED_REPEAT_MS = 60 * 60 * 1000;
 type TaskRowWithReporter = { task: typeof tasks.$inferSelect; reporter: UserRef | null };
 
 interface TaskCursor {
@@ -400,6 +404,9 @@ export class TasksService {
           metadata: { key: taskKey(access.project, task), changes },
           event: { type: 'task.updated', payload: { taskId: task.id, changes } },
         });
+        if (input.status === 'BLOCKED' && task.status !== 'BLOCKED') {
+          await this.notifyBlocked(tx, actor, access.project, task);
+        }
         if (input.status === 'DONE' && task.status !== 'DONE') {
           await this.donePrompts.closeForDone(
             tx,
@@ -470,6 +477,9 @@ export class TasksService {
             metadata: { key: taskKey(project, task), changes },
             event: { type: 'task.updated', payload: { taskId: task.id, changes } },
           });
+          if (input.status === 'BLOCKED' && task.status !== 'BLOCKED') {
+            await this.notifyBlocked(tx, actor, project, task);
+          }
           if (input.status === 'DONE' && task.status !== 'DONE') {
             await this.donePrompts.closeForDone(
               tx,
@@ -668,6 +678,43 @@ export class TasksService {
         projectId: project.id,
         type: 'TASK_ASSIGNED' as const,
         title: `@${actor.username} assigned you to ${taskKey(project, task)}`,
+        body: task.title,
+        resourceType: 'task',
+        resourceId: task.id,
+      })),
+    );
+  }
+
+  /** 0023 §6: a task moved into Blocked reaches the people who answer for the project. */
+  private async notifyBlocked(
+    tx: Executor,
+    actor: Actor,
+    project: ProjectRow,
+    task: TaskRow,
+  ): Promise<void> {
+    // Blocked, unblocked and blocked again within the hour: one notification is enough.
+    const [recent] = await tx
+      .select({ id: notifications.id })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.type, 'TASK_BLOCKED'),
+          eq(notifications.resourceId, task.id),
+          gt(notifications.createdAt, new Date(Date.now() - BLOCKED_REPEAT_MS)),
+        ),
+      )
+      .limit(1);
+    if (recent) return;
+    const people = await this.projectAccess.responsible(project, tx);
+    await this.events.notify(
+      tx,
+      actor,
+      people.map(({ id }) => ({
+        userId: id,
+        workspaceId: project.workspaceId,
+        projectId: project.id,
+        type: 'TASK_BLOCKED' as const,
+        title: `@${actor.username} marked ${taskKey(project, task)} as blocked`,
         body: task.title,
         resourceType: 'task',
         resourceId: task.id,

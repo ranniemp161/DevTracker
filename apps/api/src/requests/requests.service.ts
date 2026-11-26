@@ -17,8 +17,6 @@ import {
   taskRequests,
   tasks,
   users,
-  projectMembers,
-  workspaceMembers,
   type Database,
   type SQL,
   type Transaction,
@@ -202,22 +200,7 @@ export class RequestsService {
     });
 
     // 0023 §4: the project's leads hear about it; without leads, the workspace's admins do.
-    const leads = await tx
-      .select({ id: projectMembers.userId })
-      .from(projectMembers)
-      .where(and(eq(projectMembers.projectId, project.id), eq(projectMembers.role, 'lead')));
-    const managers =
-      leads.length > 0
-        ? leads
-        : await tx
-            .select({ id: workspaceMembers.userId })
-            .from(workspaceMembers)
-            .where(
-              and(
-                eq(workspaceMembers.workspaceId, project.workspaceId),
-                inArray(workspaceMembers.role, ['OWNER', 'ADMIN']),
-              ),
-            );
+    const managers = await this.access.responsible(project, tx);
     const what = input.kind === 'bug' ? 'bug report' : 'request';
     // A proposal never notifies its own reporter (the actor is skipped).
     await this.events.notify(

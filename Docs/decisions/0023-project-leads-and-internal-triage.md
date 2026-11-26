@@ -74,7 +74,7 @@ There is no "reports to" hierarchy between people. Responsibility attaches to wo
 ## 6. Blocked tasks reach the lead
 
 - When a task moves into `BLOCKED` (by anyone), a new **`TASK_BLOCKED`** notification goes to the project's leads, or to the project's Owners/Admins if there are no leads, except the person who made the move.
-- It carries the task title and links to the task, where the blocker is discussed in comments as today.
+- It reads "@dev marked DEV-12 as blocked", carries the task title as its body and links to the task, where the blocker is discussed in comments as today. Single edits and bulk edits both send it; status automation never moves a task into Blocked. Migration `0025_task_blocked` adds the notification type.
 - Moving the same task into Blocked again within an hour doesn't send a second one.
 
 ## 7. Job title (display only)
