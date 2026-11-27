@@ -2,7 +2,7 @@
 
 import { MILESTONE_STAGES, type Milestone, type MilestoneStatus } from '@devtrack/types';
 import { createMilestoneSchema } from '@devtrack/validators';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FlagIcon, PlusIcon } from '@/components/icons';
 import { Alert, Badge, Button, EmptyState, Field, SubmitButton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
@@ -107,6 +107,41 @@ function MilestoneRow({
   }
 
   const completed = m.status === 'DELIVERED';
+  const ready =
+    m.status === 'ACTIVE' &&
+    m.taskCounts.total > 0 &&
+    m.taskCounts.done === m.taskCounts.total &&
+    m.criteria.every((c) => c.done);
+  const readyKey = `devtrack:milestone-review-dismissed:${m.id}`;
+  const readyFingerprint = `${m.status}:${m.taskCounts.total}:${m.taskCounts.done}:${m.criteria.map((c) => `${c.id}:${c.done}`).join(',')}`;
+  const [, setDismissTick] = useState(0);
+  useEffect(() => {
+    if (ready) return;
+    try {
+      window.localStorage.removeItem(readyKey);
+    } catch {
+      // Ignore storage errors.
+    }
+  }, [ready, readyKey]);
+
+  function dismissReadyBanner() {
+    try {
+      window.localStorage.setItem(readyKey, readyFingerprint);
+    } catch {
+      // Ignore storage errors.
+    }
+    setDismissTick((n) => n + 1);
+  }
+
+  let dismissedFor: string | null = null;
+  if (typeof window !== 'undefined' && ready) {
+    try {
+      dismissedFor = window.localStorage.getItem(readyKey);
+    } catch {
+      dismissedFor = null;
+    }
+  }
+  const showReadyBanner = canManage && ready && dismissedFor !== readyFingerprint;
   return (
     <li className="flex items-start gap-3 rounded-card border border-line bg-surface p-4">
       <FlagIcon
@@ -166,6 +201,31 @@ function MilestoneRow({
           )}
         </div>
         {error ? <p className="mt-1 text-sm text-danger">{error}</p> : null}
+        {showReadyBanner ? (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-control border border-line bg-surface-sunken px-3 py-2 text-sm">
+            <span className="font-medium text-fg">Everything is done. Move to Client review?</span>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="primary"
+                disabled={busy}
+                onClick={() =>
+                  call(() =>
+                    api(`/milestones/${m.id}`, {
+                      method: 'PATCH',
+                      body: { status: 'CLIENT_REVIEW' },
+                    }),
+                  )
+                }
+              >
+                Move to Client review
+              </Button>
+              <Button size="sm" variant="ghost" disabled={busy} onClick={dismissReadyBanner}>
+                Not yet
+              </Button>
+            </div>
+          </div>
+        ) : null}
         <MilestoneProgress milestone={m} projectId={project.id} />
         <MilestoneCriteria milestone={m} canManage={canManage} onChanged={onChanged} />
       </div>

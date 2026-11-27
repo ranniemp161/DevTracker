@@ -73,7 +73,7 @@ export class MilestonesController {
     @Body(new ZodValidationPipe(createMilestoneCriterionSchema))
     body: CreateMilestoneCriterionInput,
   ): Promise<{ milestone: Milestone }> {
-    return { milestone: await this.milestones.addCriterion(user.id, id, body) };
+    return { milestone: await this.milestones.addCriterion(user, id, body) };
   }
 
   @Patch('milestone-criteria/:id')
@@ -83,7 +83,7 @@ export class MilestonesController {
     @Body(new ZodValidationPipe(updateMilestoneCriterionSchema))
     body: UpdateMilestoneCriterionInput,
   ): Promise<{ milestone: Milestone }> {
-    return { milestone: await this.milestones.updateCriterion(user.id, id, body) };
+    return { milestone: await this.milestones.updateCriterion(user, id, body) };
   }
 
   @Delete('milestone-criteria/:id')
@@ -91,6 +91,6 @@ export class MilestonesController {
     @CurrentUser() user: User,
     @Param('id', UuidParamPipe) id: string,
   ): Promise<{ milestone: Milestone }> {
-    return { milestone: await this.milestones.removeCriterion(user.id, id) };
+    return { milestone: await this.milestones.removeCriterion(user, id) };
   }
 }
