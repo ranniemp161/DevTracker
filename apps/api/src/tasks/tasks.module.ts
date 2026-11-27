@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ClientUpdatesModule } from '../client-updates/client-updates.module';
 import { MilestonesModule } from '../milestones/milestones.module';
 import { ProjectsModule } from '../projects/projects.module';
 import { RateLimitModule } from '../rate-limit/rate-limit.module';
@@ -16,7 +17,13 @@ import { TasksController } from './tasks.controller';
 import { TasksService } from './tasks.service';
 
 @Module({
-  imports: [ProjectsModule, MilestonesModule, RateLimitModule, WorkspacesModule],
+  imports: [
+    ClientUpdatesModule,
+    ProjectsModule,
+    MilestonesModule,
+    RateLimitModule,
+    WorkspacesModule,
+  ],
   controllers: [
     TasksController,
     TaskAttachmentsController,

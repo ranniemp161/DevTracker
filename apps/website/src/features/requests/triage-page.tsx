@@ -268,10 +268,13 @@ export function TriagePage() {
         <p>
           Its task {declining?.task?.key} will be deleted. The request stays in the Declined list.
         </p>
-        {declining?.source === 'internal' ? (
+        {/* 0028 §2: a form reporter with an email gets the reason in their "declined" email. */}
+        {declining?.source === 'internal' || declining?.reporterEmail ? (
           <label className="mt-3 block text-sm">
             <span className="mb-1.5 block font-medium text-fg-secondary">
-              Reason for @{declining.reporter?.username ?? 'the proposer'} (optional)
+              {declining.source === 'internal'
+                ? `Reason for @${declining.reporter?.username ?? 'the proposer'} (optional)`
+                : 'Reason (optional). The client will see this in their email.'}
             </span>
             <textarea
               value={reason}

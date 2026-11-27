@@ -50,6 +50,7 @@ import {
   type UpdateTaskInput,
 } from '@devtrack/validators';
 import { escapeLike } from '../common/escape-like';
+import { ClientUpdatesService } from '../client-updates/client-updates.service';
 import { AppException } from '../common/errors/app.exception';
 import { decodeCursor, encodeCursor, Paginated } from '../common/http/paginated';
 import { DATABASE } from '../database/database.module';
@@ -99,6 +100,7 @@ export class TasksService {
     private readonly workspaceAccess: WorkspaceAccessService,
     private readonly donePrompts: TaskDonePrompts,
     private readonly milestoneReadiness: MilestoneReadinessService,
+    private readonly clientUpdates: ClientUpdatesService,
   ) {}
 
   /**
@@ -439,6 +441,10 @@ export class TasksService {
           ]);
         }
       });
+      // 0028 §2: a form request's reporter hears it's done, after the commit.
+      if (input.status === 'DONE' && task.status !== 'DONE') {
+        await this.clientUpdates.tasksDone([task.id]);
+      }
     }
     return (await this.load([task.id], access.project.key))[0]!;
   }
@@ -559,6 +565,11 @@ export class TasksService {
         );
       }
     });
+    if (input.status === 'DONE') {
+      await this.clientUpdates.tasksDone(
+        rows.filter((r) => r.status !== 'DONE').map((r) => r.id),
+      );
+    }
     return { tasks: await this.load(input.taskIds, project.key) };
   }
 
