@@ -129,3 +129,26 @@ export type SetIntakeInput = z.infer<typeof setIntakeSchema>;
 /** 0028 §2: the "Stop emails about this request" link's token. */
 export const stopClientEmailsSchema = z.object({ token: z.string().trim().min(1).max(200) });
 export type StopClientEmailsInput = z.infer<typeof stopClientEmailsSchema>;
+
+/** 0028 §4: Approve on the client's sign-off page. Same spam protection as the request form. */
+export const approveSignoffSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .max(80, { error: 'Name must be at most 80 characters.' })
+    .optional()
+    .transform((v) => v || undefined),
+  note: z
+    .string()
+    .trim()
+    .max(500, { error: 'Note must be at most 500 characters.' })
+    .optional()
+    .transform((v) => v || undefined),
+  website: z.string().max(500).optional(),
+  turnstileToken: z.string().max(4096).optional(),
+});
+export type ApproveSignoffInput = z.infer<typeof approveSignoffSchema>;
+
+/** 0028 §3: `POST /milestones/:id/signoff-link`; `replace` makes a new link and retires the old. */
+export const signoffLinkSchema = z.object({ replace: z.boolean().optional() });
+export type SignoffLinkInput = z.infer<typeof signoffLinkSchema>;

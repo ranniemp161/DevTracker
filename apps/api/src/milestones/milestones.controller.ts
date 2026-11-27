@@ -14,11 +14,13 @@ import {
   createMilestoneCriterionSchema,
   createMilestoneSchema,
   linkMilestoneReleaseSchema,
+  signoffLinkSchema,
   updateMilestoneCriterionSchema,
   updateMilestoneSchema,
   type CreateMilestoneCriterionInput,
   type CreateMilestoneInput,
   type LinkMilestoneReleaseInput,
+  type SignoffLinkInput,
   type UpdateMilestoneCriterionInput,
   type UpdateMilestoneInput,
 } from '@devtrack/validators';
@@ -58,6 +60,17 @@ export class MilestonesController {
     @Body(new ZodValidationPipe(updateMilestoneSchema)) body: UpdateMilestoneInput,
   ): Promise<{ milestone: Milestone }> {
     return { milestone: await this.milestones.update(user, id, body) };
+  }
+
+  /** 0028 §3: get (or replace) the client's sign-off link. */
+  @Post('milestones/:id/signoff-link')
+  @HttpCode(HttpStatus.OK)
+  signoffLink(
+    @CurrentUser() user: User,
+    @Param('id', UuidParamPipe) id: string,
+    @Body(new ZodValidationPipe(signoffLinkSchema)) body: SignoffLinkInput,
+  ): Promise<{ url: string }> {
+    return this.milestones.signoffLink(user, id, body.replace ?? false);
   }
 
   /** 0027: undelivered milestones across the workspace, for admins and project leads. */

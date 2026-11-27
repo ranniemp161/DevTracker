@@ -10,7 +10,13 @@ import {
   Query,
   Req,
 } from '@nestjs/common';
-import type { ProjectIntake, PublicIntakeInfo, RequestReceipt, TaskRequest } from '@devtrack/types';
+import type {
+  ProjectIntake,
+  PublicIntakeInfo,
+  RequestReceipt,
+  TaskRequest,
+  PublicSignoff,
+} from '@devtrack/types';
 import {
   acceptRequestSchema,
   declineRequestSchema,
@@ -18,6 +24,7 @@ import {
   listRequestsQuerySchema,
   proposeTaskSchema,
   setIntakeSchema,
+  approveSignoffSchema,
   stopClientEmailsSchema,
   submitRequestSchema,
   type AcceptRequestInput,
@@ -26,6 +33,7 @@ import {
   type ListRequestsQuery,
   type ProposeTaskInput,
   type SetIntakeInput,
+  type ApproveSignoffInput,
   type StopClientEmailsInput,
   type SubmitRequestInput,
 } from '@devtrack/validators';
@@ -37,6 +45,7 @@ import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import type { User } from '../users/users.service';
 import { ClientUpdatesService } from '../client-updates/client-updates.service';
 import { RequestsService } from './requests.service';
+import { SignoffService } from './signoff.service';
 
 /** Public request forms and Triage (decision record 0016). */
 @Controller()
@@ -44,6 +53,7 @@ export class RequestsController {
   constructor(
     private readonly requests: RequestsService,
     private readonly clientUpdates: ClientUpdatesService,
+    private readonly signoff: SignoffService,
   ) {}
 
   /** What the public form page shows: the project name only. */
@@ -63,6 +73,26 @@ export class RequestsController {
   ): Promise<RequestReceipt> {
     const uploads = await this.requests.submit(token, body, clientIp(req));
     return { received: true, uploads };
+  }
+
+  /** 0028 §3: the client's sign-off page; 404 unless the milestone is in Client review. */
+  @Public()
+  @Get('public/signoff/:token')
+  signoffPage(@Param('token') token: string): Promise<PublicSignoff> {
+    return this.signoff.page(token);
+  }
+
+  /** 0028 §4: Approve. Tells the lead; never moves the stage. */
+  @Public()
+  @Post('public/signoff/:token/approve')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async approveSignoff(
+    @Param('token') token: string,
+    @Body(new ZodValidationPipe(approveSignoffSchema)) body: ApproveSignoffInput,
+    @Req() req: Request,
+  ): Promise<{ received: true }> {
+    await this.signoff.approve(token, body, clientIp(req));
+    return { received: true };
   }
 
   /** 0028 §2: "Stop emails about this request". Always 204, so tokens can't be probed. */

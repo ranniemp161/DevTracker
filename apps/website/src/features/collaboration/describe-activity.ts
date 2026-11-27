@@ -122,6 +122,8 @@ export function describeActivity(entry: ActivityEntry): string {
         to && to in MILESTONE_STAGE_LABEL ? MILESTONE_STAGE_LABEL[to as MilestoneStatus] : to;
       return `moved milestone "${String(m.name ?? '')}" to ${label ?? 'another stage'}`;
     }
+    case 'milestone.client_approved':
+      return `approved milestone "${String(m.name ?? '')}"`;
     case 'milestone.release_linked':
       return `linked release ${String((m.release as { tag?: string } | undefined)?.tag ?? '')} to milestone "${String(m.name ?? '')}"`;
     case 'milestone.release_unlinked':
@@ -183,11 +185,18 @@ export function timeAgo(iso: string, now = Date.now()): string {
 
 /**
  * DevTrack user, else "DevTrack automation" for automatic status moves (0021), else the GitHub
- * login for GitHub events, else "System".
+ * login for GitHub events, the client for sign-off approvals (0028), else "System".
  */
 export function actorLabel(e: ActivityEntry): string {
   if (e.actor) return `@${e.actor.username}`;
+  // 0028 §4: the client on their sign-off page, by the name they gave.
+  if (e.action === 'milestone.client_approved') {
+    const by = (e.metadata as { by?: string | null }).by;
+    return by ? `${by} (client)` : 'The client';
+  }
   if ((e.metadata as { automation?: unknown }).automation) return 'DevTrack automation';
+  // 0026 §3: releases linked because their name matched.
+  if ((e.metadata as { source?: unknown }).source === 'AUTO') return 'DevTrack automation';
   const github = (e.metadata as { github?: { login?: string } | null }).github;
   return github?.login ? `${github.login} (GitHub)` : 'System';
 }
