@@ -202,7 +202,7 @@ describe('commits move tasks to In progress (0021)', () => {
   });
 });
 
-describe('triage moves accepted requests to To do (0021)', () => {
+describe('triage moves requests accepted into a milestone to To do (0021, 0024 §3)', () => {
   async function requestTask(f: Fixture, title: string) {
     const form = await f.owner.browser
       .put(`/api/v1/projects/${f.project}/intake`)
@@ -221,10 +221,20 @@ describe('triage moves accepted requests to To do (0021)', () => {
 
   it('moves a Backlog task to To do, but leaves a task the team already moved', async () => {
     const f = await githubFixture(t);
+    const milestoneId = (
+      await f.owner.browser
+        .post(`/api/v1/projects/${f.project}/milestones`)
+        .send({ name: 'v1.2' })
+        .expect(201)
+    ).body.data.milestone.id as string;
     const first = await requestTask(f, 'Checkout fails');
-    await f.dev.browser.post(`/api/v1/requests/${first.id}/accept`).expect(204);
+    await f.dev.browser
+      .post(`/api/v1/requests/${first.id}/accept`)
+      .send({ milestoneId })
+      .expect(204);
     expect(await statusOf(f, first.taskId)).toBe('TODO');
-    expect((await statusChanges(first.taskId))[0]).toMatchObject({
+    // The milestone change comes first (by the triager), then the automatic move.
+    expect((await statusChanges(first.taskId)).find((c) => c.status)).toMatchObject({
       actorId: null,
       status: { from: 'BACKLOG', to: 'TODO' },
       automation: { trigger: 'request' },
@@ -233,7 +243,10 @@ describe('triage moves accepted requests to To do (0021)', () => {
     await t.db.delete(taskRequests);
     const second = await requestTask(f, 'Search is slow');
     await setStatus(f, second.taskId, 'IN_PROGRESS');
-    await f.dev.browser.post(`/api/v1/requests/${second.id}/accept`).expect(204);
+    await f.dev.browser
+      .post(`/api/v1/requests/${second.id}/accept`)
+      .send({ milestoneId })
+      .expect(204);
     expect(await statusOf(f, second.taskId)).toBe('IN_PROGRESS');
   });
 });

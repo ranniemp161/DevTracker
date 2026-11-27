@@ -12,12 +12,14 @@ import {
 } from '@nestjs/common';
 import type { ProjectIntake, PublicIntakeInfo, RequestReceipt, TaskRequest } from '@devtrack/types';
 import {
+  acceptRequestSchema,
   declineRequestSchema,
   listProposalsQuerySchema,
   listRequestsQuerySchema,
   proposeTaskSchema,
   setIntakeSchema,
   submitRequestSchema,
+  type AcceptRequestInput,
   type DeclineRequestInput,
   type ListProposalsQuery,
   type ListRequestsQuery,
@@ -99,8 +101,12 @@ export class RequestsController {
 
   @Post('requests/:id/accept')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async accept(@CurrentUser() user: User, @Param('id', UuidParamPipe) id: string): Promise<void> {
-    await this.requests.accept(user, id);
+  async accept(
+    @CurrentUser() user: User,
+    @Param('id', UuidParamPipe) id: string,
+    @Body(new ZodValidationPipe(acceptRequestSchema)) body: AcceptRequestInput,
+  ): Promise<void> {
+    await this.requests.accept(user, id, body);
   }
 
   @Post('requests/:id/decline')

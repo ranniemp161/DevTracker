@@ -14,6 +14,7 @@ export function ConfirmDialog({
   children,
   confirmLabel,
   tone = 'danger',
+  confirmDisabled = false,
   onConfirm,
   onCancel,
 }: {
@@ -22,6 +23,8 @@ export function ConfirmDialog({
   children?: ReactNode;
   confirmLabel: string;
   tone?: 'danger' | 'primary';
+  /** Keeps the confirm button off until the dialog's own fields are filled in. */
+  confirmDisabled?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -64,7 +67,7 @@ export function ConfirmDialog({
         <Button type="submit" value="cancel" variant="ghost" autoFocus>
           Cancel
         </Button>
-        <Button type="submit" value="confirm" variant={tone}>
+        <Button type="submit" value="confirm" variant={tone} disabled={confirmDisabled}>
           {confirmLabel}
         </Button>
       </form>
