@@ -9,6 +9,7 @@ import {
   isNull,
   labels,
   lt,
+  milestones,
   ne,
   or,
   projects,
@@ -149,12 +150,19 @@ export class RequestsService {
    * Creates a request's Backlog task, its kind label, the request row, the activity entry and
    * the notification to the people who triage. Returns null if the project was archived meanwhile.
    */
-  private async createRequest(
+  async createRequest(
     tx: Transaction,
     project: Pick<ProjectRow, 'id' | 'key' | 'workspaceId'>,
     input: { kind: RequestKind; title: string; description?: string },
     from:
-      { actor: null; reporterName: string | null; reporterEmail: string | null } | { actor: Actor },
+      | {
+          actor: null;
+          reporterName: string | null;
+          reporterEmail: string | null;
+          /** 0028 §4: Request changes on a sign-off page, for this milestone. */
+          signoffMilestoneId?: string;
+        }
+      | { actor: Actor },
   ): Promise<string | null> {
     const [allocated] = await tx
       .update(projects)
@@ -186,7 +194,12 @@ export class RequestsService {
         kind: input.kind,
         ...(from.actor
           ? { source: 'internal', reporterUserId: from.actor.id }
-          : { source: 'form', reporterName: from.reporterName, reporterEmail: from.reporterEmail }),
+          : {
+              source: from.signoffMilestoneId ? 'signoff' : 'form',
+              signoffMilestoneId: from.signoffMilestoneId ?? null,
+              reporterName: from.reporterName,
+              reporterEmail: from.reporterEmail,
+            }),
       })
       .returning({ id: taskRequests.id });
 
@@ -203,7 +216,11 @@ export class RequestsService {
         key,
         title: task!.title,
         status: 'BACKLOG',
-        source: from.actor ? 'proposal' : 'request_form',
+        source: from.actor
+          ? 'proposal'
+          : 'signoffMilestoneId' in from && from.signoffMilestoneId
+            ? 'signoff'
+            : 'request_form',
       },
       event: { type: 'task.created', payload: { taskId: task!.id, status: 'BACKLOG' } },
     });
@@ -241,7 +258,12 @@ export class RequestsService {
     const { project } = await this.access.require(userId, projectId, { triage: true });
     return this.load(project, [
       eq(taskRequests.status, query.status),
-      query.source ? eq(taskRequests.source, query.source) : undefined,
+      // 0028 §4: changes asked for on a sign-off page come from the client, so "Form" shows them.
+      query.source === 'form'
+        ? inArray(taskRequests.source, ['form', 'signoff'])
+        : query.source
+          ? eq(taskRequests.source, query.source)
+          : undefined,
     ]);
   }
 
@@ -278,9 +300,11 @@ export class RequestsService {
           username: reporters.username,
           avatarUrl: reporters.avatarUrl,
         },
+        signoffMilestone: { id: milestones.id, name: milestones.name },
       })
       .from(taskRequests)
       .innerJoin(tasks, eq(tasks.id, taskRequests.taskId))
+      .leftJoin(milestones, eq(milestones.id, taskRequests.signoffMilestoneId))
       .leftJoin(users, eq(users.id, taskRequests.triagedBy))
       .leftJoin(reporters, eq(reporters.id, taskRequests.reporterUserId))
       .where(and(eq(taskRequests.projectId, projectId), ...conditions))
@@ -290,7 +314,7 @@ export class RequestsService {
       rows.filter((r) => !r.task.deletedAt).map((r) => r.task.id),
     );
 
-    return rows.map(({ request: r, task, triager, reporter }) => ({
+    return rows.map(({ request: r, task, triager, reporter, signoffMilestone }) => ({
       id: r.id,
       projectId: r.projectId,
       kind: r.kind as RequestKind,
@@ -315,6 +339,10 @@ export class RequestsService {
         triager?.id && triager.username ? { id: triager.id, username: triager.username } : null,
       triagedAt: r.triagedAt?.toISOString() ?? null,
       declineReason: r.declineReason,
+      signoffMilestone:
+        signoffMilestone?.id && signoffMilestone.name
+          ? { id: signoffMilestone.id, name: signoffMilestone.name }
+          : null,
       createdAt: r.createdAt.toISOString(),
       attachments: task.deletedAt ? [] : (files.get(task.id) ?? []),
     }));

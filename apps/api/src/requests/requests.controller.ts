@@ -25,6 +25,7 @@ import {
   proposeTaskSchema,
   setIntakeSchema,
   approveSignoffSchema,
+  requestSignoffChangesSchema,
   stopClientEmailsSchema,
   submitRequestSchema,
   type AcceptRequestInput,
@@ -34,6 +35,7 @@ import {
   type ProposeTaskInput,
   type SetIntakeInput,
   type ApproveSignoffInput,
+  type RequestSignoffChangesInput,
   type StopClientEmailsInput,
   type SubmitRequestInput,
 } from '@devtrack/validators';
@@ -92,6 +94,19 @@ export class RequestsController {
     @Req() req: Request,
   ): Promise<{ received: true }> {
     await this.signoff.approve(token, body, clientIp(req));
+    return { received: true };
+  }
+
+  /** 0028 §4: Request changes. The note becomes a request in Triage. */
+  @Public()
+  @Post('public/signoff/:token/changes')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async requestSignoffChanges(
+    @Param('token') token: string,
+    @Body(new ZodValidationPipe(requestSignoffChangesSchema)) body: RequestSignoffChangesInput,
+    @Req() req: Request,
+  ): Promise<{ received: true }> {
+    await this.signoff.requestChanges(token, body, clientIp(req));
     return { received: true };
   }
 

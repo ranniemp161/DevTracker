@@ -11,12 +11,13 @@ import {
   type Database,
 } from '@devtrack/database';
 import { ErrorCode, type PublicSignoff } from '@devtrack/types';
-import type { ApproveSignoffInput } from '@devtrack/validators';
+import type { ApproveSignoffInput, RequestSignoffChangesInput } from '@devtrack/validators';
 import { AppException } from '../common/errors/app.exception';
 import { DATABASE } from '../database/database.module';
 import { EventRecorder } from '../events/event-recorder.service';
 import { ProjectAccessService } from '../projects/project-access.service';
 import { RATE_LIMITS, RateLimitService } from '../rate-limit/rate-limit.service';
+import { RequestsService } from './requests.service';
 import { TurnstileVerifier } from './turnstile.service';
 
 const linkNotFound = () =>
@@ -38,6 +39,7 @@ export class SignoffService {
     private readonly events: EventRecorder,
     private readonly rateLimit: RateLimitService,
     private readonly turnstile: TurnstileVerifier,
+    private readonly requests: RequestsService,
   ) {}
 
   async page(token: string): Promise<PublicSignoff> {
@@ -113,6 +115,41 @@ export class SignoffService {
           resourceId: milestone.id,
         })),
       );
+    });
+  }
+
+  /**
+   * 0028 §4: the client's note becomes a request in Triage ("Request" label, Backlog), linked to
+   * the milestone, so the lead triages it like any other. Their email gets the §2 updates.
+   */
+  async requestChanges(
+    token: string,
+    input: RequestSignoffChangesInput,
+    ip: string,
+  ): Promise<void> {
+    const { milestone, project } = await this.open(token);
+    await this.rateLimit.consume(RATE_LIMITS.signoffPerIp, ip);
+    await this.rateLimit.consume(RATE_LIMITS.signoffPerLink, milestone.id);
+    if (input.website) return;
+    if (!(await this.turnstile.verify(input.turnstileToken, ip))) {
+      throw AppException.validation([
+        { path: 'turnstileToken', message: 'Please complete the check and try again.' },
+      ]);
+    }
+    const title = `Changes requested on ${milestone.name}`.slice(0, 200);
+    await this.db.transaction(async (tx) => {
+      const taskId = await this.requests.createRequest(
+        tx,
+        project,
+        { kind: 'request', title, description: input.note },
+        {
+          actor: null,
+          reporterName: input.name ?? null,
+          reporterEmail: input.email ?? null,
+          signoffMilestoneId: milestone.id,
+        },
+      );
+      if (!taskId) throw linkNotFound();
     });
   }
 

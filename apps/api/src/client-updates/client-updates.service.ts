@@ -111,7 +111,8 @@ export class ClientUpdatesService {
         .where(
           and(
             which,
-            eq(taskRequests.source, 'form'),
+            // The form and sign-off pages are the client's; team proposals never email.
+            inArray(taskRequests.source, ['form', 'signoff']),
             isNotNull(taskRequests.reporterEmail),
             isNull(taskRequests.emailsStoppedAt),
             isNull(SENT_AT[kind]),

@@ -46,7 +46,8 @@ export function AcceptDialog({
   const { project, members } = useProject();
   const query = useApiQuery<Milestone[]>(request ? `/projects/${project.id}/milestones` : null);
   const milestones = openMilestones(query.data ?? []);
-  const [selected, setSelected] = useState('');
+  // 0028 §4: changes asked for on a sign-off page start in the milestone they came from.
+  const [selected, setSelected] = useState(request?.signoffMilestone?.id ?? '');
   const [newName, setNewName] = useState('');
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   // Leads and admins manage milestones (0023 §2), so they can create one on the spot.

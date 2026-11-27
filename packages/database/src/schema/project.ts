@@ -396,7 +396,10 @@ export const taskRequests = pgTable(
       .references(() => projects.id, { onDelete: 'cascade' }),
     kind: text('kind').notNull(),
     status: text('status').notNull().default('new'),
-    /** 0023 §3: `form` (public request form) or `internal` (a member's proposal). */
+    /**
+     * 0023 §3: `form` (public request form), `internal` (a member's proposal) or, 0028 §4,
+     * `signoff` (Request changes on a client's sign-off page).
+     */
     source: text('source').notNull().default('form'),
     /** The member who proposed it (`internal` only). */
     reporterUserId: uuid('reporter_user_id').references(() => users.id, { onDelete: 'set null' }),
@@ -415,6 +418,10 @@ export const taskRequests = pgTable(
     declinedEmailedAt: timestamptz('declined_emailed_at'),
     doneEmailedAt: timestamptz('done_emailed_at'),
     deliveredEmailedAt: timestamptz('delivered_emailed_at'),
+    /** 0028 §4: the milestone a sign-off "Request changes" came from. */
+    signoffMilestoneId: uuid('signoff_milestone_id').references(() => milestones.id, {
+      onDelete: 'set null',
+    }),
     triagedBy: uuid('triaged_by').references(() => users.id, { onDelete: 'set null' }),
     triagedAt: timestamptz('triaged_at'),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
@@ -423,11 +430,11 @@ export const taskRequests = pgTable(
     index('task_requests_project_status_idx').on(t.projectId, t.status, t.createdAt),
     check('task_requests_kind_check', sql`${t.kind} IN ('bug', 'request')`),
     check('task_requests_status_check', sql`${t.status} IN ('new', 'accepted', 'declined')`),
-    check('task_requests_source_check', sql`${t.source} IN ('form', 'internal')`),
+    check('task_requests_source_check', sql`${t.source} IN ('form', 'internal', 'signoff')`),
     // Contact details exist only for people outside the team (0016 §3).
     check(
       'task_requests_internal_no_contact',
-      sql`${t.source} = 'form' OR (${t.reporterName} IS NULL AND ${t.reporterEmail} IS NULL)`,
+      sql`${t.source} <> 'internal' OR (${t.reporterName} IS NULL AND ${t.reporterEmail} IS NULL)`,
     ),
   ],
 );
