@@ -239,19 +239,29 @@ describe('triage once a project has a lead (0023 §4)', () => {
 
     // No leads: a developer triages, as in 0016.
     await openRequests(dev, project).expect(200);
-    await dev.browser.post(`/api/v1/requests/${ids['First bug']}/accept`).expect(204);
+    await dev.browser
+      .post(`/api/v1/requests/${ids['First bug']}/accept`)
+      .send({ milestoneId: null })
+      .expect(204);
 
     // A lead is appointed: now only the lead (and admins) triage.
     await setRole(owner, project, lead.id, 'lead').expect(200);
     expect((await openRequests(dev, project)).status).toBe(403);
-    expect((await dev.browser.post(`/api/v1/requests/${ids['Second bug']}/accept`)).status).toBe(
-      403,
-    );
+    expect(
+      (
+        await dev.browser
+          .post(`/api/v1/requests/${ids['Second bug']}/accept`)
+          .send({ milestoneId: null })
+      ).status,
+    ).toBe(403);
     expect((await dev.browser.post(`/api/v1/requests/${ids['Second bug']}/decline`)).status).toBe(
       403,
     );
     await openRequests(lead, project).expect(200);
-    await lead.browser.post(`/api/v1/requests/${ids['Second bug']}/accept`).expect(204);
+    await lead.browser
+      .post(`/api/v1/requests/${ids['Second bug']}/accept`)
+      .send({ milestoneId: null })
+      .expect(204);
 
     // The last lead steps down: everyone triages again.
     await setRole(owner, project, lead.id, 'member').expect(200);

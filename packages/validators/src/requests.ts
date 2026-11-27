@@ -99,6 +99,24 @@ export const declineRequestSchema = z
   .default({ reason: undefined });
 export type DeclineRequestInput = z.infer<typeof declineRequestSchema>;
 
+const requestUuid = z.uuid({ error: 'Invalid id.' });
+
+/**
+ * 0024 §3: accepting files the task into an open milestone, or leaves it unscheduled (`null`).
+ * The choice is required so it is always made on purpose. Assignees are optional.
+ */
+export const acceptRequestSchema = z.object({
+  milestoneId: z
+    .union([requestUuid, z.null()], { error: 'Choose a milestone, or Unscheduled.' })
+    .transform((id) => id?.toLowerCase() ?? null),
+  assigneeIds: z
+    .array(requestUuid)
+    .max(20, { error: 'At most 20 assignees.' })
+    .transform((ids) => [...new Set(ids.map((id) => id.toLowerCase()))])
+    .optional(),
+});
+export type AcceptRequestInput = z.infer<typeof acceptRequestSchema>;
+
 /** 0023 §5: `GET /projects/:id/proposals?mine=true`; there is no list of everyone's. */
 export const listProposalsQuerySchema = z.object({
   mine: z.literal('true', { error: 'Only your own proposals can be listed (mine=true).' }),

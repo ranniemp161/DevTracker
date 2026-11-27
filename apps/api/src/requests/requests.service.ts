@@ -30,7 +30,12 @@ import {
   type RequestUpload,
   type TaskRequest,
 } from '@devtrack/types';
-import type { ListRequestsQuery, ProposeTaskInput, SubmitRequestInput } from '@devtrack/validators';
+import type {
+  AcceptRequestInput,
+  ListRequestsQuery,
+  ProposeTaskInput,
+  SubmitRequestInput,
+} from '@devtrack/validators';
 import { AppException } from '../common/errors/app.exception';
 import { DATABASE } from '../database/database.module';
 import { EventRecorder, type Actor } from '../events/event-recorder.service';
@@ -38,6 +43,7 @@ import { ProjectAccessService, type ProjectRow } from '../projects/project-acces
 import { RATE_LIMITS, RateLimitService } from '../rate-limit/rate-limit.service';
 import { TaskAttachmentsService } from '../tasks/task-attachments.service';
 import { TaskStatusAutomation } from '../tasks/task-status-automation.service';
+import { TasksService } from '../tasks/tasks.service';
 import { TurnstileVerifier } from './turnstile.service';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -74,6 +80,7 @@ export class RequestsService {
     private readonly turnstile: TurnstileVerifier,
     private readonly automation: TaskStatusAutomation,
     private readonly attachments: TaskAttachmentsService,
+    private readonly tasks: TasksService,
   ) {}
 
   // ------------------------------------------------------------ public form
@@ -311,18 +318,27 @@ export class RequestsService {
     }));
   }
 
-  /** Accepting moves a still-Backlog task to To do (decision record 0021). */
-  async accept(actor: Actor, requestId: string): Promise<void> {
+  /**
+   * Accepting files the task into a milestone or leaves it unscheduled, and can hand it out
+   * (decision record 0024 §3). Only a task accepted into a milestone moves to To do (0021);
+   * an unscheduled one stays in Backlog.
+   */
+  async accept(actor: Actor, requestId: string, input: AcceptRequestInput): Promise<void> {
     const { request, project } = await this.requireNew(actor.id, requestId);
+    const assigneeIds = input.assigneeIds ?? [];
+    const milestone = await this.tasks.checkSchedule(project.id, input.milestoneId, assigneeIds);
     await this.db.transaction(async (tx) => {
       await tx
         .update(taskRequests)
         .set({ status: 'accepted', triagedBy: actor.id, triagedAt: new Date() })
         .where(eq(taskRequests.id, request.id));
-      await this.automation.advanceByIds(tx, project, [request.taskId], 'TODO', {
-        trigger: 'request',
-      });
-      await this.tellReporter(tx, actor, project, request, 'accepted', null);
+      await this.tasks.applySchedule(tx, actor, project, request.taskId, milestone, assigneeIds);
+      if (milestone) {
+        await this.automation.advanceByIds(tx, project, [request.taskId], 'TODO', {
+          trigger: 'request',
+        });
+      }
+      await this.tellReporter(tx, actor, project, request, { outcome: 'accepted', milestone });
     });
   }
 
@@ -335,7 +351,7 @@ export class RequestsService {
         .update(taskRequests)
         .set({ status: 'declined', triagedBy: actor.id, triagedAt: now, declineReason: reason })
         .where(eq(taskRequests.id, request.id));
-      await this.tellReporter(tx, actor, project, request, 'declined', reason);
+      await this.tellReporter(tx, actor, project, request, { outcome: 'declined', reason });
       const [task] = await tx
         .update(tasks)
         .set({ deletedAt: now })
@@ -427,8 +443,9 @@ export class RequestsService {
     actor: Actor,
     project: Pick<ProjectRow, 'id' | 'workspaceId'>,
     request: Pick<typeof taskRequests.$inferSelect, 'id' | 'taskId' | 'reporterUserId'>,
-    outcome: 'accepted' | 'declined',
-    reason: string | null,
+    result:
+      | { outcome: 'accepted'; milestone: { name: string } | null }
+      | { outcome: 'declined'; reason: string | null },
   ): Promise<void> {
     if (!request.reporterUserId) return;
     const [task] = await tx
@@ -442,11 +459,16 @@ export class RequestsService {
         workspaceId: project.workspaceId,
         projectId: project.id,
         type: 'REQUEST_TRIAGED',
-        title: outcome === 'accepted' ? `Accepted: ${title}` : `Declined: ${title}`,
-        body: reason,
+        title:
+          result.outcome === 'declined'
+            ? `Declined: ${title}`
+            : result.milestone
+              ? `Accepted into ${truncate(result.milestone.name, 80)}: ${title}`
+              : `Accepted (unscheduled): ${title}`,
+        body: result.outcome === 'declined' ? result.reason : null,
         // Accepted: the task. Declined: the task is gone, so the proposal list.
-        resourceType: outcome === 'accepted' ? 'task' : 'task_request',
-        resourceId: outcome === 'accepted' ? request.taskId : request.id,
+        resourceType: result.outcome === 'accepted' ? 'task' : 'task_request',
+        resourceId: result.outcome === 'accepted' ? request.taskId : request.id,
       },
     ]);
   }

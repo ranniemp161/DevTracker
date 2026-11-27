@@ -168,9 +168,15 @@ describe('triage (0016)', () => {
 
     // Outsiders can't see or triage.
     await f.bystander.browser.get(`/api/v1/projects/${f.project}/requests`).expect(404);
-    await f.bystander.browser.post(`/api/v1/requests/${keep.id}/accept`).expect(404);
+    await f.bystander.browser
+      .post(`/api/v1/requests/${keep.id}/accept`)
+      .send({ milestoneId: null })
+      .expect(404);
 
-    await f.dev.browser.post(`/api/v1/requests/${keep.id}/accept`).expect(204);
+    await f.dev.browser
+      .post(`/api/v1/requests/${keep.id}/accept`)
+      .send({ milestoneId: null })
+      .expect(204);
     await f.dev.browser.post(`/api/v1/requests/${keep.id}/decline`).expect(409);
     await f.dev.browser.post(`/api/v1/requests/${drop.id}/decline`).expect(204);
 

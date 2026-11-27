@@ -148,7 +148,16 @@ describe('a proposal', () => {
     expect(await toldAbout(lead)).toEqual(['New bug report in DEV: Login loops forever']);
     expect(await toldAbout(dev)).toEqual([]);
 
-    await lead.browser.post(`/api/v1/requests/${request!.id}/accept`).expect(204);
+    const milestone = (
+      await lead.browser
+        .post(`/api/v1/projects/${project}/milestones`)
+        .send({ name: 'v1.2' })
+        .expect(201)
+    ).body.data.milestone.id as string;
+    await lead.browser
+      .post(`/api/v1/requests/${request!.id}/accept`)
+      .send({ milestoneId: milestone })
+      .expect(204);
     expect(
       (await dev.browser.get(`/api/v1/tasks/${taskId}`).expect(200)).body.data.task.status,
     ).toBe('TODO');
@@ -219,6 +228,7 @@ describe('telling the proposer (0023 §5)', () => {
 
     await lead.browser
       .post(`/api/v1/requests/${await requestIdFor(lead, project, 'Keep sessions alive')}/accept`)
+      .send({ milestoneId: null })
       .expect(204);
     await lead.browser
       .post(`/api/v1/requests/${await requestIdFor(lead, project, 'Rewrite in Rust')}/decline`)
@@ -228,7 +238,7 @@ describe('telling the proposer (0023 §5)', () => {
     const outcomes = await notes(dev, 'REQUEST_TRIAGED');
     expect(outcomes.map(({ title, body, link }) => ({ title, body, link })).reverse()).toEqual([
       {
-        title: 'Accepted: Keep sessions alive',
+        title: 'Accepted (unscheduled): Keep sessions alive',
         body: null,
         link: `/projects/${project}/tasks/${kept}`,
       },
@@ -254,6 +264,7 @@ describe('telling the proposer (0023 §5)', () => {
       .expect(202);
     await lead.browser
       .post(`/api/v1/requests/${await requestIdFor(lead, project, 'From a client')}/accept`)
+      .send({ milestoneId: null })
       .expect(204);
     for (const u of [owner, lead, dev]) {
       expect((await notes(u, 'REQUEST_TRIAGED')).length).toBe(u === dev ? 2 : 0);

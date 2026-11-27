@@ -1,6 +1,6 @@
 'use client';
 
-import type { TaskRequest } from '@devtrack/types';
+import type { Milestone, TaskRequest } from '@devtrack/types';
 import Link from 'next/link';
 import { useState } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -23,6 +23,7 @@ import { formatDate } from '../projects/labels';
 import { useProject } from '../projects/project-context';
 import { TaskLink } from '@/components/task-link';
 import { AttachmentGrid } from '../projects/attachment-grid';
+import { AcceptDialog, type AcceptChoice } from './accept-dialog';
 
 type Tab = 'new' | 'accepted' | 'declined';
 const TABS: { value: Tab; label: string }[] = [
@@ -53,22 +54,15 @@ export function TriagePage() {
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [accepting, setAccepting] = useState<TaskRequest | null>(null);
   const [declining, setDeclining] = useState<TaskRequest | null>(null);
   const [reason, setReason] = useState('');
 
-  async function triage(request: TaskRequest, action: 'accept' | 'decline', why = '') {
+  async function run(request: TaskRequest, work: () => Promise<string>) {
     setBusy(request.id);
     setError(null);
     try {
-      await api(`/requests/${request.id}/${action}`, {
-        method: 'POST',
-        body: action === 'decline' && why.trim() ? { reason: why.trim() } : undefined,
-      });
-      toast.show(
-        action === 'accept'
-          ? `Accepted ${request.task?.key ?? 'the request'}`
-          : `Declined ${request.task?.key ?? 'the request'}`,
-      );
+      toast.show(await work());
       query.reload();
       reloadProject();
     } catch (err) {
@@ -76,6 +70,40 @@ export function TriagePage() {
     } finally {
       setBusy(null);
     }
+  }
+
+  /** 0024 §3: into a milestone (created first when new) or unscheduled, with optional assignees. */
+  function accept(request: TaskRequest, choice: AcceptChoice) {
+    void run(request, async () => {
+      let milestone: { id: string; name: string } | null;
+      if (choice.milestone && 'newName' in choice.milestone) {
+        const created = await api<{ milestone: Milestone }>(`/projects/${project.id}/milestones`, {
+          body: { name: choice.milestone.newName },
+        });
+        milestone = { id: created.milestone.id, name: created.milestone.name };
+      } else {
+        milestone = choice.milestone;
+      }
+      await api(`/requests/${request.id}/accept`, {
+        method: 'POST',
+        body: {
+          milestoneId: milestone?.id ?? null,
+          ...(choice.assigneeIds.length > 0 ? { assigneeIds: choice.assigneeIds } : {}),
+        },
+      });
+      const key = request.task?.key ?? 'the request';
+      return milestone ? `Accepted ${key} into ${milestone.name}` : `Accepted ${key} (unscheduled)`;
+    });
+  }
+
+  function decline(request: TaskRequest, why: string) {
+    void run(request, async () => {
+      await api(`/requests/${request.id}/decline`, {
+        method: 'POST',
+        body: why.trim() ? { reason: why.trim() } : undefined,
+      });
+      return `Declined ${request.task?.key ?? 'the request'}`;
+    });
   }
 
   if (readOnly) return <Alert tone="info">Archived projects can't triage requests.</Alert>;
@@ -196,7 +224,7 @@ export function TriagePage() {
                   size="sm"
                   loading={busy === r.id}
                   disabled={busy !== null}
-                  onClick={() => triage(r, 'accept')}
+                  onClick={() => setAccepting(r)}
                 >
                   Accept
                 </Button>
@@ -213,6 +241,15 @@ export function TriagePage() {
           </li>
         ))}
       </ul>
+      <AcceptDialog
+        key={accepting?.id ?? 'none'}
+        request={accepting}
+        onAccept={(r, choice) => {
+          setAccepting(null);
+          accept(r, choice);
+        }}
+        onCancel={() => setAccepting(null)}
+      />
       <ConfirmDialog
         open={declining !== null}
         title="Decline this request?"
@@ -221,7 +258,7 @@ export function TriagePage() {
           const r = declining;
           setDeclining(null);
           setReason('');
-          if (r) void triage(r, 'decline', reason);
+          if (r) decline(r, reason);
         }}
         onCancel={() => {
           setDeclining(null);

@@ -552,31 +552,107 @@ export class TasksService {
   async addAssignees(actor: Actor, taskId: string, assigneeIds: string[]): Promise<Task> {
     const { task, access } = await this.taskAccess.require(actor.id, taskId, { write: true });
     await this.assertProjectMembers(task.projectId, assigneeIds);
-    await this.db.transaction(async (tx) => {
-      // RETURNING yields only rows actually inserted, i.e. new assignees.
-      const added = await tx
-        .insert(taskAssignees)
-        .values(assigneeIds.map((id) => ({ taskId: task.id, userId: id })))
-        .onConflictDoNothing()
-        .returning({ userId: taskAssignees.userId });
-      const newIds = added.map((a) => a.userId);
-      if (newIds.length === 0) return;
-      const people = await this.usernames(tx, newIds);
-      for (const person of people) {
-        await this.events.activity(tx, {
-          ...scope(access.project, task),
-          actor,
-          action: 'task.assigned',
-          metadata: { key: taskKey(access.project, task), user: person },
-          event: {
-            type: 'task.assigned',
-            payload: { taskId: task.id, userId: person.id, assigned: true },
-          },
-        });
-      }
-      await this.notifyAssigned(tx, actor, access.project, task, newIds);
-    });
+    await this.db.transaction((tx) => this.assign(tx, actor, access.project, task, assigneeIds));
     return (await this.load([task.id], access.project.key))[0]!;
+  }
+
+  /**
+   * Triage's accept (decision record 0024 §3), checked before the caller's transaction: the
+   * milestone must be open and in this project, and assignees must be project members.
+   */
+  async checkSchedule(
+    projectId: string,
+    milestoneId: string | null,
+    assigneeIds: string[],
+  ): Promise<{ id: string; name: string } | null> {
+    await this.assertProjectMembers(projectId, assigneeIds);
+    if (!milestoneId) return null;
+    const [milestone] = await this.db
+      .select({ id: milestones.id, name: milestones.name, status: milestones.status })
+      .from(milestones)
+      .where(and(eq(milestones.id, milestoneId), eq(milestones.projectId, projectId)))
+      .limit(1);
+    if (!milestone || milestone.status !== 'OPEN') {
+      throw AppException.validation([
+        { path: 'milestoneId', message: 'Choose an open milestone from this project.' },
+      ]);
+    }
+    return { id: milestone.id, name: milestone.name };
+  }
+
+  /**
+   * Writes a checked schedule in the caller's transaction: the milestone (`null` clears it,
+   * which is Unscheduled) and new assignees, with the same activity, live events and
+   * notifications as editing the task by hand.
+   */
+  async applySchedule(
+    tx: Executor,
+    actor: Actor,
+    project: ProjectRow,
+    taskId: string,
+    milestone: { id: string; name: string } | null,
+    assigneeIds: string[],
+  ): Promise<void> {
+    const [task] = await tx
+      .select()
+      .from(tasks)
+      .where(and(eq(tasks.id, taskId), isNull(tasks.deletedAt)));
+    if (!task) return;
+    if ((milestone?.id ?? null) !== task.milestoneId) {
+      const previous = task.milestoneId
+        ? await tx
+            .select({ name: milestones.name })
+            .from(milestones)
+            .where(eq(milestones.id, task.milestoneId))
+            .then((r) => r[0]?.name ?? null)
+        : null;
+      const changes = { milestone: { from: previous, to: milestone?.name ?? null } };
+      await tx
+        .update(tasks)
+        .set({ milestoneId: milestone?.id ?? null })
+        .where(eq(tasks.id, task.id));
+      await this.events.activity(tx, {
+        ...scope(project, task),
+        actor,
+        action: 'task.updated',
+        metadata: { key: taskKey(project, task), changes },
+        event: { type: 'task.updated', payload: { taskId: task.id, changes } },
+      });
+    }
+    await this.assign(tx, actor, project, task, assigneeIds);
+  }
+
+  /** Adds assignees with activity and TASK_ASSIGNED; people already assigned are skipped. */
+  private async assign(
+    tx: Executor,
+    actor: Actor,
+    project: ProjectRow,
+    task: TaskRow,
+    assigneeIds: string[],
+  ): Promise<void> {
+    if (assigneeIds.length === 0) return;
+    // RETURNING yields only rows actually inserted, i.e. new assignees.
+    const added = await tx
+      .insert(taskAssignees)
+      .values(assigneeIds.map((id) => ({ taskId: task.id, userId: id })))
+      .onConflictDoNothing()
+      .returning({ userId: taskAssignees.userId });
+    const newIds = added.map((a) => a.userId);
+    if (newIds.length === 0) return;
+    const people = await this.usernames(tx, newIds);
+    for (const person of people) {
+      await this.events.activity(tx, {
+        ...scope(project, task),
+        actor,
+        action: 'task.assigned',
+        metadata: { key: taskKey(project, task), user: person },
+        event: {
+          type: 'task.assigned',
+          payload: { taskId: task.id, userId: person.id, assigned: true },
+        },
+      });
+    }
+    await this.notifyAssigned(tx, actor, project, task, newIds);
   }
 
   async removeAssignee(actor: Actor, taskId: string, assigneeId: string): Promise<Task> {
