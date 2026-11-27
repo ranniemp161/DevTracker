@@ -15,7 +15,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { users } from './identity.js';
-import { projects, tasks } from './project.js';
+import { milestones, projects, tasks } from './project.js';
 import { workspaces } from './workspace.js';
 
 const timestamptz = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
@@ -370,6 +370,49 @@ export const taskGithubLinks = pgTable(
   (t) => [
     primaryKey({ name: 'task_github_links_pk', columns: [t.taskId, t.pullRequestId] }),
     index('task_github_links_pull_request_idx').on(t.pullRequestId),
+  ],
+);
+
+/** Decision record 0026: published releases of connected repositories, one row per tag. */
+export const githubReleases = pgTable(
+  'github_releases',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    repositoryId: uuid('repository_id')
+      .notNull()
+      .references(() => githubRepositories.id, { onDelete: 'cascade' }),
+    tagName: text('tag_name').notNull(),
+    name: text('name'),
+    url: text('url').notNull(),
+    prerelease: boolean('prerelease').notNull().default(false),
+    publishedAt: timestamptz('published_at').notNull().defaultNow(),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+    updatedAt: timestamptz('updated_at')
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [unique('github_releases_repository_tag_unique').on(t.repositoryId, t.tagName)],
+);
+
+/** 0026: releases that deliver a milestone (many-to-many; display only). */
+export const milestoneGithubReleases = pgTable(
+  'milestone_github_releases',
+  {
+    milestoneId: uuid('milestone_id')
+      .notNull()
+      .references(() => milestones.id, { onDelete: 'cascade' }),
+    releaseId: uuid('release_id')
+      .notNull()
+      .references(() => githubReleases.id, { onDelete: 'cascade' }),
+    source: taskLinkSource('source').notNull(),
+    /** Null for automatic links. */
+    linkedBy: uuid('linked_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ name: 'milestone_github_releases_pk', columns: [t.milestoneId, t.releaseId] }),
+    index('milestone_github_releases_release_idx').on(t.releaseId),
   ],
 );
 

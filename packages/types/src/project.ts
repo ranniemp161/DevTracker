@@ -202,8 +202,27 @@ export interface Milestone {
   taskCounts: { total: number; done: number; addedAfterStart: number };
   /** Acceptance criteria in display order. */
   criteria: MilestoneCriterion[];
+  /** GitHub releases that deliver it (0026), newest first. Display only. */
+  releases: LinkedMilestoneRelease[];
   createdAt: string;
   updatedAt: string;
+}
+
+/** A published release of a repository connected to the project (decision record 0026). */
+export interface GithubRelease {
+  id: string;
+  tagName: string;
+  name: string | null;
+  url: string;
+  prerelease: boolean;
+  publishedAt: string;
+  /** `owner/name`. */
+  repository: string;
+}
+
+export interface LinkedMilestoneRelease extends GithubRelease {
+  /** `AUTO` when DevTrack linked it because its tag or name matched the milestone. */
+  source: 'MANUAL' | 'AUTO';
 }
 
 /** One acceptance criterion: a checkable statement of what "done" means for a milestone. */

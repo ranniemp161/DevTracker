@@ -462,3 +462,7 @@ export const createTaskRelationSchema = z.object({
   taskId: z.uuid({ error: 'Choose a task.' }),
 });
 export type CreateTaskRelationInput = z.infer<typeof createTaskRelationSchema>;
+
+/** 0026: `POST /milestones/:id/releases`. */
+export const linkMilestoneReleaseSchema = z.object({ releaseId: uuid });
+export type LinkMilestoneReleaseInput = z.infer<typeof linkMilestoneReleaseSchema>;
