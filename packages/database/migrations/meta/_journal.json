@@ -239,6 +239,13 @@
       "when": 1795801222878,
       "tag": "0033_client_signoff",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1795802980528,
+      "tag": "0034_signoff_change_requests",
+      "breakpoints": true
     }
   ]
 }

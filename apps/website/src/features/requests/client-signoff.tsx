@@ -1,11 +1,11 @@
 'use client';
 
 import type { PublicSignoff } from '@devtrack/types';
-import { approveSignoffSchema } from '@devtrack/validators';
+import { approveSignoffSchema, requestSignoffChangesSchema } from '@devtrack/validators';
 import { useParams } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { CheckIcon, DevtrackMark, TagIcon } from '@/components/icons';
-import { Alert, Button, Field } from '@/components/ui';
+import { Alert, Button, Field, SegmentedControl } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useApiQuery } from '@/lib/use-api-query';
 import { formatDate } from '../projects/labels';
@@ -13,26 +13,28 @@ import { Turnstile, TURNSTILE_SITE_KEY } from './turnstile';
 
 /**
  * The client's review page at /s/<token> (decision record 0028 §3–§4). No sign-in. It shows
- * only what was promised (criteria and releases) and lets the client approve. Approving tells
- * the team; it never changes anything else.
+ * only what was promised (criteria and releases). The client approves, which tells the team, or
+ * asks for changes, which become a request in Triage (0028 §4).
  */
 export function ClientSignoff() {
   const { token } = useParams<{ token: string }>();
   const page = useApiQuery<PublicSignoff>(`/public/signoff/${token}`);
-  const [values, setValues] = useState({ name: '', note: '', website: '' });
+  const [mode, setMode] = useState<'approve' | 'changes'>('approve');
+  const [values, setValues] = useState({ name: '', note: '', email: '', website: '' });
   const [captcha, setCaptcha] = useState<string | null>(null);
   const [captchaReset, setCaptchaReset] = useState(0);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [approved, setApproved] = useState(false);
+  const [done, setDone] = useState<'approve' | 'changes' | null>(null);
 
-  async function approve(e: FormEvent) {
+  async function send(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    const parsed = approveSignoffSchema.safeParse({
-      ...values,
-      turnstileToken: captcha ?? undefined,
-    });
+    const body = { ...values, turnstileToken: captcha ?? undefined };
+    const parsed =
+      mode === 'approve'
+        ? approveSignoffSchema.safeParse({ ...body, email: undefined })
+        : requestSignoffChangesSchema.safeParse(body);
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Check the form and try again.');
       return;
@@ -43,8 +45,10 @@ export function ClientSignoff() {
     }
     setSending(true);
     try {
-      await api(`/public/signoff/${token}/approve`, { body: parsed.data });
-      setApproved(true);
+      await api(`/public/signoff/${token}/${mode === 'approve' ? 'approve' : 'changes'}`, {
+        body: parsed.data,
+      });
+      setDone(mode);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
       setCaptcha(null);
@@ -122,13 +126,26 @@ export function ClientSignoff() {
               </section>
             ) : null}
 
-            {approved ? (
+            {done === 'approve' ? (
               <Alert tone="info">
                 Thank you. The team has been told you approved this delivery.
               </Alert>
+            ) : done === 'changes' ? (
+              <Alert tone="info">
+                Thank you. Your note is with the team, who will look at it before delivering.
+              </Alert>
             ) : (
-              <form onSubmit={approve} noValidate className="space-y-4 border-t border-line pt-5">
-                {m.approvedAt ? (
+              <form onSubmit={send} noValidate className="space-y-4 border-t border-line pt-5">
+                <SegmentedControl
+                  label="Your answer"
+                  value={mode}
+                  onChange={setMode}
+                  options={[
+                    { value: 'approve', label: 'Approve' },
+                    { value: 'changes', label: 'Request changes' },
+                  ]}
+                />
+                {mode === 'approve' && m.approvedAt ? (
                   <p className="text-xs text-fg-muted">
                     Already approved on {formatDate(m.approvedAt)}. Approving again updates it.
                   </p>
@@ -141,13 +158,26 @@ export function ClientSignoff() {
                   autoComplete="name"
                   onChange={(e) => setValues((v) => ({ ...v, name: e.target.value }))}
                 />
+                {mode === 'changes' ? (
+                  <Field
+                    label="Email (optional)"
+                    name="email"
+                    type="email"
+                    autoComplete="email"
+                    value={values.email}
+                    onChange={(e) => setValues((v) => ({ ...v, email: e.target.value }))}
+                    hint="We'll email you when the team accepts, finishes or delivers your changes."
+                  />
+                ) : null}
                 <label className="block space-y-1.5 text-sm">
-                  <span className="block text-label font-medium text-fg">Note (optional)</span>
+                  <span className="block text-label font-medium text-fg">
+                    {mode === 'approve' ? 'Note (optional)' : 'What needs to change?'}
+                  </span>
                   <textarea
                     name="note"
                     value={values.note}
-                    maxLength={500}
-                    rows={3}
+                    maxLength={mode === 'approve' ? 500 : 5000}
+                    rows={mode === 'approve' ? 3 : 6}
                     onChange={(e) => setValues((v) => ({ ...v, note: e.target.value }))}
                     className="w-full rounded-control border border-line-control bg-surface px-3 py-2 text-sm text-fg focus-visible:border-primary"
                   />
@@ -173,7 +203,11 @@ export function ClientSignoff() {
                   loading={sending}
                   className="w-full"
                 >
-                  {sending ? 'Sending…' : 'Approve this delivery'}
+                  {sending
+                    ? 'Sending…'
+                    : mode === 'approve'
+                      ? 'Approve this delivery'
+                      : 'Send to the team'}
                 </Button>
               </form>
             )}

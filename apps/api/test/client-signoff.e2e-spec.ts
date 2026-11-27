@@ -168,3 +168,62 @@ describe('Approve (0028 §4)', () => {
     await approve(token).expect(404);
   });
 });
+
+describe('Request changes (0028 §4)', () => {
+  it('puts the client note in Triage, linked to the milestone, and emails them about it', async () => {
+    const f = await projectFixture(t);
+    const id = await inReview(f);
+    const token = tokenOf(await link(f, id));
+
+    const short = await t
+      .http()
+      .post(`/api/v1/public/signoff/${token}/changes`)
+      .set('x-devtrack-client-ip', '203.0.113.250')
+      .set('x-devtrack-proxy-secret', TEST_PROXY_SECRET)
+      .send({ note: '' });
+    expect(short.status).toBe(400);
+
+    await t
+      .http()
+      .post(`/api/v1/public/signoff/${token}/changes`)
+      .set('x-devtrack-client-ip', '203.0.113.251')
+      .set('x-devtrack-proxy-secret', TEST_PROXY_SECRET)
+      .send({
+        note: 'The receipt is missing the VAT number.',
+        name: 'Dana',
+        email: 'dana@example.com',
+      })
+      .expect(202);
+
+    const triage = await f.admin.browser
+      .get(`/api/v1/projects/${f.project}/requests?source=form`)
+      .expect(200);
+    expect(triage.body.data).toHaveLength(1);
+    const request = triage.body.data[0];
+    expect(request).toMatchObject({
+      source: 'signoff',
+      kind: 'request',
+      reporterName: 'Dana',
+      reporterEmail: 'dana@example.com',
+      signoffMilestone: { id, name: 'v1.2 Checkout' },
+      task: { title: 'Changes requested on v1.2 Checkout', status: 'BACKLOG' },
+    });
+    const task = (await f.admin.browser.get(`/api/v1/tasks/${request.task.id}`).expect(200)).body
+      .data.task;
+    expect(task.description).toBe('The receipt is missing the VAT number.');
+    expect(task.labels.map((l: { name: string }) => l.name)).toEqual(['Request']);
+    // The milestone's stage is untouched.
+    const milestone = (await f.dev.browser.get(`/api/v1/projects/${f.project}/milestones`)).body
+      .data[0];
+    expect(milestone.status).toBe('CLIENT_REVIEW');
+
+    // Accepted into the milestone: the client hears about it like any form request.
+    await f.admin.browser
+      .post(`/api/v1/requests/${request.id}/accept`)
+      .send({ milestoneId: id })
+      .expect(204);
+    expect(
+      t.mailer.messages.filter((m) => m.to === 'dana@example.com').map((m) => m.subject),
+    ).toEqual(["Developer Platform: we're working on your request"]);
+  });
+});

@@ -159,6 +159,11 @@ export function TriagePage() {
                     {r.kind === 'bug' ? 'Bug' : 'Request'}
                   </span>
                   {r.task ? <span className="font-mono">{r.task.key}</span> : null}
+                  {r.signoffMilestone ? (
+                    <span className="font-medium text-fg-secondary">
+                      Changes requested on {r.signoffMilestone.name}
+                    </span>
+                  ) : null}
                   <span>{formatDate(r.createdAt)}</span>
                 </p>
                 {r.task ? (

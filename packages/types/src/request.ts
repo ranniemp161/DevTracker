@@ -5,7 +5,8 @@ import type { TaskStatus } from './project.js';
 export type RequestKind = 'bug' | 'request';
 export type RequestStatus = 'new' | 'accepted' | 'declined';
 
-export type RequestSource = 'form' | 'internal';
+/** 0023 §3 and 0028 §4: the public form, a member's proposal, or a client's sign-off page. */
+export type RequestSource = 'form' | 'internal' | 'signoff';
 
 export interface TaskRequest {
   id: string;
@@ -26,6 +27,8 @@ export interface TaskRequest {
   triagedAt: string | null;
   /** Why a lead declined it (0023 §4); null otherwise. */
   declineReason: string | null;
+  /** 0028 §4: the milestone the client asked for changes on (`signoff` only). */
+  signoffMilestone: { id: string; name: string } | null;
   createdAt: string;
   /** Completed files the sender attached (0022); empty once the task is gone. */
   attachments: TaskAttachment[];

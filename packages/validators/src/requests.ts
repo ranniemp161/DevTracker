@@ -152,3 +152,25 @@ export type ApproveSignoffInput = z.infer<typeof approveSignoffSchema>;
 /** 0028 §3: `POST /milestones/:id/signoff-link`; `replace` makes a new link and retires the old. */
 export const signoffLinkSchema = z.object({ replace: z.boolean().optional() });
 export type SignoffLinkInput = z.infer<typeof signoffLinkSchema>;
+
+/** 0028 §4: Request changes on the client's sign-off page. Becomes a request in Triage. */
+export const requestSignoffChangesSchema = z.object({
+  note: z
+    .string({ error: 'Tell the team what needs to change.' })
+    .trim()
+    .min(3, { error: 'Tell the team what needs to change.' })
+    .max(5000, { error: 'Keep it under 5,000 characters.' }),
+  name: z
+    .string()
+    .trim()
+    .max(80, { error: 'Name must be at most 80 characters.' })
+    .optional()
+    .transform((v) => v || undefined),
+  email: z
+    .union([z.literal(''), z.email({ error: 'Enter a valid email address.' }).max(254)])
+    .optional()
+    .transform((v) => v || undefined),
+  website: z.string().max(500).optional(),
+  turnstileToken: z.string().max(4096).optional(),
+});
+export type RequestSignoffChangesInput = z.infer<typeof requestSignoffChangesSchema>;
