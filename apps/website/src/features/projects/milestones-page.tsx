@@ -8,7 +8,7 @@ import { Alert, Badge, Button, EmptyState, Field, SubmitButton } from '@/compone
 import { api, ApiError } from '@/lib/api';
 import { useApiQuery } from '@/lib/use-api-query';
 import { useAuthForm, withoutBlanks } from '../auth/use-auth-form';
-import { formatDate, MILESTONE_STAGE_LABEL } from './labels';
+import { formatDate, isReadyForReview, MILESTONE_STAGE_LABEL } from './labels';
 import { MilestoneCriteria, MilestoneProgress } from './milestone-criteria';
 import { MilestoneReleases } from './milestone-releases';
 import { useProject } from './project-context';
@@ -108,11 +108,7 @@ function MilestoneRow({
   }
 
   const completed = m.status === 'DELIVERED';
-  const ready =
-    m.status === 'ACTIVE' &&
-    m.taskCounts.total > 0 &&
-    m.taskCounts.done === m.taskCounts.total &&
-    m.criteria.every((c) => c.done);
+  const ready = isReadyForReview(m);
   const readyKey = `devtrack:milestone-review-dismissed:${m.id}`;
   const readyFingerprint = `${m.status}:${m.taskCounts.total}:${m.taskCounts.done}:${m.criteria.map((c) => `${c.id}:${c.done}`).join(',')}`;
   const [, setDismissTick] = useState(0);

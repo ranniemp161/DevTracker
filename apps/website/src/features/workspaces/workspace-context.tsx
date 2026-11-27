@@ -28,6 +28,7 @@ const PAGE_TITLE: Record<string, string> = {
   '/projects': 'All projects',
   '/projects/new': 'New project',
   '/members': 'Members',
+  '/overview': 'Overview',
   '/my-tasks': 'My tasks',
   '/settings': 'Workspace settings',
 };

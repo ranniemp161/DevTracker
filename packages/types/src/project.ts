@@ -265,3 +265,11 @@ export interface RelatedTask {
     projectName: string;
   };
 }
+
+/** `GET /workspaces/:id/overview` (decision record 0027): undelivered milestones by stage. */
+export interface WorkspaceOverview {
+  sections: {
+    stage: Exclude<MilestoneStatus, 'DELIVERED'>;
+    projects: { project: { id: string; key: string; name: string }; milestones: Milestone[] }[];
+  }[];
+}

@@ -16,6 +16,8 @@ export interface WorkspaceSummary {
   slug: string;
   /** The requesting user's role in this workspace. */
   role: WorkspaceRole;
+  /** 0027 §2: admins, and leads of at least one unarchived project, see the Overview. */
+  viewerCanSeeOverview: boolean;
   createdAt: string;
 }
 
