@@ -566,9 +566,7 @@ export class TasksService {
       }
     });
     if (input.status === 'DONE') {
-      await this.clientUpdates.tasksDone(
-        rows.filter((r) => r.status !== 'DONE').map((r) => r.id),
-      );
+      await this.clientUpdates.tasksDone(rows.filter((r) => r.status !== 'DONE').map((r) => r.id));
     }
     return { tasks: await this.load(input.taskIds, project.key) };
   }

@@ -21,12 +21,12 @@ No accounts, no client portal: each link shows one thing.
 
 - **Who gets them:** the form reporter, only if they left an email address and haven't stopped them (§2.3). Team proposals never email (the member already gets `REQUEST_TRIAGED`).
 - **When:**
-  | Email | Sent when | Says |
-  | ----- | --------- | ---- |
-  | Accepted | the request is accepted (0024 §3) | "We're working on it", plus "planned for <milestone>" when scheduled |
-  | Declined | the request is declined | "We won't be doing this", plus the reason if the triager gave one |
-  | Done | the request's task first moves to Done | "It's done" |
-  | Delivered | the task's milestone moves to Delivered while the task is in it | "It has been delivered", plus linked release tags |
+  | Email     | Sent when                                                       | Says                                                                 |
+  | --------- | --------------------------------------------------------------- | -------------------------------------------------------------------- |
+  | Accepted  | the request is accepted (0024 §3)                               | "We're working on it", plus "planned for <milestone>" when scheduled |
+  | Declined  | the request is declined                                         | "We won't be doing this", plus the reason if the triager gave one    |
+  | Done      | the request's task first moves to Done                          | "It's done"                                                          |
+  | Delivered | the task's milestone moves to Delivered while the task is in it | "It has been delivered", plus linked release tags                    |
 - Each is sent **at most once** per request (`task_requests.*_emailed_at`). Done and Delivered aren't sent for declined requests.
 - **What an email may contain:** the project name, the request's title, the milestone name, the decline reason, release tags. Never task keys, comments, assignees, other tasks or internal notes.
 - **Stopping them:** every email ends with **Stop emails about this request**, a link to `/u#token=<token>` (64 random hex characters, in the fragment so it never reaches server logs). The page asks once and then sets `emails_stopped_at`; opening the link alone changes nothing, so mail scanners can't unsubscribe anyone. The form says under the email field: "We'll email you when this request is accepted, done or delivered."

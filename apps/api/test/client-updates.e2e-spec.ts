@@ -114,7 +114,11 @@ describe('client status emails (0028 §2)', () => {
       .expect(204);
     const token = stopToken(mail()[0]!.text)!;
 
-    await t.http().post('/api/v1/public/client-emails/stop').send({ token: 'f'.repeat(64) }).expect(204);
+    await t
+      .http()
+      .post('/api/v1/public/client-emails/stop')
+      .send({ token: 'f'.repeat(64) })
+      .expect(204);
     await t.http().post('/api/v1/public/client-emails/stop').send({ token }).expect(204);
     const [row] = await t.db.select().from(taskRequests).where(eq(taskRequests.id, r.id));
     expect(row!.emailsStoppedAt).not.toBeNull();
