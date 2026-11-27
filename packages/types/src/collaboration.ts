@@ -56,7 +56,8 @@ export type ActivityAction =
   | 'milestone.completed'
   | 'milestone.stage_changed'
   | 'milestone.release_linked'
-  | 'milestone.release_unlinked';
+  | 'milestone.release_unlinked'
+  | 'milestone.client_approved';
 
 export interface ActivityEntry {
   id: string;
@@ -84,6 +85,7 @@ export const NOTIFICATION_TYPES = [
   'REQUEST_TRIAGED',
   'TASK_BLOCKED',
   'MILESTONE_READY',
+  'MILESTONE_CLIENT_APPROVED',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 

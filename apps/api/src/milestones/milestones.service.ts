@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import {
   and,
@@ -21,6 +22,7 @@ import {
   users,
   type Database,
 } from '@devtrack/database';
+import { ErrorCode } from '@devtrack/types';
 import type {
   GithubRelease,
   LinkedMilestoneRelease,
@@ -39,6 +41,7 @@ import type {
 } from '@devtrack/validators';
 import { ClientUpdatesService } from '../client-updates/client-updates.service';
 import { AppException } from '../common/errors/app.exception';
+import { APP_CONFIG, type AppConfig } from '../config/app-config';
 import { isUuid } from '../common/pipes/uuid-param.pipe';
 import { DATABASE } from '../database/database.module';
 import { EventRecorder, type Actor } from '../events/event-recorder.service';
@@ -77,6 +80,13 @@ const toMilestone = (
   taskCounts,
   criteria,
   releases,
+  clientApproval: m.clientApprovedAt
+    ? {
+        at: m.clientApprovedAt.toISOString(),
+        name: m.clientApprovedName,
+        note: m.clientApprovedNote,
+      }
+    : null,
   createdAt: m.createdAt.toISOString(),
   updatedAt: m.updatedAt.toISOString(),
 });
@@ -145,6 +155,7 @@ export class MilestonesService {
     private readonly access: ProjectAccessService,
     private readonly workspaceAccess: WorkspaceAccessService,
     private readonly clientUpdates: ClientUpdatesService,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
     private readonly events: EventRecorder,
     private readonly readiness: MilestoneReadinessService,
   ) {}
@@ -316,6 +327,33 @@ export class MilestonesService {
         }))
         .filter((s) => s.projects.length > 0),
     };
+  }
+
+  /**
+   * 0028 §3: the client's private sign-off link, for leads and admins while the milestone is in
+   * Client review. `replace` makes a new link, and the old one stops working at once.
+   */
+  async signoffLink(actor: Actor, milestoneId: string, replace: boolean): Promise<{ url: string }> {
+    const { milestone } = await this.requireMilestone(actor.id, milestoneId, {
+      manage: true,
+      write: true,
+    });
+    if (milestone.status !== 'CLIENT_REVIEW') {
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        ErrorCode.CONFLICT,
+        'Move the milestone to Client review to share a sign-off link.',
+      );
+    }
+    let token = milestone.signoffToken;
+    if (!token || replace) {
+      token = randomBytes(32).toString('base64url');
+      await this.db
+        .update(milestones)
+        .set({ signoffToken: token })
+        .where(eq(milestones.id, milestone.id));
+    }
+    return { url: `${this.config.webOrigin}/s/${token}` };
   }
 
   /** 0026 §4: releases of the repositories connected to the project, newest first. */

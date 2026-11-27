@@ -285,6 +285,12 @@ export const milestones = pgTable(
     startedAt: timestamptz('started_at'),
     /** Entry into Delivered; cleared when it leaves Delivered. */
     deliveredAt: timestamptz('delivered_at'),
+    /** 0028 §3: the client's private sign-off link; works only while in Client review. */
+    signoffToken: text('signoff_token').unique('milestones_signoff_token_unique'),
+    /** 0028 §4: the client's latest approval. It never moves the stage. */
+    clientApprovedAt: timestamptz('client_approved_at'),
+    clientApprovedName: text('client_approved_name'),
+    clientApprovedNote: text('client_approved_note'),
     /** When MILESTONE_READY was sent; cleared whenever the milestone stops being ready (0025 §4). */
     readyNotifiedAt: timestamptz('ready_notified_at'),
     createdAt: timestamptz('created_at').notNull().defaultNow(),

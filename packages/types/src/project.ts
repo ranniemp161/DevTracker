@@ -204,6 +204,8 @@ export interface Milestone {
   criteria: MilestoneCriterion[];
   /** GitHub releases that deliver it (0026), newest first. Display only. */
   releases: LinkedMilestoneRelease[];
+  /** 0028 §4: the client's latest approval on the sign-off page; null until approved. */
+  clientApproval: { at: string; name: string | null; note: string | null } | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -272,4 +274,17 @@ export interface WorkspaceOverview {
     stage: Exclude<MilestoneStatus, 'DELIVERED'>;
     projects: { project: { id: string; key: string; name: string }; milestones: Milestone[] }[];
   }[];
+}
+
+/** `GET /public/signoff/:token` (decision record 0028 §3): what the client's review page shows. */
+export interface PublicSignoff {
+  projectName: string;
+  milestone: {
+    name: string;
+    description: string | null;
+    dueDate: string | null;
+    criteria: { text: string; done: boolean }[];
+    releases: { tag: string; url: string }[];
+    approvedAt: string | null;
+  };
 }

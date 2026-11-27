@@ -232,6 +232,13 @@
       "when": 1795800402749,
       "tag": "0032_client_status_emails",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1795801222878,
+      "tag": "0033_client_signoff",
+      "breakpoints": true
     }
   ]
 }
