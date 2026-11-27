@@ -119,7 +119,10 @@ export class TasksService {
     const milestoneId = input.milestoneId
       ? (await this.requireMilestoneIn(projectId, input.milestoneId)).id
       : null;
-    const status = input.status ?? 'TODO';
+    // 0024 §4: when the project requires triage, the creator is triaging as they write, so an
+    // unscheduled task starts in Backlog and one filed into a milestone in To do. A chosen
+    // status always wins.
+    const status = input.status ?? (project.internalTriage && !milestoneId ? 'BACKLOG' : 'TODO');
 
     const taskId = await this.db.transaction(async (tx) => {
       const [allocated] = await tx
