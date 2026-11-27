@@ -18,12 +18,23 @@ export function MilestoneProgress({
   milestone: Milestone;
   projectId: string;
 }) {
-  const { total, done } = m.taskCounts;
+  const { total, done, addedAfterStart } = m.taskCounts;
   const pct = total === 0 ? 0 : Math.round((done / total) * 100);
   return (
     <div className="mt-3 space-y-1.5">
       <div className="flex items-center justify-between gap-3 text-xs text-fg-muted">
-        <span>{total === 0 ? 'No tasks yet' : `${done} of ${total} tasks done`}</span>
+        <span>
+          {total === 0 ? 'No tasks yet' : `${done} of ${total} tasks done`}
+          {/* 0025 §3: scope added once the milestone was Active. Real counts only. */}
+          {m.startedAt && total > 0 ? (
+            <>
+              {' · '}
+              <span className={addedAfterStart > 0 ? 'font-medium text-warning-fg' : ''}>
+                {addedAfterStart} of {total} added after start
+              </span>
+            </>
+          ) : null}
+        </span>
         <span className="flex items-center gap-3">
           {total > 0 ? <span>{pct}%</span> : null}
           <Link

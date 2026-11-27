@@ -532,6 +532,10 @@ function TaskEditor({
                     </MenuItem>
                   ))}
               </Menu>
+              {/* 0025 §3: joined its milestone after the scope was agreed. */}
+              {task.addedAfterStart && form.milestoneId === task.milestoneId ? (
+                <span className={`${chipStatic} text-warning-fg!`}>Added after start</span>
+              ) : null}
               <TaskLabels task={task} onChanged={onSaved} />
               {/* Open blockers (0020): visible next to the status they hold up. */}
               {task.blockedByCount > 0 && task.status !== 'DONE' ? (

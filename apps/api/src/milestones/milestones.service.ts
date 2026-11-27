@@ -249,10 +249,16 @@ export class MilestonesService {
         milestoneId: tasks.milestoneId,
         total: count(),
         done: sql<number>`count(*) filter (where ${tasks.status} = 'DONE')`.mapWith(Number),
+        // 0025 §3: joined after the milestone first became Active.
+        addedAfterStart:
+          sql<number>`count(*) filter (where ${milestones.startedAt} is not null and ${tasks.milestoneAddedAt} > ${milestones.startedAt})`.mapWith(
+            Number,
+          ),
       })
       .from(tasks)
+      .innerJoin(milestones, eq(milestones.id, tasks.milestoneId))
       .where(and(inArray(tasks.milestoneId, ids), isNull(tasks.deletedAt)))
-      .groupBy(tasks.milestoneId);
+      .groupBy(tasks.milestoneId, milestones.startedAt);
     const criteria = await this.db
       .select({
         criterion: milestoneCriteria,
@@ -274,7 +280,7 @@ export class MilestonesService {
       const c = countsById.get(m.id);
       return toMilestone(
         m,
-        { total: c?.total ?? 0, done: c?.done ?? 0 },
+        { total: c?.total ?? 0, done: c?.done ?? 0, addedAfterStart: c?.addedAfterStart ?? 0 },
         criteriaById.get(m.id) ?? [],
       );
     });

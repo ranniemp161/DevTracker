@@ -7,7 +7,7 @@ export interface TaskFilters {
   priority: string;
   assigneeId: string;
   labelId: string;
-  /** A milestone id, or `none` for tasks without a milestone. */
+  /** A milestone id, `none` for tasks without a milestone, or `added` (added after start, 0025 §3). */
   milestoneId: string;
   /** Free-text search: title, description or task key (see `parseTaskSearch`). */
   q: string;
@@ -33,7 +33,9 @@ export function filterTask(task: Task, filters: TaskFilters, projectKey: string)
     if (
       filters.milestoneId === 'none'
         ? task.milestoneId !== null
-        : task.milestoneId !== filters.milestoneId
+        : filters.milestoneId === 'added'
+          ? !task.addedAfterStart
+          : task.milestoneId !== filters.milestoneId
     ) {
       return false;
     }

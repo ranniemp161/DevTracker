@@ -1,0 +1,1 @@
+ALTER TABLE "tasks" ADD COLUMN "milestone_added_at" timestamp with time zone;

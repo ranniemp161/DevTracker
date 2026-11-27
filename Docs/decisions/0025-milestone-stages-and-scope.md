@@ -37,7 +37,7 @@ Business owners see how much was added after a delivery started. Developers see 
 - **Where it shows:**
   - each milestone: "**3 of 12 tasks added after start**" next to its real done/total count;
   - the task page and board card: an "Added after start" badge beside the milestone name;
-  - the milestone filter on board and list can narrow to added-after-start tasks (`?milestoneScope=added`).
+  - the milestone filter on board and list has **Added after start** (`?milestoneId=added`), across the project's milestones.
 - `Task` gains `addedAfterStart: boolean`; `Milestone` gains `startedAt`, `deliveredAt` and `taskCounts.addedAfterStart`.
 - Moving a task between milestones resets its `milestone_added_at`, so it's judged against the milestone it's in now.
 
