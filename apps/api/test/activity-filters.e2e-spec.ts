@@ -30,7 +30,7 @@ it('filters project activity by category on the server, with paging', async () =
   const project = (
     await owner!.browser
       .post(`/api/v1/workspaces/${ws}/projects`)
-      .send({ name: 'Dev', key: 'DEV' })
+      .send({ internalTriage: false, name: 'Dev', key: 'DEV' })
       .expect(201)
   ).body.data.project.id as string;
   await owner!.browser

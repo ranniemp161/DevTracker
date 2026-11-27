@@ -27,7 +27,7 @@ async function project(owner: U, ws: string, key: string, members: U[]) {
   const id = (
     await owner.browser
       .post(`/api/v1/workspaces/${ws}/projects`)
-      .send({ name: `Project ${key}`, key })
+      .send({ internalTriage: false, name: `Project ${key}`, key })
       .expect(201)
   ).body.data.project.id as string;
   for (const m of members) {

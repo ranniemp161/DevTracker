@@ -1,0 +1,1 @@
+ALTER TABLE "projects" ALTER COLUMN "internal_triage" SET DEFAULT true;

@@ -33,7 +33,7 @@ export async function projectFixture(t: TestApp) {
   await joinWorkspace(t, owner!, ws, bystander!, 'MEMBER');
   const created = await owner!.browser
     .post(`/api/v1/workspaces/${ws}/projects`)
-    .send({ name: 'Developer Platform', key: 'DEV' });
+    .send({ internalTriage: false, name: 'Developer Platform', key: 'DEV' });
   expect(created.status).toBe(201);
   const project: string = created.body.data.project.id;
   await owner!.browser

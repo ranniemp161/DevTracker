@@ -34,6 +34,20 @@ export async function findWorkspaceAccess(executor: Executor, userId: string, wo
 /** True when the outer query's project has at least one lead (0023 §4). */
 export const projectHasLeads = sql<boolean>`exists (select 1 from ${projectMembers} where ${projectMembers.projectId} = ${projects.id} and ${projectMembers.role} = 'lead')`;
 
+/**
+ * Who triages and who proposes (decision record 0024 §2). Shared by `findProjectAccess` and
+ * the project list, which reads `hasLeads` per row.
+ * - Triage required: in effect at once; leads and admins (`canManage`) triage, everyone else proposes.
+ * - Triage not required: everyone triages until the project has a lead (0023 §4); nobody proposes.
+ */
+export function triageRules(canManage: boolean, hasLeads: boolean, internalTriage: boolean) {
+  return {
+    canTriage: canManage || (!internalTriage && !hasLeads),
+    internalTriageInEffect: internalTriage,
+    mustPropose: internalTriage && !canManage,
+  };
+}
+
 export async function findProjectAccess(executor: Executor, userId: string, projectId: string) {
   if (!isUuid(projectId)) return null;
   const [row] = await executor
@@ -68,11 +82,11 @@ export async function findProjectAccess(executor: Executor, userId: string, proj
   if (!isWorkspaceAdmin && !row.projectMembershipId) return null;
   // Decision record 0023 §2: a lead manages their own project, never others.
   const canManage = isWorkspaceAdmin || row.projectRole === 'lead';
-  // 0023 §4: everyone triages until the project has a lead; then leads and admins do.
-  const canTriage = canManage || !row.hasLeads;
-  // 0023 §3: internal triage counts only once there is a lead; leads and admins never propose.
-  const internalTriageInEffect = row.project.internalTriage && row.hasLeads;
-  const mustPropose = internalTriageInEffect && !canManage;
+  const { canTriage, internalTriageInEffect, mustPropose } = triageRules(
+    canManage,
+    row.hasLeads,
+    row.project.internalTriage,
+  );
   return {
     project: row.project,
     workspaceRole: row.workspaceRole,

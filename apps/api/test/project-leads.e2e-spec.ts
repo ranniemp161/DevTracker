@@ -39,8 +39,12 @@ async function setup() {
   await join(owner!, ws, dev!, 'MEMBER');
   await join(owner!, ws, bystander!, 'MEMBER');
   const create = async (name: string, key: string) =>
-    (await owner!.browser.post(`/api/v1/workspaces/${ws}/projects`).send({ name, key }).expect(201))
-      .body.data.project.id as string;
+    (
+      await owner!.browser
+        .post(`/api/v1/workspaces/${ws}/projects`)
+        .send({ internalTriage: false, name, key })
+        .expect(201)
+    ).body.data.project.id as string;
   const project = await create('Developer Platform', 'DEV');
   const other = await create('Operations', 'OPS');
   for (const u of [lead!, dev!]) {

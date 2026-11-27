@@ -43,7 +43,7 @@ async function setup() {
     (
       await owner!.browser
         .post(`/api/v1/workspaces/${ws}/projects`)
-        .send({ name: key, key })
+        .send({ internalTriage: false, name: key, key })
         .expect(201)
     ).body.data.project.id as string;
   const project = await newProject('DEV');

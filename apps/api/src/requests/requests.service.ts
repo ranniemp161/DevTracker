@@ -115,8 +115,8 @@ export class RequestsService {
   }
 
   /**
-   * A member's proposal (0023 §3): only while internal triage is in effect, which means the
-   * setting is on and the project has a lead. The task's reporter is the member.
+   * A member's proposal (0023 §3): only while the project requires triage (0024 §2).
+   * The task's reporter is the member.
    */
   async propose(actor: Actor, projectId: string, input: ProposeTaskInput): Promise<{ id: string }> {
     const { project, internalTriageInEffect } = await this.access.require(actor.id, projectId, {

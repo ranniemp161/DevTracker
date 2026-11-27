@@ -38,6 +38,7 @@ async function setup() {
   await join(owner!, ws, dev!, 'MEMBER');
   await join(owner!, ws, bystander!, 'MEMBER');
   const created = await owner!.browser.post(`/api/v1/workspaces/${ws}/projects`).send({
+    internalTriage: false,
     name: 'Developer Platform',
     key: 'dev',
     startDate: '2026-11-01',

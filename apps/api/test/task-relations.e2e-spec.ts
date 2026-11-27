@@ -95,7 +95,7 @@ describe('task relations (0020)', () => {
     const other = (
       await f.owner.browser
         .post(`/api/v1/workspaces/${f.ws}/projects`)
-        .send({ name: 'Secret', key: 'SEC' })
+        .send({ internalTriage: false, name: 'Secret', key: 'SEC' })
         .expect(201)
     ).body.data.project.id as string;
     const hidden = await newTask(f, 'Hidden', other);

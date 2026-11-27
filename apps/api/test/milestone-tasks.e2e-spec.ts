@@ -75,7 +75,7 @@ describe('tasks in milestones', () => {
     const other = (
       await f.owner.browser
         .post(`/api/v1/workspaces/${f.ws}/projects`)
-        .send({ name: 'Other', key: 'OTH' })
+        .send({ internalTriage: false, name: 'Other', key: 'OTH' })
     ).body.data.project.id;
     const foreign = await milestone(f, 'Elsewhere', other);
     const bad = await task(f, { milestoneId: foreign });
