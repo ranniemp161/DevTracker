@@ -197,6 +197,13 @@
       "when": 1795783075845,
       "tag": "0027_triage_by_default",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1795787852092,
+      "tag": "0028_milestone_stages",
+      "breakpoints": true
     }
   ]
 }

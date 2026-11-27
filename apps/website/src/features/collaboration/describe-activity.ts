@@ -1,5 +1,10 @@
-import type { ActivityEntry, TaskPriority, TaskStatus } from '@devtrack/types';
-import { formatMinutes, PRIORITY_LABEL, TASK_STATUS_LABEL } from '../projects/labels';
+import type { ActivityEntry, MilestoneStatus, TaskPriority, TaskStatus } from '@devtrack/types';
+import {
+  formatMinutes,
+  MILESTONE_STAGE_LABEL,
+  PRIORITY_LABEL,
+  TASK_STATUS_LABEL,
+} from '../projects/labels';
 
 type Change = { from?: unknown; to?: unknown; changed?: boolean };
 
@@ -110,7 +115,13 @@ export function describeActivity(entry: ActivityEntry): string {
     case 'github_installation.installed':
       return `installed the GitHub App on ${String(m.account ?? 'an account')}`;
     case 'milestone.completed':
-      return `completed milestone "${String(m.name ?? '')}"`;
+      return `delivered milestone "${String(m.name ?? '')}"`;
+    case 'milestone.stage_changed': {
+      const to = (m.stage as { to?: string } | undefined)?.to;
+      const label =
+        to && to in MILESTONE_STAGE_LABEL ? MILESTONE_STAGE_LABEL[to as MilestoneStatus] : to;
+      return `moved milestone "${String(m.name ?? '')}" to ${label ?? 'another stage'}`;
+    }
     case 'pull_request.opened':
       return `opened ${pr(m)}`;
     case 'pull_request.reopened':

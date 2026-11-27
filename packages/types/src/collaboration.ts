@@ -53,7 +53,8 @@ export type ActivityAction =
   | 'pull_request.unlinked'
   | 'repository.pushed'
   | 'repository.release_published'
-  | 'milestone.completed';
+  | 'milestone.completed'
+  | 'milestone.stage_changed';
 
 export interface ActivityEntry {
   id: string;

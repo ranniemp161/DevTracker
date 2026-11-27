@@ -1,14 +1,14 @@
 'use client';
 
-import type { Milestone } from '@devtrack/types';
+import { MILESTONE_STAGES, type Milestone, type MilestoneStatus } from '@devtrack/types';
 import { createMilestoneSchema } from '@devtrack/validators';
 import { useState } from 'react';
-import { CheckIcon, FlagIcon, PlusIcon } from '@/components/icons';
-import { Alert, Button, EmptyState, Field, SubmitButton } from '@/components/ui';
+import { FlagIcon, PlusIcon } from '@/components/icons';
+import { Alert, Badge, Button, EmptyState, Field, SubmitButton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useApiQuery } from '@/lib/use-api-query';
 import { useAuthForm, withoutBlanks } from '../auth/use-auth-form';
-import { formatDate } from './labels';
+import { formatDate, MILESTONE_STAGE_LABEL } from './labels';
 import { MilestoneCriteria, MilestoneProgress } from './milestone-criteria';
 import { useProject } from './project-context';
 
@@ -16,30 +16,39 @@ export function MilestonesPage() {
   const { project, readOnly } = useProject();
   const canManage = project.viewerCanManage && !readOnly;
   const milestones = useApiQuery<Milestone[]>(`/projects/${project.id}/milestones`);
-  const open = milestones.data?.filter((m) => m.status !== 'COMPLETED') ?? [];
-  const completed = milestones.data?.filter((m) => m.status === 'COMPLETED') ?? [];
 
   return (
     <div className="space-y-7">
       {canManage ? <CreateMilestone onCreated={milestones.reload} /> : null}
       {milestones.error ? <Alert>{milestones.error.message}</Alert> : null}
-      <MilestoneSection
-        title="Open"
-        items={open}
-        empty="No open milestones."
-        canManage={canManage}
-        onChanged={milestones.reload}
-      />
-      <MilestoneSection
-        title="Completed"
-        items={completed}
-        empty="Completed milestones will show up here."
-        canManage={canManage}
-        onChanged={milestones.reload}
-      />
+      {SECTIONS.map((section) => (
+        <MilestoneSection
+          key={section.stage}
+          title={MILESTONE_STAGE_LABEL[section.stage]}
+          items={milestones.data?.filter((m) => m.status === section.stage) ?? []}
+          empty={section.empty}
+          canManage={canManage}
+          onChanged={milestones.reload}
+        />
+      ))}
     </div>
   );
 }
+
+/** 0025 §5: the work in flight first, then what's planned, then what's delivered. */
+const SECTIONS: { stage: MilestoneStatus; empty: string }[] = [
+  { stage: 'ACTIVE', empty: 'Nothing is being built right now.' },
+  { stage: 'CLIENT_REVIEW', empty: 'Nothing is with the client for review.' },
+  { stage: 'PLANNED', empty: 'No planned milestones.' },
+  { stage: 'DELIVERED', empty: 'Delivered milestones will show up here.' },
+];
+
+const STAGE_TONE: Record<MilestoneStatus, 'neutral' | 'blue' | 'amber' | 'green'> = {
+  PLANNED: 'neutral',
+  ACTIVE: 'blue',
+  CLIENT_REVIEW: 'amber',
+  DELIVERED: 'green',
+};
 
 function MilestoneSection({
   title,
@@ -97,7 +106,7 @@ function MilestoneRow({
     }
   }
 
-  const completed = m.status === 'COMPLETED';
+  const completed = m.status === 'DELIVERED';
   return (
     <li className="flex items-start gap-3 rounded-card border border-line bg-surface p-4">
       <FlagIcon
@@ -120,21 +129,29 @@ function MilestoneRow({
           </div>
           {canManage ? (
             <div className="flex shrink-0 items-center gap-2">
-              <Button
-                size="sm"
+              <label className="sr-only" htmlFor={`stage-${m.id}`}>
+                Stage of {m.name}
+              </label>
+              <select
+                id={`stage-${m.id}`}
+                value={m.status}
                 disabled={busy}
-                onClick={() =>
+                onChange={(e) =>
                   call(() =>
                     api(`/milestones/${m.id}`, {
                       method: 'PATCH',
-                      body: { status: completed ? 'OPEN' : 'COMPLETED' },
+                      body: { status: e.target.value },
                     }),
                   )
                 }
+                className="h-7.5 rounded-control border border-line-control bg-surface px-2 text-label font-medium text-fg focus-visible:border-primary"
               >
-                {completed ? null : <CheckIcon size={14} />}
-                {completed ? 'Reopen' : 'Mark complete'}
-              </Button>
+                {MILESTONE_STAGES.map((stage) => (
+                  <option key={stage} value={stage}>
+                    {MILESTONE_STAGE_LABEL[stage]}
+                  </option>
+                ))}
+              </select>
               <Button
                 size="sm"
                 variant="ghost"
@@ -144,7 +161,9 @@ function MilestoneRow({
                 Delete
               </Button>
             </div>
-          ) : null}
+          ) : (
+            <Badge tone={STAGE_TONE[m.status]}>{MILESTONE_STAGE_LABEL[m.status]}</Badge>
+          )}
         </div>
         {error ? <p className="mt-1 text-sm text-danger">{error}</p> : null}
         <MilestoneProgress milestone={m} projectId={project.id} />

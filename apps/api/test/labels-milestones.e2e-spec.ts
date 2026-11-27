@@ -111,7 +111,7 @@ describe('milestones', () => {
     expect(beta.status).toBe(201);
     expect(beta.body.data.milestone).toMatchObject({
       name: 'Beta',
-      status: 'OPEN',
+      status: 'PLANNED',
       dueDate: '2026-12-01',
     });
     await admin.browser
@@ -127,18 +127,18 @@ describe('milestones', () => {
 
     const id = beta.body.data.milestone.id;
     expect(
-      (await dev.browser.patch(`/api/v1/milestones/${id}`).send({ status: 'COMPLETED' })).status,
+      (await dev.browser.patch(`/api/v1/milestones/${id}`).send({ status: 'DELIVERED' })).status,
     ).toBe(403);
     expect(
-      (await bystander.browser.patch(`/api/v1/milestones/${id}`).send({ status: 'COMPLETED' }))
+      (await bystander.browser.patch(`/api/v1/milestones/${id}`).send({ status: 'DELIVERED' }))
         .status,
     ).toBe(404);
     const done = await admin.browser
       .patch(`/api/v1/milestones/${id}`)
-      .send({ status: 'COMPLETED', dueDate: null });
-    expect(done.body.data.milestone).toMatchObject({ status: 'COMPLETED', dueDate: null });
+      .send({ status: 'DELIVERED', dueDate: null });
+    expect(done.body.data.milestone).toMatchObject({ status: 'DELIVERED', dueDate: null });
 
-    // Completed milestones sort after open ones.
+    // Delivered milestones sort last.
     const after = await dev.browser.get(`/api/v1/projects/${project}/milestones`);
     expect(after.body.data.map((m: { name: string }) => m.name)).toEqual(['GA', 'Someday', 'Beta']);
 
@@ -156,5 +156,93 @@ describe('milestones', () => {
       (await admin.browser.patch(`/api/v1/milestones/${id}`).send({ name: 'x' })).body.error.code,
     ).toBe('PROJECT_ARCHIVED');
     await admin.browser.get(`/api/v1/projects/${project}/milestones`).expect(200);
+  });
+});
+
+describe('milestone stages (0025 §2)', () => {
+  type F = Awaited<ReturnType<typeof projectFixture>>;
+  const stage = (f: F, id: string, status: string) =>
+    f.admin.browser.patch(`/api/v1/milestones/${id}`).send({ status }).expect(200);
+
+  it('starts Planned, sets startedAt once and deliveredAt while delivered, and records each move', async () => {
+    const f = await projectFixture(t);
+    const created = await f.admin.browser
+      .post(`/api/v1/projects/${f.project}/milestones`)
+      .send({ name: 'v1.2' })
+      .expect(201);
+    const id = created.body.data.milestone.id as string;
+    expect(created.body.data.milestone).toMatchObject({
+      status: 'PLANNED',
+      startedAt: null,
+      deliveredAt: null,
+    });
+
+    const active = (await stage(f, id, 'ACTIVE')).body.data.milestone;
+    expect(active.startedAt).not.toBeNull();
+    const review = (await stage(f, id, 'CLIENT_REVIEW')).body.data.milestone;
+    const delivered = (await stage(f, id, 'DELIVERED')).body.data.milestone;
+    expect(delivered.deliveredAt).not.toBeNull();
+    const back = (await stage(f, id, 'ACTIVE')).body.data.milestone;
+    // Scope was agreed the first time it became Active; going back doesn't move that.
+    expect([review.startedAt, delivered.startedAt, back.startedAt]).toEqual([
+      active.startedAt,
+      active.startedAt,
+      active.startedAt,
+    ]);
+    expect(back.deliveredAt).toBeNull();
+
+    const feed = await f.dev.browser.get(`/api/v1/projects/${f.project}/activity?limit=50`);
+    const moves = (
+      feed.body.data as { action: string; metadata: { stage?: { to: string } } }[]
+    ).filter((e) => e.action.startsWith('milestone.'));
+    expect(moves.map((e) => [e.action, e.metadata.stage?.to ?? null]).reverse()).toEqual([
+      ['milestone.stage_changed', 'ACTIVE'],
+      ['milestone.stage_changed', 'CLIENT_REVIEW'],
+      ['milestone.completed', null],
+      ['milestone.stage_changed', 'ACTIVE'],
+    ]);
+
+    const told = await f.dev.browser.get('/api/v1/notifications').expect(200);
+    expect(
+      (told.body.data as { type: string; title: string }[])
+        .filter((n) => n.type === 'MILESTONE_COMPLETED')
+        .map((n) => n.title),
+    ).toEqual(['Milestone "v1.2" delivered in DEV']);
+  });
+
+  it('takes no new tasks once delivered, but tasks already in it stay', async () => {
+    const f = await projectFixture(t);
+    const id = (
+      await f.admin.browser
+        .post(`/api/v1/projects/${f.project}/milestones`)
+        .send({ name: 'v1.0', status: 'ACTIVE' })
+        .expect(201)
+    ).body.data.milestone.id as string;
+    const inside = (
+      await f.dev.browser
+        .post(`/api/v1/projects/${f.project}/tasks`)
+        .send({ title: 'Shipped work', milestoneId: id })
+        .expect(201)
+    ).body.data.task.id as string;
+    const outside = (
+      await f.dev.browser
+        .post(`/api/v1/projects/${f.project}/tasks`)
+        .send({ title: 'Later work' })
+        .expect(201)
+    ).body.data.task.id as string;
+    await stage(f, id, 'DELIVERED');
+
+    const create = await f.dev.browser
+      .post(`/api/v1/projects/${f.project}/tasks`)
+      .send({ title: 'Too late', milestoneId: id });
+    expect(create.status).toBe(400);
+    expect(
+      (await f.dev.browser.patch(`/api/v1/tasks/${outside}`).send({ milestoneId: id })).status,
+    ).toBe(400);
+    // Saving a task that's already in it (the task page sends its milestone) still works.
+    await f.dev.browser
+      .patch(`/api/v1/tasks/${inside}`)
+      .send({ title: 'Shipped work, renamed', milestoneId: id })
+      .expect(200);
   });
 });

@@ -181,7 +181,9 @@ export interface Label {
 /** Label as embedded in a task. */
 export type TaskLabel = Pick<Label, 'id' | 'name' | 'color'>;
 
-export type MilestoneStatus = 'OPEN' | 'COMPLETED';
+/** Delivery stages (decision record 0025 §2). Only Delivered stops taking new tasks. */
+export const MILESTONE_STAGES = ['PLANNED', 'ACTIVE', 'CLIENT_REVIEW', 'DELIVERED'] as const;
+export type MilestoneStatus = (typeof MILESTONE_STAGES)[number];
 
 export interface Milestone {
   id: string;
@@ -190,6 +192,10 @@ export interface Milestone {
   description: string | null;
   dueDate: string | null;
   status: MilestoneStatus;
+  /** First move into Active (scope agreed); null until then. */
+  startedAt: string | null;
+  /** When it was delivered; null unless Delivered. */
+  deliveredAt: string | null;
   /** Real counts of the milestone's non-deleted tasks; never an estimate. */
   taskCounts: { total: number; done: number };
   /** Acceptance criteria in display order. */

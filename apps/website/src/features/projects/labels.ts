@@ -1,4 +1,4 @@
-import type { ProjectStatus, TaskPriority, TaskStatus } from '@devtrack/types';
+import type { MilestoneStatus, ProjectStatus, TaskPriority, TaskStatus } from '@devtrack/types';
 
 export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
   BACKLOG: 'Backlog',
@@ -37,6 +37,14 @@ export const PROJECT_STATUS_LABEL: Record<ProjectStatus, string> = {
   ON_HOLD: 'On hold',
   COMPLETED: 'Completed',
   ARCHIVED: 'Archived',
+};
+
+/** Milestone delivery stages (decision record 0025 §2). */
+export const MILESTONE_STAGE_LABEL: Record<MilestoneStatus, string> = {
+  PLANNED: 'Planned',
+  ACTIVE: 'Active',
+  CLIENT_REVIEW: 'Client review',
+  DELIVERED: 'Delivered',
 };
 
 /** Badge tone for a project status (SPEC §2: blue for planning/active, green when completed). */

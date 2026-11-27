@@ -36,7 +36,7 @@ import { useRealtimeRefresh } from '@/lib/realtime';
 import { clickFirst, useShortcuts } from '@/lib/shortcuts';
 import { useApiQuery } from '@/lib/use-api-query';
 import { useSession } from '../session/session-context';
-import { formatDate, PRIORITY_LABEL, TASK_STATUS_LABEL } from './labels';
+import { formatDate, MILESTONE_STAGE_LABEL, PRIORITY_LABEL, TASK_STATUS_LABEL } from './labels';
 import { TaskTimeline } from '../collaboration/task-timeline';
 import { TaskPullRequests } from '../github/task-pull-requests';
 import { useProject } from './project-context';
@@ -518,18 +518,19 @@ function TaskEditor({
                 >
                   None
                 </MenuItem>
-                {milestones.map((m) => (
-                  <MenuItem
-                    key={m.id}
-                    checked={form.milestoneId === m.id}
-                    onSelect={() => setForm((f) => ({ ...f, milestoneId: m.id }))}
-                  >
-                    {m.name}
-                    {m.status === 'COMPLETED' ? (
-                      <span className="text-fg-subtle"> · completed</span>
-                    ) : null}
-                  </MenuItem>
-                ))}
+                {/* Delivered milestones take no new tasks (0025 §2); the current one stays listed. */}
+                {milestones
+                  .filter((m) => m.status !== 'DELIVERED' || m.id === task.milestoneId)
+                  .map((m) => (
+                    <MenuItem
+                      key={m.id}
+                      checked={form.milestoneId === m.id}
+                      onSelect={() => setForm((f) => ({ ...f, milestoneId: m.id }))}
+                    >
+                      {m.name}
+                      <span className="text-fg-subtle"> · {MILESTONE_STAGE_LABEL[m.status]}</span>
+                    </MenuItem>
+                  ))}
               </Menu>
               <TaskLabels task={task} onChanged={onSaved} />
               {/* Open blockers (0020): visible next to the status they hold up. */}

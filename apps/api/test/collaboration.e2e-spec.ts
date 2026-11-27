@@ -184,17 +184,17 @@ describe('mentions and notifications', () => {
     expect(await inbox(admin)).toHaveLength(1);
   });
 
-  it('notifies project members when a milestone is completed', async () => {
+  it('notifies project members when a milestone is delivered', async () => {
     const { dev, admin, owner, bystander, project } = await projectFixture(t);
     const id = (
       await admin.browser.post(`/api/v1/projects/${project}/milestones`).send({ name: 'Beta' })
     ).body.data.milestone.id;
-    await admin.browser.patch(`/api/v1/milestones/${id}`).send({ status: 'COMPLETED' }).expect(200);
+    await admin.browser.patch(`/api/v1/milestones/${id}`).send({ status: 'DELIVERED' }).expect(200);
     await admin.browser.patch(`/api/v1/milestones/${id}`).send({ name: 'Beta 1' }).expect(200); // no re-notify
 
     for (const u of [dev, owner]) {
       expect((await inbox(u)).map((n) => [n.type, n.title])).toEqual([
-        ['MILESTONE_COMPLETED', 'Milestone "Beta" completed in DEV'],
+        ['MILESTONE_COMPLETED', 'Milestone "Beta" delivered in DEV'],
       ]);
     }
     expect(await inbox(admin)).toEqual([]);
@@ -265,7 +265,7 @@ describe('activity feed', () => {
     const m = (
       await admin.browser.post(`/api/v1/projects/${project}/milestones`).send({ name: 'Beta' })
     ).body.data.milestone.id;
-    await admin.browser.patch(`/api/v1/milestones/${m}`).send({ status: 'COMPLETED' }).expect(200);
+    await admin.browser.patch(`/api/v1/milestones/${m}`).send({ status: 'DELIVERED' }).expect(200);
 
     const feed = await dev.browser.get(`/api/v1/projects/${project}/activity?limit=50`).expect(200);
     const actions = feed.body.data.map((e: { action: string }) => e.action);

@@ -326,7 +326,8 @@ const milestoneName = z
   .min(1, { error: 'Milestone name is required.' })
   .max(100, { error: 'Milestone name must be at most 100 characters.' });
 
-export const milestoneStatusSchema = z.enum(['OPEN', 'COMPLETED']);
+/** 0025 §2: delivery stages. */
+export const milestoneStatusSchema = z.enum(['PLANNED', 'ACTIVE', 'CLIENT_REVIEW', 'DELIVERED']);
 
 export const createMilestoneSchema = z.object({
   name: milestoneName,
