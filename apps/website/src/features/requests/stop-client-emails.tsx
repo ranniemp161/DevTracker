@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { DevtrackMark } from '@/components/icons';
 import { Alert, Button } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
+import { useFragmentToken } from '../auth/fragment-token';
 
 /**
  * "Stop emails about this request" (decision record 0028 §2). The token is in the URL fragment,
@@ -11,14 +12,10 @@ import { api, ApiError } from '@/lib/api';
  * can't unsubscribe anyone.
  */
 export function StopClientEmails() {
-  const [token, setToken] = useState<string | null>(null);
+  // `undefined` until hydrated, then the token, or null when the link has none.
+  const token = useFragmentToken();
   const [state, setState] = useState<'idle' | 'sending' | 'done'>('idle');
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const value = new URLSearchParams(window.location.hash.slice(1)).get('token');
-    setToken(value ?? '');
-  }, []);
 
   async function stop() {
     if (!token) return;
@@ -37,7 +34,7 @@ export function StopClientEmails() {
     <main className="mx-auto flex min-h-dvh max-w-dialog flex-col justify-center gap-6 bg-bg px-4 py-10">
       <div className="space-y-4 rounded-panel border border-line bg-surface p-6 shadow-raised">
         <h1 className="text-lg font-semibold text-fg">Stop emails about this request</h1>
-        {token === '' ? (
+        {token === null ? (
           <Alert>This link is incomplete. Open it again from the email.</Alert>
         ) : state === 'done' ? (
           <Alert tone="info">Done. You won't get more emails about this request.</Alert>
