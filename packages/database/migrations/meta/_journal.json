@@ -204,6 +204,13 @@
       "when": 1795787852092,
       "tag": "0028_milestone_stages",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1795791233493,
+      "tag": "0029_task_milestone_added_at",
+      "breakpoints": true
     }
   ]
 }

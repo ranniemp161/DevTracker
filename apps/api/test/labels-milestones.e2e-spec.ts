@@ -246,3 +246,57 @@ describe('milestone stages (0025 §2)', () => {
       .expect(200);
   });
 });
+
+describe('added after start (0025 §3)', () => {
+  it('flags tasks that join a milestone once it is Active, counts them, and filters them', async () => {
+    const f = await projectFixture(t);
+    const milestone = async (name: string) =>
+      (
+        await f.admin.browser
+          .post(`/api/v1/projects/${f.project}/milestones`)
+          .send({ name })
+          .expect(201)
+      ).body.data.milestone.id as string;
+    const create = async (title: string, milestoneId?: string) =>
+      (
+        await f.dev.browser
+          .post(`/api/v1/projects/${f.project}/tasks`)
+          .send({ title, ...(milestoneId ? { milestoneId } : {}) })
+          .expect(201)
+      ).body.data.task as { id: string; addedAfterStart: boolean };
+    const flagged = async (id: string) =>
+      (await f.dev.browser.get(`/api/v1/tasks/${id}`).expect(200)).body.data.task
+        .addedAfterStart as boolean;
+
+    const v12 = await milestone('v1.2');
+    const later = await milestone('v1.3');
+    const agreed = await create('Agreed scope', v12);
+    const loose = await create('Loose task');
+    await f.admin.browser.patch(`/api/v1/milestones/${v12}`).send({ status: 'ACTIVE' }).expect(200);
+
+    const extra = await create('Extra request', v12);
+    expect(extra.addedAfterStart).toBe(true);
+    await f.dev.browser.patch(`/api/v1/tasks/${loose.id}`).send({ milestoneId: v12 }).expect(200);
+    expect(await flagged(loose.id)).toBe(true);
+    expect(await flagged(agreed.id)).toBe(false);
+
+    const counts = (
+      await f.dev.browser.get(`/api/v1/projects/${f.project}/milestones`)
+    ).body.data.find((m: { id: string }) => m.id === v12).taskCounts;
+    expect(counts).toEqual({ total: 3, done: 0, addedAfterStart: 2 });
+
+    const listed = await f.dev.browser
+      .get(`/api/v1/projects/${f.project}/tasks?milestoneId=added`)
+      .expect(200);
+    expect(listed.body.data.map((t: { title: string }) => t.title).sort()).toEqual([
+      'Extra request',
+      'Loose task',
+    ]);
+
+    // Leaving the milestone, or moving to one that hasn't started, clears the flag.
+    await f.dev.browser.patch(`/api/v1/tasks/${loose.id}`).send({ milestoneId: null }).expect(200);
+    expect(await flagged(loose.id)).toBe(false);
+    await f.dev.browser.patch(`/api/v1/tasks/${extra.id}`).send({ milestoneId: later }).expect(200);
+    expect(await flagged(extra.id)).toBe(false);
+  });
+});

@@ -460,7 +460,11 @@ const TaskCard = memo(function TaskCard({
         ))}
         {extraLabels > 0 ? <span className="text-xs text-fg-muted">+{extraLabels}</span> : null}
       </div>
-      {task.dueDate || task.checks || task.checklist.total > 0 || blocked ? (
+      {task.dueDate ||
+      task.checks ||
+      task.checklist.total > 0 ||
+      blocked ||
+      task.addedAfterStart ? (
         <div className="flex items-center justify-between gap-2 border-t border-line-subtle pt-2 text-xs text-fg-muted">
           <span className="flex min-w-0 items-center gap-3">
             {task.dueDate ? (
@@ -482,6 +486,10 @@ const TaskCard = memo(function TaskCard({
                   by {task.blockedByCount} open {task.blockedByCount === 1 ? 'task' : 'tasks'}
                 </span>
               </span>
+            ) : null}
+            {/* Joined its milestone after it started (0025 §3). */}
+            {task.addedAfterStart ? (
+              <span className="font-medium text-warning-fg">Added after start</span>
             ) : null}
             {/* Checklist progress (0018). */}
             {task.checklist.total > 0 ? (

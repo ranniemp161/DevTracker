@@ -43,8 +43,8 @@ describe('tasks in milestones', () => {
     let list = await f.dev.browser.get(`/api/v1/projects/${f.project}/milestones`).expect(200);
     const counts = (name: string) =>
       list.body.data.find((m: { name: string }) => m.name === name).taskCounts;
-    expect(counts('Beta')).toEqual({ total: 2, done: 1 });
-    expect(counts('GA')).toEqual({ total: 0, done: 0 });
+    expect(counts('Beta')).toEqual({ total: 2, done: 1, addedAfterStart: 0 });
+    expect(counts('GA')).toEqual({ total: 0, done: 0, addedAfterStart: 0 });
 
     // Moving a task records the milestone names in activity and updates counts.
     const moved = await f.dev.browser.patch(`/api/v1/tasks/${a}`).send({ milestoneId: ga });
@@ -57,8 +57,8 @@ describe('tasks in milestones', () => {
     // Deleted tasks don't count.
     await f.dev.browser.delete(`/api/v1/tasks/${b}`).expect(204);
     list = await f.dev.browser.get(`/api/v1/projects/${f.project}/milestones`).expect(200);
-    expect(counts('Beta')).toEqual({ total: 0, done: 0 });
-    expect(counts('GA')).toEqual({ total: 1, done: 0 });
+    expect(counts('Beta')).toEqual({ total: 0, done: 0, addedAfterStart: 0 });
+    expect(counts('GA')).toEqual({ total: 1, done: 0, addedAfterStart: 0 });
 
     const inGa = await f.dev.browser.get(`/api/v1/projects/${f.project}/tasks?milestoneId=${ga}`);
     expect(inGa.body.data.map((x: { id: string }) => x.id)).toEqual([a]);

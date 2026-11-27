@@ -350,6 +350,7 @@ export function TaskFilterBar({
             onChange={(v) => setFilter('milestoneId', v)}
             options={[
               { value: 'none', label: 'No milestone' },
+              { value: 'added', label: 'Added after start' },
               ...milestones.map((m) => ({ value: m.id, label: m.name })),
             ]}
           />

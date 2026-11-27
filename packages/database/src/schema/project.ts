@@ -142,6 +142,11 @@ export const tasks = pgTable(
     milestoneId: uuid('milestone_id').references((): AnyPgColumn => milestones.id, {
       onDelete: 'set null',
     }),
+    /**
+     * When the task joined its current milestone (0025 §3). Compared with the milestone's
+     * `started_at` to flag work added after the scope was agreed. Null for older tasks.
+     */
+    milestoneAddedAt: timestamptz('milestone_added_at'),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
     updatedAt: timestamptz('updated_at')
       .notNull()

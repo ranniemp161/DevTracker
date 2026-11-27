@@ -272,8 +272,11 @@ export const listTasksQuerySchema = z.object({
   dueBefore: z.iso.date().optional(),
   assigneeId: z.union([uuid, z.literal('unassigned')]).optional(),
   labelId: uuid.optional(),
-  /** A milestone id, or `none` for tasks without a milestone. */
-  milestoneId: z.union([uuid, z.literal('none')]).optional(),
+  /**
+   * A milestone id, `none` for tasks without a milestone, or `added` for tasks added to their
+   * milestone after it started (0025 §3).
+   */
+  milestoneId: z.union([uuid, z.literal('none'), z.literal('added')]).optional(),
   /** Free-text search; see `parseTaskSearch` for the matching rules. */
   q: z.string().trim().max(TASK_SEARCH_MAX_LENGTH).optional(),
   /**

@@ -93,6 +93,8 @@ export interface Task {
   dueDate: string | null;
   /** Milestone (deliverable) this task counts toward, in the same project. */
   milestoneId: string | null;
+  /** Joined its milestone after the milestone first became Active (0025 §3). */
+  addedAfterStart: boolean;
   /** Expected effort in minutes; null when not estimated. */
   estimateMinutes: number | null;
   /** Sum of the task's time entries, in minutes. Real logged time, never an estimate. */
@@ -197,7 +199,7 @@ export interface Milestone {
   /** When it was delivered; null unless Delivered. */
   deliveredAt: string | null;
   /** Real counts of the milestone's non-deleted tasks; never an estimate. */
-  taskCounts: { total: number; done: number };
+  taskCounts: { total: number; done: number; addedAfterStart: number };
   /** Acceptance criteria in display order. */
   criteria: MilestoneCriterion[];
   createdAt: string;

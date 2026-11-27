@@ -144,6 +144,7 @@ export class TasksService {
           reporterId: actor.id,
           dueDate: input.dueDate ?? null,
           milestoneId,
+          milestoneAddedAt: milestoneId ? new Date() : null,
           estimateMinutes: input.estimateMinutes ?? null,
           completedAt: status === 'DONE' ? new Date() : null,
         })
@@ -207,7 +208,9 @@ export class TasksService {
       conditions.push(
         query.milestoneId === 'none'
           ? isNull(tasks.milestoneId)
-          : eq(tasks.milestoneId, query.milestoneId.toLowerCase()),
+          : query.milestoneId === 'added'
+            ? addedAfterStart
+            : eq(tasks.milestoneId, query.milestoneId.toLowerCase()),
       );
     }
     const search = query.q ? parseTaskSearch(query.q, project.key) : null;
@@ -398,6 +401,9 @@ export class TasksService {
             priority: input.priority,
             dueDate: input.dueDate,
             milestoneId: input.milestoneId === undefined ? undefined : (nextMilestone?.id ?? null),
+            // 0025 §3: joining (or moving to) a milestone restarts the clock; leaving clears it.
+            milestoneAddedAt:
+              changes.milestone === undefined ? undefined : nextMilestone ? new Date() : null,
             estimateMinutes: input.estimateMinutes,
             status: input.status,
             completedAt: input.status ? completionFor(input.status, task) : undefined,
@@ -615,7 +621,10 @@ export class TasksService {
       const changes = { milestone: { from: previous, to: milestone?.name ?? null } };
       await tx
         .update(tasks)
-        .set({ milestoneId: milestone?.id ?? null })
+        .set({
+          milestoneId: milestone?.id ?? null,
+          milestoneAddedAt: milestone ? new Date() : null,
+        })
         .where(eq(tasks.id, task.id));
       await this.events.activity(tx, {
         ...scope(project, task),
@@ -903,6 +912,7 @@ export class TasksService {
           // make the subqueries compare a table's columns with themselves.
           minutes: sql<number>`(select coalesce(sum(te.minutes), 0) from time_entries te where te.task_id = "tasks"."id")::int`,
           checklistTotal: sql<number>`(select count(*) from task_checklist_items ci where ci.task_id = "tasks"."id")::int`,
+          addedAfterStart: sql<boolean>`${addedAfterStart}`,
           checklistDone: sql<number>`(select count(*) from task_checklist_items ci where ci.task_id = "tasks"."id" and ci.done_at is not null)::int`,
           // Open blockers (0020): BLOCKS relations into this task from tasks not yet Done.
           blockedBy: sql<number>`(select count(*) from task_relations r join tasks b on b.id = r.task_id where r.related_task_id = "tasks"."id" and r.type = 'BLOCKS' and b.deleted_at is null and b.status <> 'DONE')::int`,
@@ -955,6 +965,7 @@ export class TasksService {
         labels: labelsByTask.get(task.id) ?? [],
         dueDate: task.dueDate,
         milestoneId: task.milestoneId,
+        addedAfterStart: totalsByTask.get(task.id)?.addedAfterStart ?? false,
         estimateMinutes: task.estimateMinutes,
         loggedMinutes: totalsByTask.get(task.id)?.minutes ?? 0,
         checks: checksByTask.get(task.id) ?? null,
@@ -970,6 +981,13 @@ export class TasksService {
     });
   }
 }
+
+/**
+ * 0025 §3: the task joined its milestone after the milestone first became Active. Tasks from
+ * before the change have no `milestone_added_at` and never match. Aliased so it works inside
+ * the totals query and as a list filter.
+ */
+const addedAfterStart = sql<boolean>`exists (select 1 from milestones ms where ms.id = "tasks"."milestone_id" and ms.started_at is not null and "tasks"."milestone_added_at" > ms.started_at)`;
 
 function scope(project: ProjectRow, task: TaskRow) {
   return {
