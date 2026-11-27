@@ -399,6 +399,16 @@ export const taskRequests = pgTable(
     reporterName: text('reporter_name'),
     reporterEmail: text('reporter_email'),
     contactDeletedAt: timestamptz('contact_deleted_at'),
+    /**
+     * 0028 §2: the form reporter's status emails. The token is the "stop emails" link; each
+     * `*_emailed_at` makes its email go out at most once.
+     */
+    emailToken: text('email_token').unique('task_requests_email_token_unique'),
+    emailsStoppedAt: timestamptz('emails_stopped_at'),
+    acceptedEmailedAt: timestamptz('accepted_emailed_at'),
+    declinedEmailedAt: timestamptz('declined_emailed_at'),
+    doneEmailedAt: timestamptz('done_emailed_at'),
+    deliveredEmailedAt: timestamptz('delivered_emailed_at'),
     triagedBy: uuid('triaged_by').references(() => users.id, { onDelete: 'set null' }),
     triagedAt: timestamptz('triaged_at'),
     createdAt: timestamptz('created_at').notNull().defaultNow(),

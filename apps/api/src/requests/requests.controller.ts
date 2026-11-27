@@ -18,6 +18,7 @@ import {
   listRequestsQuerySchema,
   proposeTaskSchema,
   setIntakeSchema,
+  stopClientEmailsSchema,
   submitRequestSchema,
   type AcceptRequestInput,
   type DeclineRequestInput,
@@ -25,6 +26,7 @@ import {
   type ListRequestsQuery,
   type ProposeTaskInput,
   type SetIntakeInput,
+  type StopClientEmailsInput,
   type SubmitRequestInput,
 } from '@devtrack/validators';
 import type { Request } from 'express';
@@ -33,12 +35,16 @@ import { clientIp } from '../common/http/request-context';
 import { UuidParamPipe } from '../common/pipes/uuid-param.pipe';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import type { User } from '../users/users.service';
+import { ClientUpdatesService } from '../client-updates/client-updates.service';
 import { RequestsService } from './requests.service';
 
 /** Public request forms and Triage (decision record 0016). */
 @Controller()
 export class RequestsController {
-  constructor(private readonly requests: RequestsService) {}
+  constructor(
+    private readonly requests: RequestsService,
+    private readonly clientUpdates: ClientUpdatesService,
+  ) {}
 
   /** What the public form page shows: the project name only. */
   @Public()
@@ -57,6 +63,16 @@ export class RequestsController {
   ): Promise<RequestReceipt> {
     const uploads = await this.requests.submit(token, body, clientIp(req));
     return { received: true, uploads };
+  }
+
+  /** 0028 §2: "Stop emails about this request". Always 204, so tokens can't be probed. */
+  @Public()
+  @Post('public/client-emails/stop')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async stopEmails(
+    @Body(new ZodValidationPipe(stopClientEmailsSchema)) body: StopClientEmailsInput,
+  ): Promise<void> {
+    await this.clientUpdates.stop(body.token);
   }
 
   /** Confirms one uploaded file (0022 §3). The attachment id is the capability. */

@@ -36,6 +36,7 @@ import type {
   ProposeTaskInput,
   SubmitRequestInput,
 } from '@devtrack/validators';
+import { ClientUpdatesService } from '../client-updates/client-updates.service';
 import { AppException } from '../common/errors/app.exception';
 import { DATABASE } from '../database/database.module';
 import { EventRecorder, type Actor } from '../events/event-recorder.service';
@@ -81,6 +82,7 @@ export class RequestsService {
     private readonly automation: TaskStatusAutomation,
     private readonly attachments: TaskAttachmentsService,
     private readonly tasks: TasksService,
+    private readonly clientUpdates: ClientUpdatesService,
   ) {}
 
   // ------------------------------------------------------------ public form
@@ -340,6 +342,8 @@ export class RequestsService {
       }
       await this.tellReporter(tx, actor, project, request, { outcome: 'accepted', milestone });
     });
+    // 0028 §2: after the commit, so a mail problem never undoes the triage.
+    await this.clientUpdates.triaged(request.id);
   }
 
   /** Declining soft-deletes the task (0003); the request row stays for the form's history. */
@@ -369,6 +373,7 @@ export class RequestsService {
         event: { type: 'task.deleted', payload: { taskId: task.id } },
       });
     });
+    await this.clientUpdates.triaged(request.id);
   }
 
   // --------------------------------------------------------- form settings

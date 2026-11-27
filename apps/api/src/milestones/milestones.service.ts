@@ -37,6 +37,7 @@ import type {
   UpdateMilestoneCriterionInput,
   UpdateMilestoneInput,
 } from '@devtrack/validators';
+import { ClientUpdatesService } from '../client-updates/client-updates.service';
 import { AppException } from '../common/errors/app.exception';
 import { isUuid } from '../common/pipes/uuid-param.pipe';
 import { DATABASE } from '../database/database.module';
@@ -143,6 +144,7 @@ export class MilestonesService {
     @Inject(DATABASE) private readonly db: Database,
     private readonly access: ProjectAccessService,
     private readonly workspaceAccess: WorkspaceAccessService,
+    private readonly clientUpdates: ClientUpdatesService,
     private readonly events: EventRecorder,
     private readonly readiness: MilestoneReadinessService,
   ) {}
@@ -241,6 +243,8 @@ export class MilestonesService {
       if (moving) await this.readiness.sync(tx, actor, project, [milestone.id]);
       return updated!;
     });
+    // 0028 §2: clients whose requests were in it hear it was delivered.
+    if (completing) await this.clientUpdates.milestoneDelivered(milestone.id);
     return (await this.hydrate([row]))[0]!;
   }
 

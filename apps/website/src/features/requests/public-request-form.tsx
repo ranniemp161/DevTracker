@@ -328,7 +328,7 @@ export function PublicRequestForm() {
                 value={values.email}
                 onChange={(e) => set('email')(e.target.value)}
                 error={errors.email}
-                hint="Only if you'd like a reply."
+                hint="We'll email you when this request is accepted, done or delivered. Every email has a link to stop them."
               />
             </div>
 

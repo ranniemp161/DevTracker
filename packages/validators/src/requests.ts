@@ -125,3 +125,7 @@ export type ListProposalsQuery = z.infer<typeof listProposalsQuerySchema>;
 
 export const setIntakeSchema = z.object({ enabled: z.boolean() });
 export type SetIntakeInput = z.infer<typeof setIntakeSchema>;
+
+/** 0028 §2: the "Stop emails about this request" link's token. */
+export const stopClientEmailsSchema = z.object({ token: z.string().trim().min(1).max(200) });
+export type StopClientEmailsInput = z.infer<typeof stopClientEmailsSchema>;
