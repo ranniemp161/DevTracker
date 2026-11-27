@@ -3,17 +3,28 @@ import {
   and,
   asc,
   count,
+  desc,
   eq,
+  githubReleases,
+  githubRepositories,
   inArray,
   isNull,
   milestoneCriteria,
+  milestoneGithubReleases,
   milestones,
+  projectRepositories,
   sql,
   tasks,
   users,
   type Database,
 } from '@devtrack/database';
-import type { Milestone, MilestoneCriterion, UserRef } from '@devtrack/types';
+import type {
+  GithubRelease,
+  LinkedMilestoneRelease,
+  Milestone,
+  MilestoneCriterion,
+  UserRef,
+} from '@devtrack/types';
 import type {
   CreateMilestoneCriterionInput,
   CreateMilestoneInput,
@@ -46,6 +57,7 @@ const toMilestone = (
   m: MilestoneRow,
   taskCounts: Milestone['taskCounts'],
   criteria: MilestoneCriterion[],
+  releases: LinkedMilestoneRelease[],
 ): Milestone => ({
   id: m.id,
   projectId: m.projectId,
@@ -57,9 +69,48 @@ const toMilestone = (
   deliveredAt: m.deliveredAt?.toISOString() ?? null,
   taskCounts,
   criteria,
+  releases,
   createdAt: m.createdAt.toISOString(),
   updatedAt: m.updatedAt.toISOString(),
 });
+
+const releaseFields = {
+  id: githubReleases.id,
+  tagName: githubReleases.tagName,
+  name: githubReleases.name,
+  url: githubReleases.url,
+  prerelease: githubReleases.prerelease,
+  publishedAt: githubReleases.publishedAt,
+  repository: githubRepositories.fullName,
+};
+
+const toRelease = (r: {
+  id: string;
+  tagName: string;
+  name: string | null;
+  url: string;
+  prerelease: boolean;
+  publishedAt: Date;
+  repository: string;
+}): GithubRelease => ({ ...r, publishedAt: r.publishedAt.toISOString() });
+
+/** Activity metadata for a release link (0026): names and links, never ids alone. */
+export function releaseActivity(
+  milestoneName: string,
+  release: { tagName: string; name: string | null; url: string; repository: string },
+  source: 'MANUAL' | 'AUTO',
+) {
+  return {
+    name: milestoneName,
+    release: {
+      tag: release.tagName,
+      name: release.name,
+      url: release.url,
+      repository: release.repository,
+    },
+    source,
+  };
+}
 
 /**
  * 0025 §2: `startedAt` is set on the first entry into Active and never cleared; `deliveredAt`
@@ -186,6 +237,101 @@ export class MilestonesService {
     return (await this.hydrate([row]))[0]!;
   }
 
+  /** 0026 §4: releases of the repositories connected to the project, newest first. */
+  async releases(userId: string, projectId: string): Promise<GithubRelease[]> {
+    await this.access.require(userId, projectId);
+    const rows = await this.db
+      .select(releaseFields)
+      .from(githubReleases)
+      .innerJoin(githubRepositories, eq(githubRepositories.id, githubReleases.repositoryId))
+      .innerJoin(
+        projectRepositories,
+        and(
+          eq(projectRepositories.repositoryId, githubReleases.repositoryId),
+          eq(projectRepositories.projectId, projectId),
+        ),
+      )
+      .orderBy(desc(githubReleases.publishedAt), asc(githubReleases.tagName))
+      .limit(100);
+    return rows.map(toRelease);
+  }
+
+  /** 0026 §4: display only; linking never moves the milestone's stage. */
+  async linkRelease(actor: Actor, milestoneId: string, releaseId: string): Promise<Milestone> {
+    const { milestone, project } = await this.requireMilestone(actor.id, milestoneId, {
+      manage: true,
+      write: true,
+    });
+    const [release] = await this.db
+      .select(releaseFields)
+      .from(githubReleases)
+      .innerJoin(githubRepositories, eq(githubRepositories.id, githubReleases.repositoryId))
+      .innerJoin(
+        projectRepositories,
+        and(
+          eq(projectRepositories.repositoryId, githubReleases.repositoryId),
+          eq(projectRepositories.projectId, project.id),
+        ),
+      )
+      .where(eq(githubReleases.id, releaseId))
+      .limit(1);
+    if (!release) {
+      throw AppException.notFound("This release isn't from a repository connected to the project.");
+    }
+    await this.db.transaction(async (tx) => {
+      const added = await tx
+        .insert(milestoneGithubReleases)
+        .values({ milestoneId: milestone.id, releaseId, source: 'MANUAL', linkedBy: actor.id })
+        .onConflictDoNothing()
+        .returning({ releaseId: milestoneGithubReleases.releaseId });
+      if (added.length === 0) return;
+      await this.events.activity(tx, {
+        workspaceId: project.workspaceId,
+        projectId: project.id,
+        entity: { type: 'milestone', id: milestone.id },
+        actor,
+        action: 'milestone.release_linked',
+        metadata: releaseActivity(milestone.name, release, 'MANUAL'),
+      });
+    });
+    return (await this.hydrate([milestone]))[0]!;
+  }
+
+  async unlinkRelease(actor: Actor, milestoneId: string, releaseId: string): Promise<Milestone> {
+    const { milestone, project } = await this.requireMilestone(actor.id, milestoneId, {
+      manage: true,
+      write: true,
+    });
+    await this.db.transaction(async (tx) => {
+      const removed = await tx
+        .delete(milestoneGithubReleases)
+        .where(
+          and(
+            eq(milestoneGithubReleases.milestoneId, milestone.id),
+            eq(milestoneGithubReleases.releaseId, releaseId),
+          ),
+        )
+        .returning({ source: milestoneGithubReleases.source });
+      if (removed.length === 0) {
+        throw AppException.notFound('This release is not linked to the milestone.');
+      }
+      const [release] = await tx
+        .select(releaseFields)
+        .from(githubReleases)
+        .innerJoin(githubRepositories, eq(githubRepositories.id, githubReleases.repositoryId))
+        .where(eq(githubReleases.id, releaseId));
+      await this.events.activity(tx, {
+        workspaceId: project.workspaceId,
+        projectId: project.id,
+        entity: { type: 'milestone', id: milestone.id },
+        actor,
+        action: 'milestone.release_unlinked',
+        metadata: releaseActivity(milestone.name, release!, removed[0]!.source),
+      });
+    });
+    return (await this.hydrate([milestone]))[0]!;
+  }
+
   async remove(userId: string, milestoneId: string): Promise<void> {
     const { milestone } = await this.requireMilestone(userId, milestoneId, { manage: true });
     await this.db.delete(milestones).where(eq(milestones.id, milestone.id));
@@ -290,12 +436,31 @@ export class MilestonesService {
       list.push(toCriterion(c.criterion, c.doneBy));
       criteriaById.set(c.criterion.milestoneId, list);
     }
+    const linked = await this.db
+      .select({
+        milestoneId: milestoneGithubReleases.milestoneId,
+        source: milestoneGithubReleases.source,
+        ...releaseFields,
+      })
+      .from(milestoneGithubReleases)
+      .innerJoin(githubReleases, eq(githubReleases.id, milestoneGithubReleases.releaseId))
+      .innerJoin(githubRepositories, eq(githubRepositories.id, githubReleases.repositoryId))
+      .where(inArray(milestoneGithubReleases.milestoneId, ids))
+      .orderBy(desc(githubReleases.publishedAt), asc(githubReleases.tagName));
+    const releasesById = new Map<string, LinkedMilestoneRelease[]>();
+    for (const { milestoneId, source, ...r } of linked) {
+      releasesById.set(milestoneId, [
+        ...(releasesById.get(milestoneId) ?? []),
+        { ...toRelease(r), source },
+      ]);
+    }
     return rows.map((m) => {
       const c = countsById.get(m.id);
       return toMilestone(
         m,
         { total: c?.total ?? 0, done: c?.done ?? 0, addedAfterStart: c?.addedAfterStart ?? 0 },
         criteriaById.get(m.id) ?? [],
+        releasesById.get(m.id) ?? [],
       );
     });
   }

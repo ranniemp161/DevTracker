@@ -218,6 +218,13 @@
       "when": 1795793665208,
       "tag": "0030_milestone_ready_prompt",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1795796413851,
+      "tag": "0031_github_releases",
+      "breakpoints": true
     }
   ]
 }

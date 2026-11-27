@@ -122,6 +122,10 @@ export function describeActivity(entry: ActivityEntry): string {
         to && to in MILESTONE_STAGE_LABEL ? MILESTONE_STAGE_LABEL[to as MilestoneStatus] : to;
       return `moved milestone "${String(m.name ?? '')}" to ${label ?? 'another stage'}`;
     }
+    case 'milestone.release_linked':
+      return `linked release ${String((m.release as { tag?: string } | undefined)?.tag ?? '')} to milestone "${String(m.name ?? '')}"`;
+    case 'milestone.release_unlinked':
+      return `unlinked release ${String((m.release as { tag?: string } | undefined)?.tag ?? '')} from milestone "${String(m.name ?? '')}"`;
     case 'pull_request.opened':
       return `opened ${pr(m)}`;
     case 'pull_request.reopened':

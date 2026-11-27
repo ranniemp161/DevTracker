@@ -87,6 +87,8 @@ export const releaseEventSchema = z.object({
     name: z.string().nullable().optional(),
     html_url: httpsUrl,
     prerelease: z.boolean().optional(),
+    /** 0026: when GitHub published it; missing on older payloads. */
+    published_at: z.string().nullable().optional(),
   }),
 });
 

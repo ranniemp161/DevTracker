@@ -10,6 +10,7 @@ import { useApiQuery } from '@/lib/use-api-query';
 import { useAuthForm, withoutBlanks } from '../auth/use-auth-form';
 import { formatDate, MILESTONE_STAGE_LABEL } from './labels';
 import { MilestoneCriteria, MilestoneProgress } from './milestone-criteria';
+import { MilestoneReleases } from './milestone-releases';
 import { useProject } from './project-context';
 
 export function MilestonesPage() {
@@ -228,6 +229,7 @@ function MilestoneRow({
         ) : null}
         <MilestoneProgress milestone={m} projectId={project.id} />
         <MilestoneCriteria milestone={m} canManage={canManage} onChanged={onChanged} />
+        <MilestoneReleases milestone={m} canManage={canManage} onChanged={onChanged} />
       </div>
     </li>
   );

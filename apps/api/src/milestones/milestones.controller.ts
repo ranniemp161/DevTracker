@@ -9,14 +9,16 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
-import type { Milestone } from '@devtrack/types';
+import type { GithubRelease, Milestone } from '@devtrack/types';
 import {
   createMilestoneCriterionSchema,
   createMilestoneSchema,
+  linkMilestoneReleaseSchema,
   updateMilestoneCriterionSchema,
   updateMilestoneSchema,
   type CreateMilestoneCriterionInput,
   type CreateMilestoneInput,
+  type LinkMilestoneReleaseInput,
   type UpdateMilestoneCriterionInput,
   type UpdateMilestoneInput,
 } from '@devtrack/validators';
@@ -56,6 +58,33 @@ export class MilestonesController {
     @Body(new ZodValidationPipe(updateMilestoneSchema)) body: UpdateMilestoneInput,
   ): Promise<{ milestone: Milestone }> {
     return { milestone: await this.milestones.update(user, id, body) };
+  }
+
+  /** 0026: releases of the project's connected repositories, for the Link release picker. */
+  @Get('projects/:id/releases')
+  async releases(
+    @CurrentUser() user: User,
+    @Param('id', UuidParamPipe) projectId: string,
+  ): Promise<GithubRelease[]> {
+    return this.milestones.releases(user.id, projectId);
+  }
+
+  @Post('milestones/:id/releases')
+  async linkRelease(
+    @CurrentUser() user: User,
+    @Param('id', UuidParamPipe) id: string,
+    @Body(new ZodValidationPipe(linkMilestoneReleaseSchema)) body: LinkMilestoneReleaseInput,
+  ): Promise<{ milestone: Milestone }> {
+    return { milestone: await this.milestones.linkRelease(user, id, body.releaseId) };
+  }
+
+  @Delete('milestones/:id/releases/:releaseId')
+  async unlinkRelease(
+    @CurrentUser() user: User,
+    @Param('id', UuidParamPipe) id: string,
+    @Param('releaseId', UuidParamPipe) releaseId: string,
+  ): Promise<{ milestone: Milestone }> {
+    return { milestone: await this.milestones.unlinkRelease(user, id, releaseId) };
   }
 
   @Delete('milestones/:id')
