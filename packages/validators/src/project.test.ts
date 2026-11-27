@@ -84,7 +84,8 @@ describe('label and milestone schemas', () => {
     expect(createLabelSchema.safeParse({ name: 'bug', color: 'red' }).success).toBe(false);
     expect(createLabelSchema.safeParse({ name: '', color: '#000000' }).success).toBe(false);
     expect(updateMilestoneSchema.safeParse({}).success).toBe(false);
-    expect(updateMilestoneSchema.parse({ status: 'COMPLETED' })).toEqual({ status: 'COMPLETED' });
+    expect(updateMilestoneSchema.parse({ status: 'DELIVERED' })).toEqual({ status: 'DELIVERED' });
+    expect(updateMilestoneSchema.safeParse({ status: 'COMPLETED' }).success).toBe(false);
   });
 });
 

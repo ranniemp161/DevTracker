@@ -52,11 +52,28 @@ const toMilestone = (
   description: m.description,
   dueDate: m.dueDate,
   status: m.status,
+  startedAt: m.startedAt?.toISOString() ?? null,
+  deliveredAt: m.deliveredAt?.toISOString() ?? null,
   taskCounts,
   criteria,
   createdAt: m.createdAt.toISOString(),
   updatedAt: m.updatedAt.toISOString(),
 });
+
+/**
+ * 0025 §2: `startedAt` is set on the first entry into Active and never cleared; `deliveredAt`
+ * follows Delivered.
+ */
+function stageTimestamps(
+  to: MilestoneRow['status'],
+  current: Pick<MilestoneRow, 'startedAt'> | null,
+  now: Date,
+): Partial<Pick<MilestoneRow, 'startedAt' | 'deliveredAt'>> {
+  return {
+    ...(to === 'ACTIVE' && !current?.startedAt ? { startedAt: now } : {}),
+    deliveredAt: to === 'DELIVERED' ? now : null,
+  };
+}
 
 /**
  * Project milestones (M3 addition, §8.2 fields). Anyone with project access can read them;
@@ -70,7 +87,7 @@ export class MilestonesService {
     private readonly events: EventRecorder,
   ) {}
 
-  /** Open milestones first, then by due date (undated last), then name. */
+  /** By stage (Active, Client review, Planned, Delivered), then due date (undated last), then name. */
   async list(userId: string, projectId: string): Promise<Milestone[]> {
     await this.access.require(userId, projectId);
     const rows = await this.db
@@ -78,7 +95,9 @@ export class MilestonesService {
       .from(milestones)
       .where(eq(milestones.projectId, projectId))
       .orderBy(
-        asc(sql`${milestones.status} = 'COMPLETED'`),
+        asc(
+          sql`case ${milestones.status} when 'ACTIVE' then 0 when 'CLIENT_REVIEW' then 1 when 'PLANNED' then 2 else 3 end`,
+        ),
         sql`${milestones.dueDate} asc nulls last`,
         asc(milestones.name),
       );
@@ -94,18 +113,23 @@ export class MilestonesService {
         name: input.name,
         description: input.description ?? null,
         dueDate: input.dueDate ?? null,
-        status: input.status ?? 'OPEN',
+        ...stageTimestamps(input.status ?? 'PLANNED', null, new Date()),
+        status: input.status ?? 'PLANNED',
       })
       .returning();
     return (await this.hydrate([row!]))[0]!;
   }
 
-  /** Completing a milestone records activity and notifies everyone on the project (M4 rule 5). */
+  /**
+   * A stage change records activity (0025 §2). Delivering also records `milestone.completed` and
+   * notifies everyone on the project, as completing did (M4 rule 5).
+   */
   async update(actor: Actor, milestoneId: string, input: UpdateMilestoneInput): Promise<Milestone> {
     const { milestone, project } = await this.requireMilestone(actor.id, milestoneId, {
       manage: true,
     });
-    const completing = input.status === 'COMPLETED' && milestone.status !== 'COMPLETED';
+    const moving = input.status !== undefined && input.status !== milestone.status;
+    const completing = moving && input.status === 'DELIVERED';
 
     const row = await this.db.transaction(async (tx) => {
       const [updated] = await tx
@@ -115,9 +139,21 @@ export class MilestonesService {
           description: input.description,
           dueDate: input.dueDate,
           status: input.status,
+          ...(moving ? stageTimestamps(input.status!, milestone, new Date()) : {}),
         })
         .where(eq(milestones.id, milestone.id))
         .returning();
+      // Delivering is recorded as `milestone.completed` below, so the feed shows it once.
+      if (moving && !completing) {
+        await this.events.activity(tx, {
+          workspaceId: project.workspaceId,
+          projectId: project.id,
+          entity: { type: 'milestone', id: milestone.id },
+          actor,
+          action: 'milestone.stage_changed',
+          metadata: { name: updated!.name, stage: { from: milestone.status, to: input.status } },
+        });
+      }
       if (completing) {
         await this.events.activity(tx, {
           workspaceId: project.workspaceId,
@@ -136,7 +172,7 @@ export class MilestonesService {
             workspaceId: project.workspaceId,
             projectId: project.id,
             type: 'MILESTONE_COMPLETED' as const,
-            title: `Milestone "${updated!.name}" completed in ${project.key}`,
+            title: `Milestone "${updated!.name}" delivered in ${project.key}`,
             resourceType: 'milestone',
             resourceId: milestone.id,
           })),

@@ -95,7 +95,7 @@ describe('accepting a request (0024 §3)', () => {
     const shipped = await milestone(f, 'v1.0');
     await f.owner.browser
       .patch(`/api/v1/milestones/${shipped}`)
-      .send({ status: 'COMPLETED' })
+      .send({ status: 'DELIVERED' })
       .expect(200);
     expect((await accept(f, r.id, { milestoneId: shipped })).status).toBe(400);
 

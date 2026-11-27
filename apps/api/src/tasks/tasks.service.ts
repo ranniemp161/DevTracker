@@ -117,7 +117,7 @@ export class TasksService {
     const assigneeIds = input.assigneeIds ?? [];
     await this.assertProjectMembers(projectId, assigneeIds);
     const milestoneId = input.milestoneId
-      ? (await this.requireMilestoneIn(projectId, input.milestoneId)).id
+      ? (await this.requireMilestoneIn(projectId, input.milestoneId, { open: true })).id
       : null;
     // 0024 §4: when the project requires triage, the creator is triaging as they write, so an
     // unscheduled task starts in Backlog and one filed into a milestone in To do. A chosen
@@ -369,10 +369,13 @@ export class TasksService {
   ): Promise<Task> {
     const { task, access } = await this.taskAccess.require(actor.id, taskId, { write: true });
     const changes = describeChanges(task, input);
+    // A task already in a Delivered milestone can stay there; joining one is refused (0025 §2).
     const nextMilestone =
       input.milestoneId === undefined || input.milestoneId === null
         ? null
-        : await this.requireMilestoneIn(task.projectId, input.milestoneId);
+        : await this.requireMilestoneIn(task.projectId, input.milestoneId, {
+            open: input.milestoneId.toLowerCase() !== task.milestoneId,
+          });
     if (input.milestoneId !== undefined && (nextMilestone?.id ?? null) !== task.milestoneId) {
       // Activity shows names, not ids, so the feed stays readable after renames or deletion.
       const previous = task.milestoneId
@@ -575,9 +578,9 @@ export class TasksService {
       .from(milestones)
       .where(and(eq(milestones.id, milestoneId), eq(milestones.projectId, projectId)))
       .limit(1);
-    if (!milestone || milestone.status !== 'OPEN') {
+    if (!milestone || milestone.status === 'DELIVERED') {
       throw AppException.validation([
-        { path: 'milestoneId', message: 'Choose an open milestone from this project.' },
+        { path: 'milestoneId', message: 'Choose an undelivered milestone from this project.' },
       ]);
     }
     return { id: milestone.id, name: milestone.name };
@@ -825,15 +828,24 @@ export class TasksService {
   }
 
   /** A milestone may only hold tasks from its own project. */
-  private async requireMilestoneIn(projectId: string, milestoneId: string) {
+  private async requireMilestoneIn(
+    projectId: string,
+    milestoneId: string,
+    { open }: { open: boolean },
+  ) {
     const [milestone] = await this.db
-      .select({ id: milestones.id, name: milestones.name })
+      .select({ id: milestones.id, name: milestones.name, status: milestones.status })
       .from(milestones)
       .where(and(eq(milestones.id, milestoneId.toLowerCase()), eq(milestones.projectId, projectId)))
       .limit(1);
     if (!milestone) {
       throw AppException.validation([
         { path: 'milestoneId', message: 'Choose a milestone from this project.' },
+      ]);
+    }
+    if (open && milestone.status === 'DELIVERED') {
+      throw AppException.validation([
+        { path: 'milestoneId', message: 'This milestone is delivered; choose another.' },
       ]);
     }
     return milestone;

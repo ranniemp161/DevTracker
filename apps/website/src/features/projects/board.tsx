@@ -36,7 +36,7 @@ import {
 import { api, ApiError } from '@/lib/api';
 import { useApiQuery } from '@/lib/use-api-query';
 import { useShortcuts } from '@/lib/shortcuts';
-import { formatDate, PRIORITY_RANK, TASK_STATUS_LABEL } from './labels';
+import { formatDate, MILESTONE_STAGE_LABEL, PRIORITY_RANK, TASK_STATUS_LABEL } from './labels';
 import { LabelChip } from './label-chip';
 import { useProject } from './project-context';
 import { filterTask, TaskFilterBar, useTaskFilters } from './task-filters';
@@ -536,7 +536,8 @@ function ColumnQuickAdd({
   const milestonesQuery = useApiQuery<Milestone[]>(
     schedule ? `/projects/${project.id}/milestones` : null,
   );
-  const openMilestones = (milestonesQuery.data ?? []).filter((m) => m.status === 'OPEN');
+  // Delivered milestones take no new tasks (0025 §2).
+  const openMilestones = (milestonesQuery.data ?? []).filter((m) => m.status !== 'DELIVERED');
   const [milestone, setMilestone] = useState('');
   const draftKey = `devtrack_task_draft_${project.id}`;
   const input = useRef<HTMLInputElement>(null);
@@ -649,7 +650,7 @@ function ColumnQuickAdd({
             </option>
             {openMilestones.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.name}
+                {m.name} · {MILESTONE_STAGE_LABEL[m.status]}
               </option>
             ))}
             <option value={UNSCHEDULED}>Unscheduled</option>

@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Field, Select } from '@/components/ui';
 import { useApiQuery } from '@/lib/use-api-query';
-import { formatDate } from '../projects/labels';
+import { formatDate, MILESTONE_STAGE_LABEL } from '../projects/labels';
 import { useProject } from '../projects/project-context';
 
 /** What the triager chose: an existing milestone, a new one to create first, or Unscheduled. */
@@ -17,10 +17,10 @@ export interface AcceptChoice {
 const UNSCHEDULED = 'unscheduled';
 const NEW_MILESTONE = 'new';
 
-/** Open milestones, soonest due first, undated last (0024 §5). */
+/** Milestones that take tasks (not Delivered, 0025 §2), soonest due first, undated last. */
 function openMilestones(milestones: Milestone[]): Milestone[] {
   return milestones
-    .filter((m) => m.status === 'OPEN')
+    .filter((m) => m.status !== 'DELIVERED')
     .sort((a, b) => {
       if (a.dueDate === b.dueDate) return a.name.localeCompare(b.name);
       if (!a.dueDate) return 1;
@@ -102,7 +102,7 @@ export function AcceptDialog({
           </option>
           {milestones.map((m) => (
             <option key={m.id} value={m.id}>
-              {m.name}
+              {m.name} · {MILESTONE_STAGE_LABEL[m.status]}
               {m.dueDate ? ` · due ${formatDate(m.dueDate)}` : ''}
             </option>
           ))}

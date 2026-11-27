@@ -256,7 +256,13 @@ export const activeTaskTimers = pgTable('active_task_timers', {
   spentOn: date('spent_on', { mode: 'string' }).notNull(),
 });
 
-export const milestoneStatus = pgEnum('milestone_status', ['OPEN', 'COMPLETED']);
+/** Delivery stages (decision record 0025 §2). */
+export const milestoneStatus = pgEnum('milestone_status', [
+  'PLANNED',
+  'ACTIVE',
+  'CLIENT_REVIEW',
+  'DELIVERED',
+]);
 
 /** Architecture §8.2 — project milestones (M3 addition, approved). */
 export const milestones = pgTable(
@@ -269,7 +275,11 @@ export const milestones = pgTable(
     name: text('name').notNull(),
     description: text('description'),
     dueDate: date('due_date', { mode: 'string' }),
-    status: milestoneStatus('status').notNull().default('OPEN'),
+    status: milestoneStatus('status').notNull().default('PLANNED'),
+    /** First entry into Active: when the scope was agreed. Never cleared (0025 §2). */
+    startedAt: timestamptz('started_at'),
+    /** Entry into Delivered; cleared when it leaves Delivered. */
+    deliveredAt: timestamptz('delivered_at'),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
     updatedAt: timestamptz('updated_at')
       .notNull()
