@@ -72,7 +72,9 @@ export class ProjectAccessService {
       throw AppException.forbidden('You need to be a project lead or workspace admin to do this.');
     }
     if (options.triage && !canTriage) {
-      throw AppException.forbidden('Only the project leads triage requests in this project.');
+      throw AppException.forbidden(
+        'Only project leads and workspace admins triage requests in this project.',
+      );
     }
     if (
       (options.write || options.manage || options.admin || options.triage) &&

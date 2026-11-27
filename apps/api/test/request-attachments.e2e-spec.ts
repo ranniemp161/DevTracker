@@ -150,7 +150,7 @@ describe('request form attachments (0022)', () => {
     // Another form's token.
     const other = await f.owner.browser
       .post(`/api/v1/workspaces/${f.ws}/projects`)
-      .send({ name: 'Other', key: 'OTH' })
+      .send({ internalTriage: false, name: 'Other', key: 'OTH' })
       .expect(201);
     const otherToken = await openForm({ ...f, project: other.body.data.project.id });
     await complete(otherToken, upload.id).expect(404);

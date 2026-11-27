@@ -213,7 +213,7 @@ function RequestFormCard() {
   );
 }
 
-/** Internal triage (0023 §3): members propose tasks, and a lead accepts them in Triage. */
+/** Require triage (0023 §3, 0024 §2): members propose tasks; leads or admins accept them in Triage. */
 function InternalTriageCard() {
   const { project, reload } = useProject();
   const [busy, setBusy] = useState(false);
@@ -235,8 +235,8 @@ function InternalTriageCard() {
   return (
     <SettingsSection
       id="internal-triage"
-      title="Internal triage"
-      description="Members who aren't project leads propose new tasks instead of adding them to the board. A lead accepts or declines each proposal in Triage. Leads and workspace admins still add tasks directly."
+      title="Triage"
+      description="Members who aren't project leads propose new tasks instead of adding them to the board. Project leads, or workspace admins when the project has no lead, accept or decline each proposal in Triage. Leads and admins still add tasks directly."
     >
       <div className="max-w-md space-y-3">
         {error ? <Alert>{error}</Alert> : null}
@@ -247,12 +247,12 @@ function InternalTriageCard() {
             disabled={busy}
             onChange={(e) => void toggle(e.target.checked)}
           />
-          Members propose new tasks
+          Require triage for new tasks
         </label>
         {project.internalTriage && project.leads.length === 0 ? (
           <Alert tone="info">
-            This has no effect until the project has a lead. Without one, every member triages, so
-            members add tasks directly. Appoint a lead under Members.
+            This project has no lead, so workspace admins triage. Appoint a lead under Members to
+            hand triage to them.
           </Alert>
         ) : null}
       </div>

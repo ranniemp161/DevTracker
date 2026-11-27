@@ -25,7 +25,10 @@ async function join(owner: U, ws: string, user: U, role = 'MEMBER') {
 
 async function project(owner: U, ws: string, key: string, name: string, members: U[]) {
   const id = (
-    await owner.browser.post(`/api/v1/workspaces/${ws}/projects`).send({ name, key }).expect(201)
+    await owner.browser
+      .post(`/api/v1/workspaces/${ws}/projects`)
+      .send({ internalTriage: false, name, key })
+      .expect(201)
   ).body.data.project.id as string;
   for (const m of members) {
     await owner.browser.post(`/api/v1/projects/${id}/members`).send({ userId: m.id }).expect(201);

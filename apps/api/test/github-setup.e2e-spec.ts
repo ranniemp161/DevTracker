@@ -516,7 +516,7 @@ describe('project repositories', () => {
     const second: string = (
       await owner.browser
         .post(`/api/v1/workspaces/${ws}/projects`)
-        .send({ name: 'Mobile', key: 'MOB' })
+        .send({ internalTriage: false, name: 'Mobile', key: 'MOB' })
         .expect(201)
     ).body.data.project.id;
     const body = { connectionId: inst.id, githubRepositoryId: 1001 };
@@ -575,7 +575,7 @@ describe('shared GitHub workspace connections', () => {
     const project: string = (
       await outsider.browser
         .post(`/api/v1/workspaces/${other}/projects`)
-        .send({ name: 'Website', key: 'WEB' })
+        .send({ internalTriage: false, name: 'Website', key: 'WEB' })
     ).body.data.project.id;
     // Knowing the global installation ID or another workspace's connection ID is insufficient.
     await outsider.browser
@@ -798,7 +798,7 @@ describe('the disconnected mark on a repository', () => {
     const project: string = (
       await outsider.browser
         .post(`/api/v1/workspaces/${ws}/projects`)
-        .send({ name: 'Website', key: 'WEB' })
+        .send({ internalTriage: false, name: 'Website', key: 'WEB' })
         .expect(201)
     ).body.data.project.id;
     t.githubApp.codes.set('client-code', [111]);

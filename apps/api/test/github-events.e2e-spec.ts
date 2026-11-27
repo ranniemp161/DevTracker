@@ -364,7 +364,7 @@ describe('pull requests', () => {
     // OPS-1 exists in another project of the workspace, which is not connected to the repo.
     const ops = await f.owner.browser
       .post(`/api/v1/workspaces/${f.ws}/projects`)
-      .send({ name: 'Ops', key: 'OPS' })
+      .send({ internalTriage: false, name: 'Ops', key: 'OPS' })
       .expect(201);
     await f.owner.browser
       .post(`/api/v1/projects/${ops.body.data.project.id}/tasks`)
@@ -523,7 +523,7 @@ describe('pull request API', () => {
     const f = await withPr();
     const other = await f.owner.browser
       .post(`/api/v1/workspaces/${f.ws}/projects`)
-      .send({ name: 'Ops', key: 'OPS' })
+      .send({ internalTriage: false, name: 'Ops', key: 'OPS' })
       .expect(201);
     const opsTask = await f.owner.browser
       .post(`/api/v1/projects/${other.body.data.project.id}/tasks`)
@@ -790,7 +790,7 @@ describe('GitHub events across workspace connections', () => {
     const project: string = (
       await f.outsider.browser
         .post(`/api/v1/workspaces/${ws}/projects`)
-        .send({ name: 'Client website', key: 'DEV' })
+        .send({ internalTriage: false, name: 'Client website', key: 'DEV' })
     ).body.data.project.id;
     t.githubApp.codes.set('other-client', [GH_INSTALLATION]);
     const start = await f.outsider.browser

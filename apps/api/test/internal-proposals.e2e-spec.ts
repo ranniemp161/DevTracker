@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createTestApp, TEST_PROXY_SECRET, verifiedUser, type TestApp } from './utils/test-app';
 
-/** Decision record 0023 §3: internal triage and proposals. */
+/** Decision records 0023 §3 and 0024 §2: the triage gate and proposals. */
 let t: TestApp;
 beforeAll(async () => {
   t = await createTestApp();
@@ -15,7 +15,7 @@ beforeEach(async () => {
 
 type U = Awaited<ReturnType<typeof verifiedUser>>;
 
-/** Owner; `lead` and `dev` are Members on project DEV. Nobody is a lead yet. */
+/** Owner; `lead` and `dev` are Members on project DEV (triage required by default). Nobody is a lead yet. */
 async function setup() {
   const [owner, lead, dev] = await Promise.all(
     ['owner', 'lead', 'dev'].map((u) => verifiedUser(t, u)),
@@ -66,30 +66,58 @@ const mustPropose = async (u: U, project: string) =>
   (await u.browser.get(`/api/v1/projects/${project}`).expect(200)).body.data.project
     .viewerMustPropose as boolean;
 
-describe('the internal triage gate', () => {
-  it('only applies with the setting on and a lead appointed', async () => {
+const canTriage = async (u: U, project: string) =>
+  (await u.browser.get(`/api/v1/projects/${project}`).expect(200)).body.data.project
+    .viewerCanTriage as boolean;
+
+describe('the triage gate (0024 §2)', () => {
+  it('is on for new projects and in effect without a lead: admins hold the gate', async () => {
     const { owner, lead, dev, project } = await setup();
+    const { project: p } = (await owner.browser.get(`/api/v1/projects/${project}`).expect(200)).body
+      .data;
+    expect(p.internalTriage).toBe(true);
 
-    // Off: members create tasks; there's nothing to propose to.
-    await createTask(dev, project).expect(201);
-    expect((await propose(dev, project)).body.error.code).toBe('INTERNAL_TRIAGE_OFF');
-
-    // On, but no lead yet: still off in effect.
-    await setInternalTriage(owner, project, true);
-    await createTask(dev, project).expect(201);
-    expect((await propose(dev, project)).status).toBe(409);
-    expect(await mustPropose(dev, project)).toBe(false);
-
-    // On with a lead: members must propose; the lead and the owner create directly.
-    await makeLead(owner, project, lead);
+    // No lead yet: members propose, the owner creates directly and is the one who triages.
     const refused = await createTask(dev, project);
     expect(refused.status).toBe(403);
     expect(refused.body.error.code).toBe('PROPOSAL_REQUIRED');
     expect(await mustPropose(dev, project)).toBe(true);
-    expect(await mustPropose(lead, project)).toBe(false);
-    await createTask(lead, project).expect(201);
+    expect(await canTriage(dev, project)).toBe(false);
+    expect(await canTriage(owner, project)).toBe(true);
     await createTask(owner, project).expect(201);
     await propose(dev, project).expect(201);
+    expect((await dev.browser.get(`/api/v1/projects/${project}/requests`)).status).toBe(403);
+
+    // With a lead: the lead creates directly and triages; members still propose.
+    await makeLead(owner, project, lead);
+    expect(await mustPropose(lead, project)).toBe(false);
+    expect(await canTriage(lead, project)).toBe(true);
+    await createTask(lead, project).expect(201);
+    expect((await createTask(dev, project)).status).toBe(403);
+  });
+
+  it('when turned off, behaves as before: everyone adds tasks, and triages until there is a lead', async () => {
+    const { owner, lead, dev, project } = await setup();
+    await setInternalTriage(owner, project, false);
+    await createTask(dev, project).expect(201);
+    expect((await propose(dev, project)).body.error.code).toBe('INTERNAL_TRIAGE_OFF');
+    expect(await mustPropose(dev, project)).toBe(false);
+    expect(await canTriage(dev, project)).toBe(true);
+
+    await makeLead(owner, project, lead);
+    expect(await canTriage(dev, project)).toBe(false);
+    await createTask(dev, project).expect(201);
+  });
+
+  it('can be chosen when the project is created', async () => {
+    const { owner, project } = await setup();
+    const { workspaceId } = (await owner.browser.get(`/api/v1/projects/${project}`).expect(200))
+      .body.data.project;
+    const created = await owner.browser
+      .post(`/api/v1/workspaces/${workspaceId}/projects`)
+      .send({ name: 'Open Project', key: 'OPEN', internalTriage: false })
+      .expect(201);
+    expect(created.body.data.project.internalTriage).toBe(false);
   });
 });
 

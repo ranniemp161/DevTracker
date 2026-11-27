@@ -51,6 +51,8 @@ export const createProjectSchema = z
     status: editableProjectStatusSchema.optional(),
     startDate: optionalDate,
     targetDate: optionalDate,
+    /** "Require triage for new tasks" (0024 §2). Omitted: on. */
+    internalTriage: z.boolean().optional(),
   })
   .refine(datesOrdered, datesMessage);
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;

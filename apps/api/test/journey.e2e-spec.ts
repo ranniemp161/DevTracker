@@ -63,7 +63,7 @@ describe('§16 end-to-end journey', () => {
     const project: string = (
       await lead.browser
         .post(`/api/v1/workspaces/${ws}/projects`)
-        .send({ name: 'Journey App', key: 'JRN' })
+        .send({ internalTriage: false, name: 'Journey App', key: 'JRN' })
         .expect(201)
     ).body.data.project.id;
     await lead.browser

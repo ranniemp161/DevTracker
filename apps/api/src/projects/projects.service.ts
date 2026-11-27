@@ -33,7 +33,7 @@ import { EventRecorder, type Actor } from '../events/event-recorder.service';
 import { isUniqueViolation } from '../database/pg-errors';
 import { WorkspaceAccessService } from '../workspaces/workspace-access.service';
 import { hasAtLeastRole } from '../workspaces/workspace-policy';
-import { projectHasLeads } from '@devtrack/server-core';
+import { projectHasLeads, triageRules } from '@devtrack/server-core';
 import { ProjectAccessService, type ProjectRow } from './project-access.service';
 
 const memberCount = sql<number>`(select count(*)::int from ${projectMembers} where ${projectMembers.projectId} = ${projects.id})`;
@@ -84,6 +84,8 @@ export class ProjectsService {
             status: input.status ?? 'PLANNING',
             startDate: input.startDate ?? null,
             targetDate: input.targetDate ?? null,
+            // Omitted: the column default (on, 0024 §2).
+            internalTriage: input.internalTriage,
             createdBy: userId,
           })
           .returning();
@@ -442,19 +444,15 @@ export class ProjectsService {
   }
 }
 
-/** The same rules as `findProjectAccess` (0023 §2–4), for rows read in a list. */
+/** The same rules as `findProjectAccess` (0023 §2, 0024 §2), for rows read in a list. */
 function viewerOf(
   canManage: boolean,
   isWorkspaceAdmin: boolean,
   hasLeads: boolean,
   p: ProjectRow,
 ): Viewer {
-  return {
-    canManage,
-    isWorkspaceAdmin,
-    canTriage: canManage || !hasLeads,
-    mustPropose: p.internalTriage && hasLeads && !canManage,
-  };
+  const { canTriage, mustPropose } = triageRules(canManage, hasLeads, p.internalTriage);
+  return { canManage, isWorkspaceAdmin, canTriage, mustPropose };
 }
 
 function toProject(

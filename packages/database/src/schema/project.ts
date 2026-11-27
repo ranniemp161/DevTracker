@@ -68,8 +68,8 @@ export const projects = pgTable(
     nextMessageSequence: integer('next_message_sequence').notNull().default(1),
     /** 0016: public request form. The token is NULL until the form is first turned on. */
     intakeEnabled: boolean('intake_enabled').notNull().default(false),
-    /** 0023 §3: members propose tasks through Triage; in effect only once there is a lead. */
-    internalTriage: boolean('internal_triage').notNull().default(false),
+    /** "Require triage for new tasks" (0023 §3, 0024 §2): non-leads propose. On for new projects. */
+    internalTriage: boolean('internal_triage').notNull().default(true),
     intakeToken: text('intake_token').unique('projects_intake_token_unique'),
     /**
      * 0014: GitHub events posted to the project's chat. Keys are validated by the API
