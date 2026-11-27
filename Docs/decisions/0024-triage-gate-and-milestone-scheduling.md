@@ -49,6 +49,8 @@ When triage is required, the people who triage still create tasks directly. They
 
 - The New task form gets the same **Milestone or Unscheduled** choice.
 - Default status follows the same rule: a milestone → To do, Unscheduled → Backlog. The creator can still pick another status, as today.
+  - **API:** `POST /projects/:id/tasks` without `status` starts the task in Backlog when the project requires triage and no `milestoneId` is given, otherwise in To do.
+  - **Board:** **New task** (the button, `N`, the sidebar's `?new=1`) sends no status, so the milestone choice decides; a column's own **+** keeps that column's status.
 - No `task_requests` row is written: it isn't a request, and Triage stays a list of things waiting for a decision.
 - When triage is off, the form is unchanged (milestone optional, To do by default).
 

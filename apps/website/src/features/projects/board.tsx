@@ -1,6 +1,12 @@
 'use client';
 
-import { TASK_STATUSES, type RequestKind, type Task, type TaskStatus } from '@devtrack/types';
+import {
+  TASK_STATUSES,
+  type Milestone,
+  type RequestKind,
+  type Task,
+  type TaskStatus,
+} from '@devtrack/types';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   memo,
@@ -28,6 +34,7 @@ import {
   StatusDot,
 } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
+import { useApiQuery } from '@/lib/use-api-query';
 import { useShortcuts } from '@/lib/shortcuts';
 import { formatDate, PRIORITY_RANK, TASK_STATUS_LABEL } from './labels';
 import { LabelChip } from './label-chip';
@@ -55,6 +62,9 @@ export function Board() {
   const [dropError, setDropError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<TaskStatus | null>(null);
   const [chosenColumn, setAddingIn] = useState<TaskStatus | null>(null);
+  // 0024 §4: "New task" (button, N, ?new=1) lets the milestone choice set the status; a
+  // column's own + button picks that column's status.
+  const [viaButton, setViaButton] = useState(false);
   // "New task" from the sidebar opens the board with ?new=1: quick add in To do.
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -63,8 +73,10 @@ export function Board() {
   const propose = project.viewerMustPropose;
   const newColumn: TaskStatus = propose ? 'BACKLOG' : 'TODO';
   const addingIn = chosenColumn ?? (wantsNew ? newColumn : null);
+  const statusFromMilestone = chosenColumn === null ? wantsNew : viaButton;
   function stopAdding() {
     setAddingIn(null);
+    setViaButton(false);
     if (wantsNew) {
       const rest = new URLSearchParams(searchParams.toString());
       rest.delete('new');
@@ -84,14 +96,15 @@ export function Board() {
     });
   }
 
-  function startAdding(status: TaskStatus) {
+  function startAdding(status: TaskStatus, fromButton = false) {
     setAddingIn(status);
+    setViaButton(fromButton);
     showColumn(status);
   }
 
   // `N` new task in To do, `/` jumps to the task search (`?` lists all shortcuts).
   useShortcuts([
-    { key: 'n', run: () => !readOnly && startAdding(newColumn) },
+    { key: 'n', run: () => !readOnly && startAdding(newColumn, true) },
     {
       key: '/',
       run: () =>
@@ -173,7 +186,7 @@ export function Board() {
           <Button
             variant="primary"
             icon={<PlusIcon size={15} />}
-            onClick={() => startAdding(newColumn)}
+            onClick={() => startAdding(newColumn, true)}
           >
             {propose ? 'Propose task' : 'New task'}
           </Button>
@@ -267,6 +280,7 @@ export function Board() {
                   {addingIn === status && !readOnly ? (
                     <ColumnQuickAdd
                       status={status}
+                      statusFromMilestone={statusFromMilestone}
                       propose={propose}
                       onCancel={stopAdding}
                       onCreated={(t) => {
@@ -497,13 +511,18 @@ const PROPOSAL_KINDS: { value: RequestKind; label: string }[] = [
  * Inline quick-add in a column; the task is created with that column's status. As a proposal
  * (0023 §3) it also takes a type and a description, and goes to Triage as a Backlog task.
  */
+const UNSCHEDULED = 'unscheduled';
+
 function ColumnQuickAdd({
   status,
+  statusFromMilestone,
   propose,
   onCreated,
   onCancel,
 }: {
   status: TaskStatus;
+  /** Leave the status to the API: Backlog when unscheduled, To do in a milestone (0024 §4). */
+  statusFromMilestone: boolean;
   propose: boolean;
   onCreated: (task: Task) => void;
   onCancel: () => void;
@@ -511,6 +530,14 @@ function ColumnQuickAdd({
   const [kind, setKind] = useState<RequestKind>('bug');
   const [description, setDescription] = useState('');
   const { project } = useProject();
+  // 0024 §4: with triage required, leads and admins triage as they create, so they choose a
+  // milestone or Unscheduled. Members propose instead, and the triager chooses.
+  const schedule = project.internalTriage && !propose;
+  const milestonesQuery = useApiQuery<Milestone[]>(
+    schedule ? `/projects/${project.id}/milestones` : null,
+  );
+  const openMilestones = (milestonesQuery.data ?? []).filter((m) => m.status === 'OPEN');
+  const [milestone, setMilestone] = useState('');
   const draftKey = `devtrack_task_draft_${project.id}`;
   const input = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState(() => {
@@ -538,7 +565,7 @@ function ColumnQuickAdd({
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!title.trim()) return;
+    if (!title.trim() || (schedule && !milestone)) return;
     setPending(true);
     setError(null);
     try {
@@ -549,8 +576,13 @@ function ColumnQuickAdd({
         });
         ({ task } = await api<{ task: Task }>(`/tasks/${created.task.id}`));
       } else {
+        const milestoneId = schedule && milestone !== UNSCHEDULED ? milestone : undefined;
         ({ task } = await api<{ task: Task }>(`/projects/${project.id}/tasks`, {
-          body: { title, status },
+          body: {
+            title,
+            ...(schedule && statusFromMilestone ? {} : { status }),
+            ...(milestoneId ? { milestoneId } : {}),
+          },
         }));
       }
       handleTitleChange('');
@@ -599,6 +631,36 @@ function ColumnQuickAdd({
           <p className="text-xs text-fg-muted">A project lead reviews proposals in Triage.</p>
         </>
       ) : null}
+      {schedule ? (
+        <>
+          <label className="sr-only" htmlFor={`quick-add-${status}-milestone`}>
+            Milestone
+          </label>
+          <select
+            id={`quick-add-${status}-milestone`}
+            value={milestone}
+            onChange={(e) => setMilestone(e.target.value)}
+            className="h-8 w-full rounded-control border pointer-coarse:h-11 border-line-control bg-surface px-2 text-sm text-fg focus-visible:border-primary"
+          >
+            <option value="" disabled>
+              {milestonesQuery.data || milestonesQuery.error
+                ? 'Milestone or Unscheduled…'
+                : 'Loading milestones…'}
+            </option>
+            {openMilestones.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+            <option value={UNSCHEDULED}>Unscheduled</option>
+          </select>
+          {statusFromMilestone && milestone ? (
+            <p className="text-xs text-fg-muted">
+              {milestone === UNSCHEDULED ? 'Goes to Backlog.' : 'Goes to To do.'}
+            </p>
+          ) : null}
+        </>
+      ) : null}
       {error ? (
         <p role="alert" className="text-xs text-danger">
           {error}
@@ -613,7 +675,7 @@ function ColumnQuickAdd({
           variant="primary"
           size="sm"
           loading={pending}
-          disabled={!title.trim()}
+          disabled={!title.trim() || (schedule && !milestone)}
         >
           {propose ? (pending ? 'Sending…' : 'Propose') : pending ? 'Adding…' : 'Add task'}
         </Button>

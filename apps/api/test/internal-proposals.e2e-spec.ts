@@ -385,3 +385,31 @@ describe('my proposals (0023 §5)', () => {
     expect((await other.browser.get(`/api/v1/projects/${project}/requests`)).status).toBe(403);
   });
 });
+
+describe('creating directly when triage is required (0024 §4)', () => {
+  const statusOf = async (u: U, project: string, body: Record<string, unknown>) =>
+    (
+      await u.browser
+        .post(`/api/v1/projects/${project}/tasks`)
+        .send({ title: 'Direct task', ...body })
+        .expect(201)
+    ).body.data.task.status as string;
+
+  it('starts unscheduled tasks in Backlog and milestone tasks in To do; a chosen status wins', async () => {
+    const { owner, project } = await setup();
+    const v12 = (
+      await owner.browser
+        .post(`/api/v1/projects/${project}/milestones`)
+        .send({ name: 'v1.2' })
+        .expect(201)
+    ).body.data.milestone.id as string;
+
+    expect(await statusOf(owner, project, {})).toBe('BACKLOG');
+    expect(await statusOf(owner, project, { milestoneId: v12 })).toBe('TODO');
+    expect(await statusOf(owner, project, { status: 'IN_PROGRESS' })).toBe('IN_PROGRESS');
+
+    // Triage off: To do by default, as before.
+    await setInternalTriage(owner, project, false);
+    expect(await statusOf(owner, project, {})).toBe('TODO');
+  });
+});
