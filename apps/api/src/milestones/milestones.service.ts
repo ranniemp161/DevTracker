@@ -12,7 +12,10 @@ import {
   milestoneCriteria,
   milestoneGithubReleases,
   milestones,
+  ne,
+  projectMembers,
   projectRepositories,
+  projects,
   sql,
   tasks,
   users,
@@ -24,7 +27,10 @@ import type {
   Milestone,
   MilestoneCriterion,
   UserRef,
+  WorkspaceOverview,
 } from '@devtrack/types';
+import { hasAtLeastRole } from '@devtrack/server-core';
+import { WorkspaceAccessService } from '../workspaces/workspace-access.service';
 import type {
   CreateMilestoneCriterionInput,
   CreateMilestoneInput,
@@ -136,6 +142,7 @@ export class MilestonesService {
   constructor(
     @Inject(DATABASE) private readonly db: Database,
     private readonly access: ProjectAccessService,
+    private readonly workspaceAccess: WorkspaceAccessService,
     private readonly events: EventRecorder,
     private readonly readiness: MilestoneReadinessService,
   ) {}
@@ -235,6 +242,76 @@ export class MilestonesService {
       return updated!;
     });
     return (await this.hydrate([row]))[0]!;
+  }
+
+  /**
+   * 0027: undelivered milestones across the workspace for its admins (every unarchived project)
+   * and project leads (their projects only). Anyone else is refused.
+   */
+  async overview(userId: string, workspaceId: string): Promise<WorkspaceOverview> {
+    const { membership } = await this.workspaceAccess.require(userId, workspaceId);
+    const admin = hasAtLeastRole(membership.role, 'ADMIN');
+    const visible = await this.db
+      .select({ id: projects.id, key: projects.key, name: projects.name })
+      .from(projects)
+      .where(
+        and(
+          eq(projects.workspaceId, workspaceId),
+          ne(projects.status, 'ARCHIVED'),
+          admin
+            ? undefined
+            : inArray(
+                projects.id,
+                this.db
+                  .select({ id: projectMembers.projectId })
+                  .from(projectMembers)
+                  .where(and(eq(projectMembers.userId, userId), eq(projectMembers.role, 'lead'))),
+              ),
+        ),
+      )
+      .orderBy(asc(projects.name));
+    if (!admin && visible.length === 0) {
+      throw AppException.forbidden('The overview is for workspace admins and project leads.');
+    }
+    const rows =
+      visible.length === 0
+        ? []
+        : await this.db
+            .select()
+            .from(milestones)
+            .where(
+              and(
+                inArray(
+                  milestones.projectId,
+                  visible.map((p) => p.id),
+                ),
+                ne(milestones.status, 'DELIVERED'),
+              ),
+            );
+    const hydrated = await this.hydrate(rows);
+    const today = new Date().toISOString().slice(0, 10);
+    // Overdue first, then by due date (undated last), then name.
+    const rank = (m: Milestone) => (m.dueDate !== null && m.dueDate < today ? 0 : 1);
+    hydrated.sort(
+      (a, b) =>
+        rank(a) - rank(b) ||
+        (a.dueDate ?? '9999-12-31').localeCompare(b.dueDate ?? '9999-12-31') ||
+        a.name.localeCompare(b.name),
+    );
+    const stages = ['ACTIVE', 'CLIENT_REVIEW', 'PLANNED'] as const;
+    return {
+      sections: stages
+        .map((stage) => ({
+          stage,
+          projects: visible
+            .map((project) => ({
+              project,
+              milestones: hydrated.filter((m) => m.projectId === project.id && m.status === stage),
+            }))
+            .filter((g) => g.milestones.length > 0),
+        }))
+        .filter((s) => s.projects.length > 0),
+    };
   }
 
   /** 0026 §4: releases of the repositories connected to the project, newest first. */

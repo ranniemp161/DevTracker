@@ -6,6 +6,9 @@ import {
   eq,
   inArray,
   isNull,
+  ne,
+  projectMembers,
+  projects,
   workspaceMembers,
   workspaces,
   type Database,
@@ -58,12 +61,40 @@ export class WorkspacesService {
       .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
       .where(and(eq(workspaceMembers.userId, userId), isNull(workspaces.archivedAt)))
       .orderBy(asc(workspaces.name), asc(workspaces.createdAt));
-    return rows.map((r) => toWorkspaceSummary(r.workspace, r.role));
+    const leading = await this.leadWorkspaceIds(
+      userId,
+      rows.map((r) => r.workspace.id),
+    );
+    return rows.map((r) => toWorkspaceSummary(r.workspace, r.role, leading.has(r.workspace.id)));
+  }
+
+  /** Workspaces (of those given) where the user leads an unarchived project (0027 §2). */
+  private async leadWorkspaceIds(userId: string, workspaceIds: string[]): Promise<Set<string>> {
+    if (workspaceIds.length === 0) return new Set();
+    const rows = await this.db
+      .selectDistinct({ workspaceId: projects.workspaceId })
+      .from(projectMembers)
+      .innerJoin(projects, eq(projects.id, projectMembers.projectId))
+      .where(
+        and(
+          eq(projectMembers.userId, userId),
+          eq(projectMembers.role, 'lead'),
+          ne(projects.status, 'ARCHIVED'),
+          inArray(projects.workspaceId, workspaceIds),
+        ),
+      );
+    return new Set(rows.map((r) => r.workspaceId));
   }
 
   async get(userId: string, workspaceId: string): Promise<WorkspaceDetails> {
     const { workspace, membership } = await this.access.require(userId, workspaceId);
-    return toWorkspaceDetails(workspace, membership.role, await this.memberCount(workspace.id));
+    const leads = (await this.leadWorkspaceIds(userId, [workspace.id])).has(workspace.id);
+    return toWorkspaceDetails(
+      workspace,
+      membership.role,
+      await this.memberCount(workspace.id),
+      leads,
+    );
   }
 
   /** Admins and the owner can rename. The slug never changes. */

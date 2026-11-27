@@ -9,7 +9,7 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
-import type { GithubRelease, Milestone } from '@devtrack/types';
+import type { GithubRelease, Milestone, WorkspaceOverview } from '@devtrack/types';
 import {
   createMilestoneCriterionSchema,
   createMilestoneSchema,
@@ -58,6 +58,15 @@ export class MilestonesController {
     @Body(new ZodValidationPipe(updateMilestoneSchema)) body: UpdateMilestoneInput,
   ): Promise<{ milestone: Milestone }> {
     return { milestone: await this.milestones.update(user, id, body) };
+  }
+
+  /** 0027: undelivered milestones across the workspace, for admins and project leads. */
+  @Get('workspaces/:id/overview')
+  overview(
+    @CurrentUser() user: User,
+    @Param('id', UuidParamPipe) workspaceId: string,
+  ): Promise<WorkspaceOverview> {
+    return this.milestones.overview(user.id, workspaceId);
   }
 
   /** 0026: releases of the project's connected repositories, for the Link release picker. */

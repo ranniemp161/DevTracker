@@ -148,6 +148,17 @@ export function Sidebar({
               <span className="flex-1 text-left">Search</span>
               <ShortcutHint />
             </button>
+            {/* 0027 §3: admins and project leads only. */}
+            {active.viewerCanSeeOverview ? (
+              <NavLink
+                href={`${base}/overview`}
+                active={pathname === `${base}/overview`}
+                icon={<FlagIcon size={16} />}
+                onNavigate={onNavigate}
+              >
+                Overview
+              </NavLink>
+            ) : null}
             <NavLink
               href={`${base}/my-tasks`}
               active={pathname === `${base}/my-tasks`}

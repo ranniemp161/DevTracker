@@ -1,4 +1,10 @@
-import type { MilestoneStatus, ProjectStatus, TaskPriority, TaskStatus } from '@devtrack/types';
+import type {
+  Milestone,
+  MilestoneStatus,
+  ProjectStatus,
+  TaskPriority,
+  TaskStatus,
+} from '@devtrack/types';
 
 export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
   BACKLOG: 'Backlog',
@@ -46,6 +52,16 @@ export const MILESTONE_STAGE_LABEL: Record<MilestoneStatus, string> = {
   CLIENT_REVIEW: 'Client review',
   DELIVERED: 'Delivered',
 };
+
+/** 0025 §4: an Active milestone with every task Done and every criterion ticked. */
+export function isReadyForReview(m: Milestone): boolean {
+  return (
+    m.status === 'ACTIVE' &&
+    m.taskCounts.total > 0 &&
+    m.taskCounts.done === m.taskCounts.total &&
+    m.criteria.every((c) => c.done)
+  );
+}
 
 /** Badge tone for a project status (SPEC §2: blue for planning/active, green when completed). */
 export function projectStatusTone(status: ProjectStatus): 'blue' | 'green' | 'neutral' {
