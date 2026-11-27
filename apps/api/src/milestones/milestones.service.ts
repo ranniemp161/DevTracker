@@ -28,6 +28,7 @@ import {
   ProjectAccessService,
   type ProjectAccessOptions,
 } from '../projects/project-access.service';
+import { MilestoneReadinessService } from './milestone-readiness.service';
 
 type MilestoneRow = typeof milestones.$inferSelect;
 type CriterionRow = typeof milestoneCriteria.$inferSelect;
@@ -85,6 +86,7 @@ export class MilestonesService {
     @Inject(DATABASE) private readonly db: Database,
     private readonly access: ProjectAccessService,
     private readonly events: EventRecorder,
+    private readonly readiness: MilestoneReadinessService,
   ) {}
 
   /** By stage (Active, Client review, Planned, Delivered), then due date (undated last), then name. */
@@ -178,6 +180,7 @@ export class MilestonesService {
           })),
         );
       }
+      if (moving) await this.readiness.sync(tx, actor, project, [milestone.id]);
       return updated!;
     });
     return (await this.hydrate([row]))[0]!;
@@ -190,53 +193,64 @@ export class MilestonesService {
 
   /** Appends a criterion to the end of the milestone's checklist. */
   async addCriterion(
-    userId: string,
+    actor: Actor,
     milestoneId: string,
     input: CreateMilestoneCriterionInput,
   ): Promise<Milestone> {
-    const { milestone } = await this.requireMilestone(userId, milestoneId, {
+    const { milestone, project } = await this.requireMilestone(actor.id, milestoneId, {
       manage: true,
       write: true,
     });
-    const [last] = await this.db
-      .select({ position: milestoneCriteria.position })
-      .from(milestoneCriteria)
-      .where(eq(milestoneCriteria.milestoneId, milestone.id))
-      .orderBy(sql`${milestoneCriteria.position} desc`)
-      .limit(1);
-    await this.db.insert(milestoneCriteria).values({
-      milestoneId: milestone.id,
-      text: input.text,
-      position: (last?.position ?? -1) + 1,
+    await this.db.transaction(async (tx) => {
+      const [last] = await tx
+        .select({ position: milestoneCriteria.position })
+        .from(milestoneCriteria)
+        .where(eq(milestoneCriteria.milestoneId, milestone.id))
+        .orderBy(sql`${milestoneCriteria.position} desc`)
+        .limit(1);
+      await tx.insert(milestoneCriteria).values({
+        milestoneId: milestone.id,
+        text: input.text,
+        position: (last?.position ?? -1) + 1,
+      });
+      await this.readiness.sync(tx, actor, project, [milestone.id]);
     });
     return (await this.hydrate([milestone]))[0]!;
   }
 
   /** Edits the text and/or checks or unchecks a criterion, recording who checked it. */
   async updateCriterion(
-    userId: string,
+    actor: Actor,
     criterionId: string,
     input: UpdateMilestoneCriterionInput,
   ): Promise<Milestone> {
-    const { criterion, milestone } = await this.requireCriterion(userId, criterionId);
+    const { criterion, milestone, project } = await this.requireCriterion(actor.id, criterionId);
     const checking = input.done === true && criterion.doneAt === null;
     const unchecking = input.done === false && criterion.doneAt !== null;
     if (input.text !== undefined || checking || unchecking) {
-      await this.db
-        .update(milestoneCriteria)
-        .set({
-          text: input.text,
-          ...(checking ? { doneAt: new Date(), doneBy: userId } : {}),
-          ...(unchecking ? { doneAt: null, doneBy: null } : {}),
-        })
-        .where(eq(milestoneCriteria.id, criterion.id));
+      await this.db.transaction(async (tx) => {
+        await tx
+          .update(milestoneCriteria)
+          .set({
+            text: input.text,
+            ...(checking ? { doneAt: new Date(), doneBy: actor.id } : {}),
+            ...(unchecking ? { doneAt: null, doneBy: null } : {}),
+          })
+          .where(eq(milestoneCriteria.id, criterion.id));
+        if (checking || unchecking) {
+          await this.readiness.sync(tx, actor, project, [milestone.id]);
+        }
+      });
     }
     return (await this.hydrate([milestone]))[0]!;
   }
 
-  async removeCriterion(userId: string, criterionId: string): Promise<Milestone> {
-    const { criterion, milestone } = await this.requireCriterion(userId, criterionId);
-    await this.db.delete(milestoneCriteria).where(eq(milestoneCriteria.id, criterion.id));
+  async removeCriterion(actor: Actor, criterionId: string): Promise<Milestone> {
+    const { criterion, milestone, project } = await this.requireCriterion(actor.id, criterionId);
+    await this.db.transaction(async (tx) => {
+      await tx.delete(milestoneCriteria).where(eq(milestoneCriteria.id, criterion.id));
+      await this.readiness.sync(tx, actor, project, [milestone.id]);
+    });
     return (await this.hydrate([milestone]))[0]!;
   }
 
@@ -292,11 +306,11 @@ export class MilestonesService {
       : [];
     if (!criterion) throw AppException.notFound('Criterion not found.');
     try {
-      const { milestone } = await this.requireMilestone(userId, criterion.milestoneId, {
+      const { milestone, project } = await this.requireMilestone(userId, criterion.milestoneId, {
         manage: true,
         write: true,
       });
-      return { criterion, milestone };
+      return { criterion, milestone, project };
     } catch (err) {
       if (err instanceof AppException && err.getStatus() === HttpStatus.NOT_FOUND) {
         throw AppException.notFound('Criterion not found.');

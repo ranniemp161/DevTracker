@@ -54,6 +54,7 @@ import { AppException } from '../common/errors/app.exception';
 import { decodeCursor, encodeCursor, Paginated } from '../common/http/paginated';
 import { DATABASE } from '../database/database.module';
 import { EventRecorder, type Actor } from '../events/event-recorder.service';
+import { MilestoneReadinessService } from '../milestones/milestone-readiness.service';
 import { ProjectAccessService, type ProjectRow } from '../projects/project-access.service';
 import { WorkspaceAccessService } from '../workspaces/workspace-access.service';
 import { TaskAccessService, type TaskRow } from './task-access.service';
@@ -97,6 +98,7 @@ export class TasksService {
     private readonly events: EventRecorder,
     private readonly workspaceAccess: WorkspaceAccessService,
     private readonly donePrompts: TaskDonePrompts,
+    private readonly milestoneReadiness: MilestoneReadinessService,
   ) {}
 
   /**
@@ -163,6 +165,9 @@ export class TasksService {
         event: { type: 'task.created', payload: { taskId: task!.id, status } },
       });
       await this.notifyAssigned(tx, actor, project, task!, assigneeIds);
+      if (milestoneId) {
+        await this.milestoneReadiness.sync(tx, actor, project, [milestoneId]);
+      }
       return task!.id;
     });
     return (await this.load([taskId], project.key))[0]!;
@@ -427,6 +432,12 @@ export class TasksService {
             promptResolution,
           );
         }
+        if (changes.status !== undefined || changes.milestone !== undefined) {
+          await this.milestoneReadiness.sync(tx, actor, access.project, [
+            task.milestoneId,
+            nextMilestone?.id,
+          ]);
+        }
       });
     }
     return (await this.load([task.id], access.project.key))[0]!;
@@ -539,6 +550,14 @@ export class TasksService {
           });
         }
       }
+      if (input.status !== undefined) {
+        await this.milestoneReadiness.sync(
+          tx,
+          actor,
+          project,
+          rows.map((t) => t.milestoneId),
+        );
+      }
     });
     return { tasks: await this.load(input.taskIds, project.key) };
   }
@@ -558,6 +577,9 @@ export class TasksService {
         metadata: { key: taskKey(access.project, task), title: task.title },
         event: { type: 'task.deleted', payload: { taskId: task.id } },
       });
+      if (task.milestoneId) {
+        await this.milestoneReadiness.sync(tx, actor, access.project, [task.milestoneId]);
+      }
     });
   }
 
@@ -633,6 +655,7 @@ export class TasksService {
         metadata: { key: taskKey(project, task), changes },
         event: { type: 'task.updated', payload: { taskId: task.id, changes } },
       });
+      await this.milestoneReadiness.sync(tx, actor, project, [task.milestoneId, milestone?.id]);
     }
     await this.assign(tx, actor, project, task, assigneeIds);
   }

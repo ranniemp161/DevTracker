@@ -81,6 +81,7 @@ export const NOTIFICATION_TYPES = [
   'TASK_DONE_PROMPT',
   'REQUEST_TRIAGED',
   'TASK_BLOCKED',
+  'MILESTONE_READY',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 

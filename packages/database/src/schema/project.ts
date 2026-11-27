@@ -285,6 +285,8 @@ export const milestones = pgTable(
     startedAt: timestamptz('started_at'),
     /** Entry into Delivered; cleared when it leaves Delivered. */
     deliveredAt: timestamptz('delivered_at'),
+    /** When MILESTONE_READY was sent; cleared whenever the milestone stops being ready (0025 §4). */
+    readyNotifiedAt: timestamptz('ready_notified_at'),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
     updatedAt: timestamptz('updated_at')
       .notNull()

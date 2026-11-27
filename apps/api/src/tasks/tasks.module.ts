@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { MilestonesModule } from '../milestones/milestones.module';
 import { ProjectsModule } from '../projects/projects.module';
 import { RateLimitModule } from '../rate-limit/rate-limit.module';
 import { WorkspacesModule } from '../workspaces/workspaces.module';
@@ -15,7 +16,7 @@ import { TasksController } from './tasks.controller';
 import { TasksService } from './tasks.service';
 
 @Module({
-  imports: [ProjectsModule, RateLimitModule, WorkspacesModule],
+  imports: [ProjectsModule, MilestonesModule, RateLimitModule, WorkspacesModule],
   controllers: [
     TasksController,
     TaskAttachmentsController,

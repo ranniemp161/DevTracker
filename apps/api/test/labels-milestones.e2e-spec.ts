@@ -300,3 +300,88 @@ describe('added after start (0025 §3)', () => {
     expect(await flagged(extra.id)).toBe(false);
   });
 });
+
+describe('milestone readiness notification (0025 §4)', () => {
+  it('notifies responsible people once per readiness transition across task and criterion changes', async () => {
+    const f = await projectFixture(t);
+    const readyNotices = async (who: typeof f.admin) =>
+      (
+        (await who.browser.get('/api/v1/notifications').expect(200)).body.data as {
+          type: string;
+          title: string;
+          link: string | null;
+        }[]
+      ).filter((n) => n.type === 'MILESTONE_READY');
+
+    const mId = (
+      await f.admin.browser
+        .post(`/api/v1/projects/${f.project}/milestones`)
+        .send({ name: 'v1.4', status: 'ACTIVE' })
+        .expect(201)
+    ).body.data.milestone.id as string;
+
+    const cId = (
+      await f.admin.browser
+        .post(`/api/v1/milestones/${mId}/criteria`)
+        .send({ text: 'QA signed off' })
+        .expect(201)
+    ).body.data.milestone.criteria[0].id as string;
+
+    const t1 = (
+      await f.dev.browser
+        .post(`/api/v1/projects/${f.project}/tasks`)
+        .send({ title: 'Build feature', milestoneId: mId })
+        .expect(201)
+    ).body.data.task.id as string;
+    const t2 = (
+      await f.dev.browser
+        .post(`/api/v1/projects/${f.project}/tasks`)
+        .send({ title: 'Write docs', milestoneId: mId })
+        .expect(201)
+    ).body.data.task.id as string;
+
+    // Tasks done, but criterion is still unticked -> no notification yet.
+    await f.dev.browser
+      .patch(`/api/v1/projects/${f.project}/tasks/bulk`)
+      .send({ taskIds: [t1, t2], status: 'DONE' })
+      .expect(200);
+    expect(await readyNotices(f.admin)).toHaveLength(0);
+
+    // Ticking the last criterion makes it ready; dev isn't a lead/admin, so admin (responsible) is notified.
+    await f.admin.browser
+      .patch(`/api/v1/milestone-criteria/${cId}`)
+      .send({ done: true })
+      .expect(200);
+    // Re-save when f.admin ticked it: EventRecorder.notify skips the actor, so let's verify when dev triggers it!
+    // Wait: admin ticked the criterion, so admin is the actor -> skipped by EventRecorder.notify.
+    expect(await readyNotices(f.admin)).toHaveLength(0);
+
+    // Reopen t1 (makes it un-ready), then dev marks t1 Done -> admin gets notified!
+    await f.dev.browser.patch(`/api/v1/tasks/${t1}`).send({ status: 'IN_PROGRESS' }).expect(200);
+    await f.dev.browser.patch(`/api/v1/tasks/${t1}`).send({ status: 'DONE' }).expect(200);
+    expect(await readyNotices(f.admin)).toEqual([
+      expect.objectContaining({
+        type: 'MILESTONE_READY',
+        title: 'Milestone "v1.4" is ready for Client review in DEV',
+        link: `/projects/${f.project}/milestones`,
+      }),
+    ]);
+
+    // Adding an extra Done task while already ready does not send a duplicate notification.
+    await f.dev.browser
+      .post(`/api/v1/projects/${f.project}/tasks`)
+      .send({ title: 'Bonus fix', milestoneId: mId, status: 'DONE' })
+      .expect(201);
+    expect(await readyNotices(f.admin)).toHaveLength(1);
+
+    // Adding an open task makes it un-ready; removing that task makes it ready again -> notifies a second time.
+    const extra = (
+      await f.dev.browser
+        .post(`/api/v1/projects/${f.project}/tasks`)
+        .send({ title: 'Follow-up', milestoneId: mId })
+        .expect(201)
+    ).body.data.task.id as string;
+    await f.dev.browser.patch(`/api/v1/tasks/${extra}`).send({ milestoneId: null }).expect(200);
+    expect(await readyNotices(f.admin)).toHaveLength(2);
+  });
+});
