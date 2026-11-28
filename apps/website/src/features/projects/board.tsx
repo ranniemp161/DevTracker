@@ -520,6 +520,7 @@ const PROPOSAL_KINDS: { value: RequestKind; label: string }[] = [
  * (0023 §3) it also takes a type and a description, and goes to Triage as a Backlog task.
  */
 const UNSCHEDULED = 'unscheduled';
+const NEW_MILESTONE = 'new';
 
 function ColumnQuickAdd({
   status,
@@ -538,15 +539,28 @@ function ColumnQuickAdd({
   const [kind, setKind] = useState<RequestKind>('bug');
   const [description, setDescription] = useState('');
   const { project } = useProject();
-  // 0024 §4: with triage required, leads and admins triage as they create, so they choose a
-  // milestone or Unscheduled. Members propose instead, and the triager chooses.
-  const schedule = project.internalTriage && !propose;
+  // 0024 §4: with triage required, leads and admins triage as they create, so they must choose
+  // a milestone or Unscheduled. With triage off the choice is optional (0029 §3). Members who
+  // propose see no picker: the triager chooses.
+  const schedule = !propose;
+  const mustChoose = project.internalTriage && !propose;
+  // Leads and admins manage milestones (0023 §2), so they can create one on the spot (0029 §3).
+  const canCreateMilestone = project.viewerCanManage;
   const milestonesQuery = useApiQuery<Milestone[]>(
     schedule ? `/projects/${project.id}/milestones` : null,
   );
+  // A milestone made here before the task failed; kept so a retry doesn't make a second one.
+  const [madeHere, setMadeHere] = useState<Milestone | null>(null);
   // Delivered milestones take no new tasks (0025 §2).
-  const openMilestones = (milestonesQuery.data ?? []).filter((m) => m.status !== 'DELIVERED');
-  const [milestone, setMilestone] = useState('');
+  const openMilestones = [
+    ...(madeHere && !milestonesQuery.data?.some((m) => m.id === madeHere.id) ? [madeHere] : []),
+    ...(milestonesQuery.data ?? []),
+  ].filter((m) => m.status !== 'DELIVERED');
+  const [milestone, setMilestone] = useState(mustChoose ? '' : UNSCHEDULED);
+  const [newMilestoneName, setNewMilestoneName] = useState('');
+  const choiceReady =
+    !schedule ||
+    (milestone !== '' && (milestone !== NEW_MILESTONE || newMilestoneName.trim().length > 0));
   const draftKey = `devtrack_task_draft_${project.id}`;
   const input = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState(() => {
@@ -574,7 +588,7 @@ function ColumnQuickAdd({
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!title.trim() || (schedule && !milestone)) return;
+    if (!title.trim() || !choiceReady) return;
     setPending(true);
     setError(null);
     try {
@@ -585,11 +599,21 @@ function ColumnQuickAdd({
         });
         ({ task } = await api<{ task: Task }>(`/tasks/${created.task.id}`));
       } else {
-        const milestoneId = schedule && milestone !== UNSCHEDULED ? milestone : undefined;
+        let milestoneId = schedule && milestone !== UNSCHEDULED ? milestone : undefined;
+        if (milestone === NEW_MILESTONE) {
+          const created = await api<{ milestone: Milestone }>(
+            `/projects/${project.id}/milestones`,
+            { body: { name: newMilestoneName.trim() } },
+          );
+          setMadeHere(created.milestone);
+          setMilestone(created.milestone.id);
+          setNewMilestoneName('');
+          milestoneId = created.milestone.id;
+        }
         ({ task } = await api<{ task: Task }>(`/projects/${project.id}/tasks`, {
           body: {
             title,
-            ...(schedule && statusFromMilestone ? {} : { status }),
+            ...(mustChoose && statusFromMilestone ? {} : { status }),
             ...(milestoneId ? { milestoneId } : {}),
           },
         }));
@@ -651,19 +675,40 @@ function ColumnQuickAdd({
             onChange={(e) => setMilestone(e.target.value)}
             className="h-8 w-full rounded-control border pointer-coarse:h-11 border-line-control bg-surface px-2 text-sm text-fg focus-visible:border-primary"
           >
-            <option value="" disabled>
-              {milestonesQuery.data || milestonesQuery.error
-                ? 'Milestone or Unscheduled…'
-                : 'Loading milestones…'}
-            </option>
+            {mustChoose ? (
+              <option value="" disabled>
+                {milestonesQuery.data || milestonesQuery.error
+                  ? 'Milestone or Unscheduled…'
+                  : 'Loading milestones…'}
+              </option>
+            ) : null}
             {openMilestones.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.name} · {MILESTONE_STAGE_LABEL[m.status]}
               </option>
             ))}
-            <option value={UNSCHEDULED}>Unscheduled</option>
+            {canCreateMilestone ? <option value={NEW_MILESTONE}>New milestone…</option> : null}
+            <option value={UNSCHEDULED}>{mustChoose ? 'Unscheduled' : 'No milestone'}</option>
           </select>
-          {statusFromMilestone && milestone ? (
+          {milestone === NEW_MILESTONE ? (
+            <>
+              <label className="sr-only" htmlFor={`quick-add-${status}-milestone-name`}>
+                New milestone name
+              </label>
+              <input
+                id={`quick-add-${status}-milestone-name`}
+                value={newMilestoneName}
+                onChange={(e) => setNewMilestoneName(e.target.value)}
+                placeholder="New milestone name"
+                maxLength={100}
+                className="h-8 w-full rounded-control border pointer-coarse:h-11 border-line-control bg-surface px-2.5 text-sm placeholder:text-fg-subtle focus-visible:border-primary"
+              />
+              <p className="text-xs text-fg-muted">
+                Starts as Planned. Add a due date and acceptance criteria on the Milestones page.
+              </p>
+            </>
+          ) : null}
+          {mustChoose && statusFromMilestone && milestone ? (
             <p className="text-xs text-fg-muted">
               {milestone === UNSCHEDULED ? 'Goes to Backlog.' : 'Goes to To do.'}
             </p>
@@ -684,7 +729,7 @@ function ColumnQuickAdd({
           variant="primary"
           size="sm"
           loading={pending}
-          disabled={!title.trim() || (schedule && !milestone)}
+          disabled={!title.trim() || !choiceReady}
         >
           {propose ? (pending ? 'Sending…' : 'Propose') : pending ? 'Adding…' : 'Add task'}
         </Button>

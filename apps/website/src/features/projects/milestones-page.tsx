@@ -1,6 +1,6 @@
 'use client';
 
-import { MILESTONE_STAGES, type Milestone, type MilestoneStatus } from '@devtrack/types';
+import { MILESTONE_STAGES, type Milestone, type MilestoneStatus, type Task } from '@devtrack/types';
 import { createMilestoneSchema } from '@devtrack/validators';
 import { useEffect, useState } from 'react';
 import { FlagIcon, PlusIcon } from '@/components/icons';
@@ -12,12 +12,22 @@ import { formatDate, isReadyForReview, MILESTONE_STAGE_LABEL } from './labels';
 import { MilestoneCriteria, MilestoneProgress } from './milestone-criteria';
 import { MilestoneReleases } from './milestone-releases';
 import { MilestoneSignoff } from './milestone-signoff';
+import { MilestoneTasks } from './milestone-tasks';
 import { useProject } from './project-context';
+import { useProjectTasks } from './use-project-tasks';
 
 export function MilestonesPage() {
   const { project, readOnly } = useProject();
   const canManage = project.viewerCanManage && !readOnly;
   const milestones = useApiQuery<Milestone[]>(`/projects/${project.id}/milestones`);
+  // 0029 §4: each milestone lists its open tasks; shares the board's cache.
+  const { tasks, setTasks } = useProjectTasks(project.id);
+  // Anyone who creates tasks directly can add them to a milestone; proposers go through Triage.
+  const canAddTasks = !readOnly && !project.viewerMustPropose;
+  function taskAdded(task: Task) {
+    setTasks((current) => [task, ...(current ?? [])]);
+    milestones.reload();
+  }
 
   return (
     <div className="space-y-7">
@@ -31,6 +41,9 @@ export function MilestonesPage() {
           empty={section.empty}
           canManage={canManage}
           onChanged={milestones.reload}
+          tasks={tasks}
+          canAddTasks={canAddTasks}
+          onTaskAdded={taskAdded}
         />
       ))}
     </div>
@@ -58,13 +71,14 @@ function MilestoneSection({
   empty,
   canManage,
   onChanged,
+  ...taskProps
 }: {
   title: string;
   items: Milestone[];
   empty: string;
   canManage: boolean;
   onChanged: () => void;
-}) {
+} & TaskProps) {
   return (
     <section aria-label={title} className="space-y-3">
       <h2 className="text-md font-semibold text-fg">
@@ -75,7 +89,13 @@ function MilestoneSection({
       ) : (
         <ul className="space-y-3">
           {items.map((m) => (
-            <MilestoneRow key={m.id} milestone={m} canManage={canManage} onChanged={onChanged} />
+            <MilestoneRow
+              key={m.id}
+              milestone={m}
+              canManage={canManage}
+              onChanged={onChanged}
+              {...taskProps}
+            />
           ))}
         </ul>
       )}
@@ -83,15 +103,24 @@ function MilestoneSection({
   );
 }
 
+interface TaskProps {
+  tasks: Task[] | null;
+  canAddTasks: boolean;
+  onTaskAdded: (task: Task) => void;
+}
+
 function MilestoneRow({
   milestone: m,
   canManage,
   onChanged,
+  tasks,
+  canAddTasks,
+  onTaskAdded,
 }: {
   milestone: Milestone;
   canManage: boolean;
   onChanged: () => void;
-}) {
+} & TaskProps) {
   const { project } = useProject();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -225,6 +254,13 @@ function MilestoneRow({
           </div>
         ) : null}
         <MilestoneProgress milestone={m} projectId={project.id} />
+        <MilestoneTasks
+          milestone={m}
+          projectId={project.id}
+          tasks={tasks}
+          canAdd={canAddTasks}
+          onAdded={onTaskAdded}
+        />
         <MilestoneCriteria milestone={m} canManage={canManage} onChanged={onChanged} />
         <MilestoneReleases milestone={m} canManage={canManage} onChanged={onChanged} />
         <MilestoneSignoff milestone={m} canManage={canManage} />

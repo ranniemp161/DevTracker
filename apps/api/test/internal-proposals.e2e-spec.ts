@@ -413,3 +413,50 @@ describe('creating directly when triage is required (0024 §4)', () => {
     expect(await statusOf(owner, project, {})).toBe('TODO');
   });
 });
+
+describe('planning a delivery in one place (0029)', () => {
+  it('a lead makes a milestone and adds its tasks; members propose; Delivered takes none', async () => {
+    const { owner, lead, dev, project } = await setup();
+    await makeLead(owner, project, lead);
+
+    // §3: New milestone… then the task in it, from New task (no status sent).
+    const v1 = (
+      await lead.browser
+        .post(`/api/v1/projects/${project}/milestones`)
+        .send({ name: 'v1 Checkout' })
+        .expect(201)
+    ).body.data.milestone;
+    expect(v1.status).toBe('PLANNED');
+    const task = (
+      await lead.browser
+        .post(`/api/v1/projects/${project}/tasks`)
+        .send({ title: 'Cart page', milestoneId: v1.id })
+        .expect(201)
+    ).body.data.task;
+    expect(task).toMatchObject({ status: 'TODO', milestoneId: v1.id });
+
+    // §4: members who must propose can't add to a milestone directly.
+    const refused = await dev.browser
+      .post(`/api/v1/projects/${project}/tasks`)
+      .send({ title: 'Sneaky', milestoneId: v1.id })
+      .expect(403);
+    expect(refused.body.error.code).toBe('PROPOSAL_REQUIRED');
+
+    // With triage off, members add tasks to a milestone too.
+    await setInternalTriage(owner, project, false);
+    await dev.browser
+      .post(`/api/v1/projects/${project}/tasks`)
+      .send({ title: 'Receipt email', milestoneId: v1.id })
+      .expect(201);
+
+    // Delivered milestones take no tasks (0025 §2).
+    await lead.browser
+      .patch(`/api/v1/milestones/${v1.id}`)
+      .send({ status: 'DELIVERED' })
+      .expect(200);
+    await lead.browser
+      .post(`/api/v1/projects/${project}/tasks`)
+      .send({ title: 'Too late', milestoneId: v1.id })
+      .expect(400);
+  });
+});
