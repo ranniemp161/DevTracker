@@ -1,6 +1,6 @@
 # 0030 — The milestone as a brief: plan deliveries milestone first
 
-- **Status:** Accepted (user answers, 2026-11-28); steps 1–2 built
+- **Status:** Accepted (user answers, 2026-11-28); built (steps 1–3)
 - **Date:** 2026-11-28
 - **Scope:** Give each milestone its own page (goal, description, files, acceptance criteria, tasks with assignees), make New task ask "which delivery?", and show the milestone on the task page
 - **Builds on:** [0003](0003-projects-and-tasks.md) §10 (milestones), [0018](0018-task-checklist.md) (task checklists), [0022](0022-request-attachments.md) and task attachments (uploads to R2), [0024](0024-triage-gate-and-milestone-scheduling.md) (milestone or Unscheduled; milestones stay optional), [0025](0025-milestone-stages-and-scope.md) (stages, added after start), [0028](0028-client-updates-and-sign-off.md) (sign-off page), [0029](0029-plan-deliveries-in-one-place.md) (tasks from a milestone)
