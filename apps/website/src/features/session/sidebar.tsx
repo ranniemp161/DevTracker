@@ -308,9 +308,9 @@ function ProjectSubNav({
   const base = `/projects/${project.id}`;
   const items = [
     { href: base, label: 'Board', icon: <BoardIcon size={16} />, filtered: true },
+    { href: `${base}/milestones`, label: 'Milestones', icon: <FlagIcon size={16} /> },
     { href: `${base}/list`, label: 'List', icon: <ListIcon size={16} />, filtered: true },
     { href: `${base}/chat`, label: 'Chat', icon: <ChatIcon size={16} />, count: unread },
-    { href: `${base}/milestones`, label: 'Milestones', icon: <FlagIcon size={16} /> },
     { href: `${base}/timesheet`, label: 'Timesheet', icon: <CalendarIcon size={16} /> },
     { href: `${base}/activity`, label: 'Activity', icon: <ActivityIcon size={16} /> },
     // Request form triage (0016); hidden on archived projects and from members who don't triage (0023 §4).
@@ -332,10 +332,11 @@ function ProjectSubNav({
 
   const isActive = (href: string) =>
     href === base ? pathname === base : pathname.startsWith(href);
-  // Board, List and Chat stay in view; Triage joins them while requests wait.
+  // Board, Milestones, List and Chat stay in view; Triage joins them while requests wait.
   const primary = items.filter(
     (i) =>
       i.label === 'Board' ||
+      i.label === 'Milestones' ||
       i.label === 'List' ||
       i.label === 'Chat' ||
       (i.label === 'Triage' && (i.count ?? 0) > 0),

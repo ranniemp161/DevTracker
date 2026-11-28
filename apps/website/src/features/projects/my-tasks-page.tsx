@@ -11,6 +11,7 @@ import { useApiQuery } from '@/lib/use-api-query';
 import { useWorkspace } from '../workspaces/workspace-context';
 import { formatDate, TASK_STATUS_LABEL } from './labels';
 import { DUE_GROUP_LABEL, groupByDue, localDate } from './my-tasks-groups';
+import { TaskMilestoneTag } from './task-milestone-tag';
 import { TaskStatusMenu } from './task-status-menu';
 import { TaskLink } from '@/components/task-link';
 
@@ -113,7 +114,12 @@ export function MyTasksPage() {
                   >
                     {t.title}
                   </TaskLink>
-                  <span className="text-label text-fg-muted">{t.project.name}</span>
+                  <span className="inline-flex items-center gap-1.5 text-label text-fg-muted">
+                    <span>{t.project.name}</span>
+                    {t.milestoneId ? (
+                      <TaskMilestoneTag projectId={t.project.id} milestoneId={t.milestoneId} />
+                    ) : null}
+                  </span>
                   <PriorityIcon priority={t.priority} />
                   <span
                     className={`text-label whitespace-nowrap ${group === 'overdue' ? 'text-danger' : 'text-fg-muted'}`}
