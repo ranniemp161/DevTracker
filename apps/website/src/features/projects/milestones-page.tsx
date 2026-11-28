@@ -1,37 +1,33 @@
 'use client';
 
-import { MILESTONE_STAGES, type Milestone, type MilestoneStatus, type Task } from '@devtrack/types';
+import type { Milestone, MilestoneStatus } from '@devtrack/types';
 import { createMilestoneSchema } from '@devtrack/validators';
-import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { FlagIcon, PlusIcon } from '@/components/icons';
 import { Alert, Badge, Button, EmptyState, Field, SubmitButton } from '@/components/ui';
-import { api, ApiError } from '@/lib/api';
+import { api } from '@/lib/api';
 import { useApiQuery } from '@/lib/use-api-query';
 import { useAuthForm, withoutBlanks } from '../auth/use-auth-form';
-import { formatDate, isReadyForReview, MILESTONE_STAGE_LABEL } from './labels';
-import { MilestoneCriteria, MilestoneProgress } from './milestone-criteria';
-import { MilestoneReleases } from './milestone-releases';
-import { MilestoneSignoff } from './milestone-signoff';
-import { MilestoneTasks } from './milestone-tasks';
+import {
+  dueLabel,
+  dueTone,
+  isReadyForReview,
+  MILESTONE_STAGE_LABEL,
+  MILESTONE_STAGE_TONE,
+} from './labels';
+import { MilestoneProgress } from './milestone-criteria';
 import { useProject } from './project-context';
-import { useProjectTasks } from './use-project-tasks';
 
 export function MilestonesPage() {
   const { project, readOnly } = useProject();
   const canManage = project.viewerCanManage && !readOnly;
   const milestones = useApiQuery<Milestone[]>(`/projects/${project.id}/milestones`);
-  // 0029 §4: each milestone lists its open tasks; shares the board's cache.
-  const { tasks, setTasks } = useProjectTasks(project.id);
-  // Anyone who creates tasks directly can add them to a milestone; proposers go through Triage.
-  const canAddTasks = !readOnly && !project.viewerMustPropose;
-  function taskAdded(task: Task) {
-    setTasks((current) => [task, ...(current ?? [])]);
-    milestones.reload();
-  }
 
   return (
     <div className="space-y-7">
-      {canManage ? <CreateMilestone onCreated={milestones.reload} /> : null}
+      {canManage ? <CreateMilestone /> : null}
       {milestones.error ? <Alert>{milestones.error.message}</Alert> : null}
       {SECTIONS.map((section) => (
         <MilestoneSection
@@ -40,10 +36,6 @@ export function MilestonesPage() {
           items={milestones.data?.filter((m) => m.status === section.stage) ?? []}
           empty={section.empty}
           canManage={canManage}
-          onChanged={milestones.reload}
-          tasks={tasks}
-          canAddTasks={canAddTasks}
-          onTaskAdded={taskAdded}
         />
       ))}
     </div>
@@ -58,27 +50,17 @@ const SECTIONS: { stage: MilestoneStatus; empty: string }[] = [
   { stage: 'DELIVERED', empty: 'Delivered milestones will show up here.' },
 ];
 
-const STAGE_TONE: Record<MilestoneStatus, 'neutral' | 'blue' | 'amber' | 'green'> = {
-  PLANNED: 'neutral',
-  ACTIVE: 'blue',
-  CLIENT_REVIEW: 'amber',
-  DELIVERED: 'green',
-};
-
 function MilestoneSection({
   title,
   items,
   empty,
   canManage,
-  onChanged,
-  ...taskProps
 }: {
   title: string;
   items: Milestone[];
   empty: string;
   canManage: boolean;
-  onChanged: () => void;
-} & TaskProps) {
+}) {
   return (
     <section aria-label={title} className="space-y-3">
       <h2 className="text-md font-semibold text-fg">
@@ -89,13 +71,7 @@ function MilestoneSection({
       ) : (
         <ul className="space-y-3">
           {items.map((m) => (
-            <MilestoneRow
-              key={m.id}
-              milestone={m}
-              canManage={canManage}
-              onChanged={onChanged}
-              {...taskProps}
-            />
+            <MilestoneRow key={m.id} milestone={m} canManage={canManage} />
           ))}
         </ul>
       )}
@@ -103,205 +79,84 @@ function MilestoneSection({
   );
 }
 
-interface TaskProps {
-  tasks: Task[] | null;
-  canAddTasks: boolean;
-  onTaskAdded: (task: Task) => void;
+/** The first line of the Markdown brief, as plain text, for the summary. */
+function excerpt(markdown: string | null) {
+  const line = markdown
+    ?.split('\n')
+    .map((l) => l.replace(/^[#>*\-\s]+|[*_`]/g, '').trim())
+    .find(Boolean);
+  return line ?? null;
 }
 
-function MilestoneRow({
-  milestone: m,
-  canManage,
-  onChanged,
-  tasks,
-  canAddTasks,
-  onTaskAdded,
-}: {
-  milestone: Milestone;
-  canManage: boolean;
-  onChanged: () => void;
-} & TaskProps) {
+/** 0030 §3: a summary that opens the milestone's own page. */
+function MilestoneRow({ milestone: m, canManage }: { milestone: Milestone; canManage: boolean }) {
   const { project } = useProject();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function call(fn: () => Promise<unknown>) {
-    setBusy(true);
-    setError(null);
-    try {
-      await fn();
-      onChanged();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
-      setBusy(false);
-    }
-  }
-
-  const completed = m.status === 'DELIVERED';
-  const ready = isReadyForReview(m);
-  const readyKey = `devtrack:milestone-review-dismissed:${m.id}`;
-  const readyFingerprint = `${m.status}:${m.taskCounts.total}:${m.taskCounts.done}:${m.criteria.map((c) => `${c.id}:${c.done}`).join(',')}`;
-  const [, setDismissTick] = useState(0);
-  useEffect(() => {
-    if (ready) return;
-    try {
-      window.localStorage.removeItem(readyKey);
-    } catch {
-      // Ignore storage errors.
-    }
-  }, [ready, readyKey]);
-
-  function dismissReadyBanner() {
-    try {
-      window.localStorage.setItem(readyKey, readyFingerprint);
-    } catch {
-      // Ignore storage errors.
-    }
-    setDismissTick((n) => n + 1);
-  }
-
-  let dismissedFor: string | null = null;
-  if (typeof window !== 'undefined' && ready) {
-    try {
-      dismissedFor = window.localStorage.getItem(readyKey);
-    } catch {
-      dismissedFor = null;
-    }
-  }
-  const showReadyBanner = canManage && ready && dismissedFor !== readyFingerprint;
+  const delivered = m.status === 'DELIVERED';
+  const met = m.criteria.filter((c) => c.done).length;
+  const summary = excerpt(m.description);
   return (
-    <li className="flex items-start gap-3 rounded-card border border-line bg-surface p-4">
+    <li className="relative flex items-start gap-3 rounded-card border border-line bg-surface p-4 transition-colors hover:border-line-control">
       <FlagIcon
         size={18}
-        className={`mt-1 shrink-0 ${completed ? 'text-status-done' : 'text-fg-subtle'}`}
+        className={`mt-1 shrink-0 ${delivered ? 'text-status-done' : 'text-fg-subtle'}`}
       />
       <div className="min-w-0 flex-1">
-        {/* Name and actions share a row on wide cards; on phones the actions wrap below the name. */}
         <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
           <div className="min-w-0 flex-1 basis-48">
-            <p className={`text-lg font-semibold ${completed ? 'text-fg-muted' : 'text-fg'}`}>
+            {/* The whole card opens the milestone; "View tasks" below sits above the link. */}
+            <Link
+              href={`/projects/${project.id}/milestones/${m.id}`}
+              className={`text-lg font-semibold after:absolute after:inset-0 after:rounded-card hover:underline ${delivered ? 'text-fg-muted' : 'text-fg'}`}
+            >
               {m.name}
+            </Link>
+            {summary ? <p className="mt-0.5 truncate text-sm text-fg-muted">{summary}</p> : null}
+            <p className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-fg-muted">
+              {m.dueDate ? (
+                <span className={dueTone(m.dueDate, delivered)}>
+                  {dueLabel(m.dueDate, delivered)}
+                </span>
+              ) : null}
+              {m.criteria.length > 0 ? (
+                <span>
+                  {met} of {m.criteria.length} criteria met
+                </span>
+              ) : null}
+              {m.clientApproval ? (
+                <span className="text-status-done-fg">Approved by the client</span>
+              ) : null}
             </p>
-            {m.description ? <p className="mt-0.5 text-sm text-fg-muted">{m.description}</p> : null}
-            {m.dueDate ? (
-              <p className={`mt-1.5 text-xs ${dueTone(m.dueDate, completed)}`}>
-                {dueLabel(m.dueDate, completed)}
-              </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {canManage && isReadyForReview(m) ? (
+              <Badge tone="green">Ready for client review</Badge>
             ) : null}
+            <Badge tone={MILESTONE_STAGE_TONE[m.status]}>{MILESTONE_STAGE_LABEL[m.status]}</Badge>
           </div>
-          {canManage ? (
-            <div className="flex shrink-0 items-center gap-2">
-              <label className="sr-only" htmlFor={`stage-${m.id}`}>
-                Stage of {m.name}
-              </label>
-              <select
-                id={`stage-${m.id}`}
-                value={m.status}
-                disabled={busy}
-                onChange={(e) =>
-                  call(() =>
-                    api(`/milestones/${m.id}`, {
-                      method: 'PATCH',
-                      body: { status: e.target.value },
-                    }),
-                  )
-                }
-                className="h-7.5 rounded-control border border-line-control bg-surface px-2 text-label font-medium text-fg focus-visible:border-primary"
-              >
-                {MILESTONE_STAGES.map((stage) => (
-                  <option key={stage} value={stage}>
-                    {MILESTONE_STAGE_LABEL[stage]}
-                  </option>
-                ))}
-              </select>
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={busy}
-                onClick={() => call(() => api(`/milestones/${m.id}`, { method: 'DELETE' }))}
-              >
-                Delete
-              </Button>
-            </div>
-          ) : (
-            <Badge tone={STAGE_TONE[m.status]}>{MILESTONE_STAGE_LABEL[m.status]}</Badge>
-          )}
         </div>
-        {error ? <p className="mt-1 text-sm text-danger">{error}</p> : null}
-        {showReadyBanner ? (
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-control border border-line bg-surface-sunken px-3 py-2 text-sm">
-            <span className="font-medium text-fg">Everything is done. Move to Client review?</span>
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="primary"
-                disabled={busy}
-                onClick={() =>
-                  call(() =>
-                    api(`/milestones/${m.id}`, {
-                      method: 'PATCH',
-                      body: { status: 'CLIENT_REVIEW' },
-                    }),
-                  )
-                }
-              >
-                Move to Client review
-              </Button>
-              <Button size="sm" variant="ghost" disabled={busy} onClick={dismissReadyBanner}>
-                Not yet
-              </Button>
-            </div>
-          </div>
-        ) : null}
-        <MilestoneProgress milestone={m} projectId={project.id} />
-        <MilestoneTasks
-          milestone={m}
-          projectId={project.id}
-          tasks={tasks}
-          canAdd={canAddTasks}
-          onAdded={onTaskAdded}
-        />
-        <MilestoneCriteria milestone={m} canManage={canManage} onChanged={onChanged} />
-        <MilestoneReleases milestone={m} canManage={canManage} onChanged={onChanged} />
-        <MilestoneSignoff milestone={m} canManage={canManage} />
+        <div className="relative">
+          <MilestoneProgress milestone={m} projectId={project.id} />
+        </div>
       </div>
     </li>
   );
 }
 
-/** Calendar-date difference in days between a YYYY-MM-DD string and today (local). */
-function daysUntil(iso: string) {
-  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
-  const target = Date.UTC(y!, m! - 1, d!);
-  const now = new Date();
-  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
-  return Math.round((target - today) / 86_400_000);
-}
-
-function dueTone(iso: string, completed: boolean) {
-  if (completed) return 'text-fg-muted';
-  const days = daysUntil(iso);
-  if (days < 0) return 'font-medium text-danger';
-  if (days <= 2) return 'font-medium text-warning-fg';
-  return 'text-fg-muted';
-}
-
-function dueLabel(iso: string, completed: boolean) {
-  if (!completed && daysUntil(iso) < 0) return `Overdue · ${formatDate(iso)}`;
-  return `Due ${formatDate(iso)}`;
-}
-
-function CreateMilestone({ onCreated }: { onCreated: () => void }) {
+function CreateMilestone() {
   const { project } = useProject();
+  const router = useRouter();
   // Phones start with a button so the milestones themselves are on the first screen.
   const [expanded, setExpanded] = useState(false);
   const form = useAuthForm(
     withoutBlanks(createMilestoneSchema),
     { name: '', description: '', dueDate: '' },
     async (values) => {
-      await api(`/projects/${project.id}/milestones`, { body: values });
-      setExpanded(false);
-      onCreated();
+      // 0030 §3: a new milestone opens on its own page, to write the brief.
+      const { milestone } = await api<{ milestone: Milestone }>(
+        `/projects/${project.id}/milestones`,
+        { body: values },
+      );
+      router.push(`/projects/${project.id}/milestones/${milestone.id}`);
     },
   );
   return (

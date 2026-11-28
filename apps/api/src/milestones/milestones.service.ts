@@ -177,6 +177,12 @@ export class MilestonesService {
     return this.hydrate(rows);
   }
 
+  /** 0030 §5: one milestone, for its page. Outsiders get 404. */
+  async get(userId: string, milestoneId: string): Promise<Milestone> {
+    const { milestone } = await this.requireMilestone(userId, milestoneId, {});
+    return (await this.hydrate([milestone]))[0]!;
+  }
+
   async create(userId: string, projectId: string, input: CreateMilestoneInput): Promise<Milestone> {
     await this.access.require(userId, projectId, { manage: true });
     const [row] = await this.db

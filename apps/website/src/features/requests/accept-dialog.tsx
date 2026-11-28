@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Field, Select } from '@/components/ui';
 import { useApiQuery } from '@/lib/use-api-query';
-import { formatDate, MILESTONE_STAGE_LABEL } from '../projects/labels';
+import { formatDate, MILESTONE_STAGE_LABEL, openMilestones } from '../projects/labels';
 import { useProject } from '../projects/project-context';
 
 /** What the triager chose: an existing milestone, a new one to create first, or Unscheduled. */
@@ -16,18 +16,6 @@ export interface AcceptChoice {
 
 const UNSCHEDULED = 'unscheduled';
 const NEW_MILESTONE = 'new';
-
-/** Milestones that take tasks (not Delivered, 0025 §2), soonest due first, undated last. */
-function openMilestones(milestones: Milestone[]): Milestone[] {
-  return milestones
-    .filter((m) => m.status !== 'DELIVERED')
-    .sort((a, b) => {
-      if (a.dueDate === b.dueDate) return a.name.localeCompare(b.name);
-      if (!a.dueDate) return 1;
-      if (!b.dueDate) return -1;
-      return a.dueDate.localeCompare(b.dueDate);
-    });
-}
 
 /**
  * Accept in Triage (decision record 0024 §3): file the task into a milestone or leave it
