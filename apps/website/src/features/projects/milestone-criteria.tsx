@@ -25,11 +25,11 @@ export function MilestoneProgress({
       <div className="flex items-center justify-between gap-3 text-xs text-fg-muted">
         <span>
           {total === 0 ? 'No tasks yet' : `${done} of ${total} tasks done`}
-          {/* 0025 §3: scope added once the milestone was Active. Real counts only. */}
-          {m.startedAt && total > 0 ? (
+          {/* 0025 §3, 0031 #7: scope added once the milestone was Active, shown only when > 0. */}
+          {m.startedAt && addedAfterStart > 0 ? (
             <>
               {' · '}
-              <span className={addedAfterStart > 0 ? 'font-medium text-warning-fg' : ''}>
+              <span className="font-medium text-warning-fg">
                 {addedAfterStart} of {total} added after start
               </span>
             </>

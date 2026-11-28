@@ -52,7 +52,7 @@ export function ConfirmDialog({
         if (confirmed) onConfirm();
         else onCancel();
       }}
-      className="m-auto max-w-dialog rounded-panel border border-line bg-surface p-5 text-fg shadow-overlay backdrop:bg-fg/40"
+      className="m-auto w-[calc(100%-2rem)] max-w-dialog rounded-panel border border-line bg-surface p-5 text-fg shadow-overlay backdrop:bg-fg/40"
     >
       <h2 id={titleId} className="text-md font-semibold">
         {title}

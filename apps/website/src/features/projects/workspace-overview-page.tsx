@@ -77,7 +77,7 @@ function OverviewRow({ milestone: m }: { milestone: Milestone }) {
     <li className="rounded-card border border-line bg-surface p-4">
       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
         <Link
-          href={`/projects/${m.projectId}/milestones`}
+          href={`/projects/${m.projectId}/milestones/${m.id}`}
           className="min-w-0 flex-1 basis-48 text-md font-semibold text-fg hover:underline"
         >
           {m.name}
@@ -96,10 +96,8 @@ function OverviewRow({ milestone: m }: { milestone: Milestone }) {
           <span>No due date</span>
         )}
         <span>{total === 0 ? 'No tasks yet' : `${done} of ${total} tasks done`}</span>
-        {m.startedAt && total > 0 ? (
-          <span className={addedAfterStart > 0 ? 'font-medium text-warning-fg' : ''}>
-            {addedAfterStart} added after start
-          </span>
+        {m.startedAt && addedAfterStart > 0 ? (
+          <span className="font-medium text-warning-fg">{addedAfterStart} added after start</span>
         ) : null}
         {m.criteria.length > 0 ? (
           <span>
