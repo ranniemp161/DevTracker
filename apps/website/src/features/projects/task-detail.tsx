@@ -170,8 +170,10 @@ function TaskEditor({
     form.dueDate !== (task.dueDate ?? '') ||
     form.milestoneId !== (task.milestoneId ?? '');
   const milestonesQuery = useApiQuery<Milestone[]>(`/projects/${project.id}/milestones`);
+  const milestonesLoaded = milestonesQuery.data !== undefined;
   const milestones = milestonesQuery.data ?? [];
   const milestoneName = milestones.find((m) => m.id === form.milestoneId)?.name;
+  const milestoneLoading = !milestonesLoaded && form.milestoneId !== '';
   // 0030 §4: the card shows the milestone the task is saved in, not an unsaved pick.
   const savedMilestone = milestones.find((m) => m.id === task.milestoneId);
 
@@ -505,14 +507,18 @@ function TaskEditor({
               />
               <Menu
                 label="Milestone"
-                disabled={readOnly}
-                triggerProps={{ 'aria-label': `Milestone: ${milestoneName ?? 'none'}` }}
+                disabled={readOnly || !milestonesLoaded}
+                triggerProps={{
+                  'aria-label': `Milestone: ${milestoneLoading ? 'loading' : (milestoneName ?? 'none')}`,
+                }}
                 triggerClassName={`${chipTrigger} max-w-60 ${milestoneName ? '' : 'text-fg-muted!'}`}
                 menuClassName="w-60"
                 trigger={
                   <>
                     <FlagIcon size={14} className="shrink-0" />
-                    <span className="min-w-0 truncate">{milestoneName ?? 'Milestone'}</span>
+                    <span className="min-w-0 truncate">
+                      {milestoneLoading ? 'Loading…' : (milestoneName ?? 'Milestone')}
+                    </span>
                   </>
                 }
               >
@@ -551,6 +557,8 @@ function TaskEditor({
             </div>
             {savedMilestone ? (
               <TaskMilestoneCard milestone={savedMilestone} projectId={project.id} />
+            ) : task.milestoneId && !milestonesLoaded ? (
+              <Skeleton className="h-24 rounded-card" />
             ) : null}
             <DescriptionField
               value={form.description}
