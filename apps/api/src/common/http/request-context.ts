@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { isIP } from 'node:net';
+import { CLIENT_IP_PATH_PREFIXES } from '@devtrack/types';
 import type { NextFunction, Request, Response } from 'express';
 import type { Session } from '../../auth/sessions.service';
 import type { User } from '../../users/users.service';
@@ -31,8 +32,24 @@ export function requestIdMiddleware(req: Request, res: Response, next: NextFunct
   next();
 }
 
-/** Best-effort client IP (respects the configured `trust proxy` setting). */
+/**
+ * Best-effort client IP (respects the configured `trust proxy` setting).
+ *
+ * Only valid under `CLIENT_IP_PATH_PREFIXES`: the website's proxy forwards the IP on those paths
+ * alone. Elsewhere every user would share the website's IP, so outside production this throws;
+ * add the path to the prefixes and the website's proxy matcher instead.
+ */
 export function clientIp(req: Request): string {
+  const path = req.originalUrl.split('?')[0] ?? '';
+  if (
+    process.env.NODE_ENV !== 'production' &&
+    !CLIENT_IP_PATH_PREFIXES.some((prefix) => path.startsWith(prefix))
+  ) {
+    throw new Error(
+      `clientIp() used on ${path}, where the website proxy does not forward the IP. ` +
+        'Add the path to CLIENT_IP_PATH_PREFIXES and the proxy matcher.',
+    );
+  }
   return req.clientIp ?? req.ip ?? req.socket.remoteAddress ?? 'unknown';
 }
 

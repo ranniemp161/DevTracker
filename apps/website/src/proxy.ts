@@ -23,6 +23,9 @@ export function proxy(request: NextRequest) {
   return NextResponse.next({ request: { headers } });
 }
 
+// Only the paths that read the client IP (`CLIENT_IP_PATH_PREFIXES` in @devtrack/types). Every
+// other /api/v1 request goes through the next.config rewrite alone, which runs no function.
+// Literals, because Next.js analyzes the matcher at build time; proxy.test.ts keeps them in sync.
 export const config = {
-  matcher: '/api/v1/:path*',
+  matcher: ['/api/v1/auth/:path*', '/api/v1/public/:path*'],
 };
