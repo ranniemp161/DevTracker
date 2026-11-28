@@ -13,6 +13,7 @@ import { useAuthForm, withoutBlanks } from '../auth/use-auth-form';
 import {
   dueLabel,
   dueTone,
+  excerpt,
   isReadyForReview,
   MILESTONE_STAGE_LABEL,
   MILESTONE_STAGE_TONE,
@@ -77,16 +78,6 @@ function MilestoneSection({
       )}
     </section>
   );
-}
-
-/** The first line of the Markdown brief that isn't a heading, as plain text, for the summary. */
-function excerpt(markdown: string | null) {
-  const line = markdown
-    ?.split('\n')
-    .filter((l) => !/^\s*#/.test(l))
-    .map((l) => l.replace(/^[>*\-\s]+|[*_`]/g, '').trim())
-    .find(Boolean);
-  return line ?? null;
 }
 
 /** 0030 §3: a summary that opens the milestone's own page. */

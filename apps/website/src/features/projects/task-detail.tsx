@@ -46,6 +46,7 @@ import { TaskTime } from './task-time';
 import { TaskTimeEntries } from './task-time-entries';
 import { TaskAttachments } from './task-attachments';
 import { TaskChecklist } from './task-checklist';
+import { TaskMilestoneCard } from './task-milestone-card';
 import { TaskRelations } from './task-relations';
 import { TaskDonePromptBanner } from './task-done-prompt';
 import { useTaskTimer } from './task-timer';
@@ -170,6 +171,8 @@ function TaskEditor({
   const milestonesQuery = useApiQuery<Milestone[]>(`/projects/${project.id}/milestones`);
   const milestones = milestonesQuery.data ?? [];
   const milestoneName = milestones.find((m) => m.id === form.milestoneId)?.name;
+  // 0030 §4: the card shows the milestone the task is saved in, not an unsaved pick.
+  const savedMilestone = milestones.find((m) => m.id === task.milestoneId);
 
   async function call(fn: () => Promise<unknown>, after?: () => void) {
     setSaving(true);
@@ -545,6 +548,9 @@ function TaskEditor({
                 </span>
               ) : null}
             </div>
+            {savedMilestone ? (
+              <TaskMilestoneCard milestone={savedMilestone} projectId={project.id} />
+            ) : null}
             <DescriptionField
               value={form.description}
               readOnly={readOnly}

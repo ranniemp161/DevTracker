@@ -107,6 +107,21 @@ export function dueLabel(iso: string, delivered: boolean) {
   return `Due ${formatDate(iso)}`;
 }
 
+/**
+ * The opening of a Markdown brief as plain text: its first `lines` lines that aren't headings,
+ * without list and emphasis marks. Null when there's nothing to show.
+ */
+export function excerpt(markdown: string | null, lines = 1): string | null {
+  const text = (markdown ?? '')
+    .split('\n')
+    .filter((l) => !/^\s*#/.test(l))
+    .map((l) => l.replace(/^[>*\-\s]+|[*_`]/g, '').trim())
+    .filter(Boolean)
+    .slice(0, lines)
+    .join(' ');
+  return text || null;
+}
+
 /** Badge tone for a project status (SPEC §2: blue for planning/active, green when completed). */
 export function projectStatusTone(status: ProjectStatus): 'blue' | 'green' | 'neutral' {
   if (status === 'ACTIVE' || status === 'PLANNING') return 'blue';

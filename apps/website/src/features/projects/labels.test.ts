@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { formatDate, formatDuration, formatMinutes } from './labels';
+import { excerpt, formatDate, formatDuration, formatMinutes } from './labels';
+
+describe('excerpt', () => {
+  const brief =
+    '## Goal\n\nLet the client see the **whole brief**.\n\n- Who: leads\n- Scope: tasks';
+
+  it('skips headings and strips list and emphasis marks', () => {
+    expect(excerpt(brief)).toBe('Let the client see the whole brief.');
+    expect(excerpt(brief, 2)).toBe('Let the client see the whole brief. Who: leads');
+  });
+
+  it('returns null when there is nothing but headings or no text', () => {
+    expect(excerpt('# Only a heading')).toBeNull();
+    expect(excerpt(null)).toBeNull();
+  });
+});
 
 describe('formatDuration', () => {
   it('reports anything under a minute as under 1m', () => {

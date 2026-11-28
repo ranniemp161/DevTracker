@@ -118,8 +118,9 @@ export function TaskChecklist({ taskId, onChanged }: { taskId: string; onChanged
   return (
     <section aria-labelledby={headingId} className="space-y-3">
       <div className="flex items-center gap-3">
+        {/* 0030 §4: the milestone is what we promised; this is how I'll do my part. */}
         <h2 id={headingId} className="text-md font-semibold">
-          Checklist
+          Your checklist
         </h2>
         {total > 0 ? (
           <>
