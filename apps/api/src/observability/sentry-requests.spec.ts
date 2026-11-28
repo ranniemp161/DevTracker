@@ -24,7 +24,12 @@ describe('Sentry on Vercel', () => {
     };
     Sentry.init({
       ...sentryOptions({
-        sentry: { dsn: 'https://public@o0.ingest.sentry.io/1', environment: 'test', release: null },
+        // A release is always set in production (the commit SHA); it turns on process sessions.
+        sentry: {
+          dsn: 'https://public@o0.ingest.sentry.io/1',
+          environment: 'test',
+          release: 'test-release',
+        },
       } as AppConfig),
       transport: (options) =>
         Sentry.createTransport(options, async (request) => {
@@ -61,8 +66,14 @@ describe('Sentry on Vercel', () => {
     Sentry.captureException(new Error('boom'));
     await settle();
 
-    expect(sent).toHaveLength(1);
-    expect(sent[0]).toContain('"type":"event"');
-    expect(sent[0]).not.toMatch(/"type":"(sessions|client_report)"/);
+    // Item types of every envelope sent, e.g. [['event']], so a failure shows what leaked.
+    // An envelope is a header line, then an item header line and a payload line per item.
+    const types = sent.map((body) =>
+      body
+        .split('\n')
+        .filter((_line, index) => index % 2 === 1)
+        .map((line) => (JSON.parse(line) as { type: string }).type),
+    );
+    expect(types).toEqual([['event']]);
   });
 });

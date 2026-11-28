@@ -47,9 +47,13 @@ export function sentryOptions(config: AppConfig): Sentry.NodeOptions {
     },
     tracesSampleRate: 0,
     // On Vercel the SDK flushes after every response. With release-health sessions and client
-    // reports on, each flush made a request to Sentry, i.e. one per API request.
+    // reports on, each flush made a request to Sentry, i.e. one per API request. The process
+    // session (started whenever a release is set) would also ride along with every error.
     sendClientReports: false,
-    integrations: [Sentry.httpIntegration({ sessions: false })],
+    integrations: (defaults) => [
+      ...defaults.filter(({ name }) => name !== 'Http' && name !== 'ProcessSession'),
+      Sentry.httpIntegration({ sessions: false }),
+    ],
     beforeSend: scrubEvent,
   };
 }

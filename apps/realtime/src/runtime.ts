@@ -23,20 +23,23 @@ const realtime = await createRealtimeServer({
   throw new Error('Realtime server initialization failed');
 });
 
+/** One JSON line on stdout (info level in the Vercel logs; `no-console` allows only warn/error). */
+const logInfo = (fields: Record<string, unknown>) =>
+  process.stdout.write(`${JSON.stringify(fields)}\n`);
+
 // Instance-level cost signals for the Vercel logs (no user data): how much CPU a new instance
 // spends before it can accept sockets, and whether later connections reuse a warm instance.
-console.log(JSON.stringify({ msg: 'realtime.instance_ready', cpuMs: cpuMs() }));
+
+logInfo({ msg: 'realtime.instance_ready', cpuMs: cpuMs() });
 let connections = 0;
 realtime.io.on('connection', () => {
   connections++;
-  console.log(
-    JSON.stringify({
-      msg: 'realtime.connection',
-      instanceConnections: connections,
-      instanceUptimeS: Math.round(process.uptime()),
-      instanceCpuMs: cpuMs(),
-    }),
-  );
+  logInfo({
+    msg: 'realtime.connection',
+    instanceConnections: connections,
+    instanceUptimeS: Math.round(process.uptime()),
+    instanceCpuMs: cpuMs(),
+  });
 });
 
 export default realtime.server;
