@@ -58,7 +58,9 @@ When a task belongs to a milestone, a **Milestone** card sits above the descript
 - "2 of 4 criteria met", with the criteria listed (read-only);
 - the "Added after start" badge when it applies (0025 §3).
 
-The task's own **checklist** (0018) stays where it is, under a clearer heading: "Your checklist". Changing the task's milestone stays in the task's fields, as today.
+The task's own **checklist** (0018) stays where it is, under a clearer heading: "Your checklist".
+
+The task **description** stays (requests, proposals, sign-off changes and bug details live there, and quick tasks have no brief), but an empty one is a small **+ Add description** button instead of an open editor (user review, 2026-11-28), so the brief and the checklist sit together. Changing the task's milestone stays in the task's fields, as today.
 
 ## 5. Data and API
 

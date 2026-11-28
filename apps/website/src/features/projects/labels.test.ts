@@ -7,7 +7,8 @@ describe('excerpt', () => {
 
   it('skips headings and strips list and emphasis marks', () => {
     expect(excerpt(brief)).toBe('Let the client see the whole brief.');
-    expect(excerpt(brief, 2)).toBe('Let the client see the whole brief. Who: leads');
+    // Lines stay apart, so list items don't run together.
+    expect(excerpt(brief, 2)).toBe('Let the client see the whole brief. · Who: leads');
   });
 
   it('returns null when there is nothing but headings or no text', () => {
