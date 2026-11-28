@@ -118,7 +118,7 @@ export function excerpt(markdown: string | null, lines = 1): string | null {
     .map((l) => l.replace(/^[>*\-\s]+|[*_`]/g, '').trim())
     .filter(Boolean)
     .slice(0, lines)
-    .join(' ');
+    .join(' · ');
   return text || null;
 }
 

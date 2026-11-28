@@ -13,6 +13,7 @@ import {
   FlagIcon,
   LinkIcon,
   MoreIcon,
+  PlusIcon,
   UserPlusIcon,
   XIcon,
 } from '@/components/icons';
@@ -741,10 +742,26 @@ function DescriptionField({
   const empty = value.trim() === '';
 
   if (readOnly) {
-    return empty ? (
-      <p className="text-sm text-fg-subtle">No description.</p>
-    ) : (
-      <Markdown>{value}</Markdown>
+    return empty ? null : <Markdown>{value}</Markdown>;
+  }
+
+  // An empty description is a small button, not an open editor: the milestone's brief and the
+  // checklist often say enough.
+  if (!editing && empty) {
+    return (
+      <button
+        type="button"
+        data-shortcut="edit-description"
+        aria-keyshortcuts="E"
+        onClick={() => {
+          setTab('write');
+          setEditing(true);
+        }}
+        className="inline-flex items-center gap-1.5 self-start rounded-control px-1 py-1 text-label font-medium text-fg-muted hover:text-fg pointer-coarse:min-h-11"
+      >
+        <PlusIcon size={14} />
+        Add description
+      </button>
     );
   }
 
@@ -792,11 +809,9 @@ function DescriptionField({
         />
         <div className="flex items-center gap-2">
           <span className="hidden text-xs text-fg-subtle sm:inline">Markdown supported</span>
-          {!empty ? (
-            <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
-              Done
-            </Button>
-          ) : null}
+          <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
+            Done
+          </Button>
         </div>
       </div>
       {tab === 'write' ? (
