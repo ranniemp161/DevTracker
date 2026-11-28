@@ -1,6 +1,6 @@
 # 0030 — The milestone as a brief: plan deliveries milestone first
 
-- **Status:** Accepted (user answers, 2026-11-28); step 1 built
+- **Status:** Accepted (user answers, 2026-11-28); steps 1–2 built
 - **Date:** 2026-11-28
 - **Scope:** Give each milestone its own page (goal, description, files, acceptance criteria, tasks with assignees), make New task ask "which delivery?", and show the milestone on the task page
 - **Builds on:** [0003](0003-projects-and-tasks.md) §10 (milestones), [0018](0018-task-checklist.md) (task checklists), [0022](0022-request-attachments.md) and task attachments (uploads to R2), [0024](0024-triage-gate-and-milestone-scheduling.md) (milestone or Unscheduled; milestones stay optional), [0025](0025-milestone-stages-and-scope.md) (stages, added after start), [0028](0028-client-updates-and-sign-off.md) (sign-off page), [0029](0029-plan-deliveries-in-one-place.md) (tasks from a milestone)
@@ -64,8 +64,10 @@ The task's own **checklist** (0018) stays where it is, under a clearer heading: 
 
 - **Migration `0035_milestone_attachments`:** a `milestone_attachments` table shaped like `task_attachments` (`id`, `milestone_id` FK cascade, `uploader_id` FK set null, `name`, `content_type`, `size`, `created_at`, `completed_at`). The milestone description limit grows to 20,000 characters (validator only; the column is already `text`).
 - **API:**
-  - `GET /milestones/:id` → one milestone (as in the list, with counts, criteria, releases, approval) plus its attachments. Project access; `404` otherwise.
+  - `GET /milestones/:id` → one milestone (as in the list, with counts, criteria, releases, approval). Project access; `404` otherwise.
+  - `GET /milestones/:id/attachments` → `{ attachments, uploadsEnabled }` (everyone on the project; `uploadsEnabled` only for leads and admins on active projects); `GET …/:attachmentId/content` for Markdown previews.
   - `POST /milestones/:id/attachments` `{ name, contentType, size }` → an upload URL (leads and admins); `POST /milestones/:id/attachments/:attachmentId/complete`; `DELETE /milestones/:id/attachments/:attachmentId`. Same flow, types and checks as task attachments.
+  - Storage: the same R2 keys as task media (`task-media/<id>`, staged under `pending-task-media/`), so the CDN Worker, CORS and the lifecycle rule need no change. Removing a file deletes its object.
   - Tasks: no change. Listing a milestone's tasks uses the existing `GET /projects/:id/tasks` filtered by `milestoneId`; creating uses `POST /projects/:id/tasks { title, milestoneId, assigneeIds }` (check `assigneeIds` is accepted on create; add it if not).
 - **Not shared with the client:** milestone files and the description stay internal. The sign-off page keeps showing only what 0028 §3 lists.
 

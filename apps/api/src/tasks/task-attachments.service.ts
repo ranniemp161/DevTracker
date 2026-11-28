@@ -1,12 +1,5 @@
-import { createHmac, randomUUID } from 'node:crypto';
-import {
-  CopyObjectCommand,
-  GetObjectCommand,
-  HeadObjectCommand,
-  PutObjectCommand,
-} from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import { Inject, Injectable } from '@nestjs/common';
 import {
   and,
   desc,
@@ -21,35 +14,27 @@ import {
   type Database,
   type Transaction,
 } from '@devtrack/database';
-import { ErrorCode, type TaskAttachment } from '@devtrack/types';
+import type { TaskAttachment } from '@devtrack/types';
 import type { CreateTaskAttachmentInput } from '@devtrack/validators';
 import { MAX_REQUEST_MARKDOWN_BYTES } from '@devtrack/validators';
 import { AppException } from '../common/errors/app.exception';
 import { DATABASE } from '../database/database.module';
 import { RateLimitService } from '../rate-limit/rate-limit.service';
-import { r2StorageConfig } from '../storage/r2';
+import { MediaObjects, type PreparedUpload } from '../storage/media-objects';
 import { TaskAccessService } from './task-access.service';
 
-const UPLOAD_SECONDS = 300;
-const READ_SECONDS = 900;
 /** A request form sender has this long to finish uploading the files they declared (0022). */
 const REQUEST_UPLOAD_WINDOW_MS = 15 * 60 * 1000;
-const completedKey = (id: string) => `task-media/${id}`;
-const pendingKey = (id: string) => `pending-task-media/${id}`;
 
 type AttachmentRow = typeof taskAttachments.$inferSelect;
 type FileInput = Pick<CreateTaskAttachmentInput, 'name' | 'contentType' | 'size'>;
-export interface PreparedUpload {
-  id: string;
-  url: string;
-  headers: Record<string, string>;
-}
+export type { PreparedUpload };
 
 const notFound = () => AppException.notFound('Attachment not found.');
 
 @Injectable()
 export class TaskAttachmentsService {
-  private readonly storage = r2StorageConfig();
+  private readonly media = new MediaObjects();
 
   constructor(
     @Inject(DATABASE) private readonly db: Database,
@@ -59,12 +44,12 @@ export class TaskAttachmentsService {
 
   /** Whether media storage is configured at all. */
   get uploadsEnabled(): boolean {
-    return this.storage !== null;
+    return this.media.enabled;
   }
 
   async list(userId: string, taskId: string) {
     const { access } = await this.taskAccess.require(userId, taskId);
-    if (!this.storage) return { attachments: [], uploadsEnabled: false };
+    if (!this.media.enabled) return { attachments: [], uploadsEnabled: false };
     const attachments = (await this.completedFor([taskId])).get(taskId) ?? [];
     return {
       attachments,
@@ -78,7 +63,7 @@ export class TaskAttachmentsService {
    */
   async completedFor(taskIds: string[]): Promise<Map<string, TaskAttachment[]>> {
     const byTask = new Map<string, TaskAttachment[]>();
-    if (!this.storage || taskIds.length === 0) return byTask;
+    if (!this.media.enabled || taskIds.length === 0) return byTask;
     const rows = await this.db
       .select()
       .from(taskAttachments)
@@ -91,7 +76,7 @@ export class TaskAttachmentsService {
         name: row.name,
         contentType: row.contentType,
         size: row.size,
-        url: await this.readUrl(row.id),
+        url: await this.media.readUrl(row.id),
       });
       byTask.set(row.taskId, list);
     }
@@ -100,13 +85,13 @@ export class TaskAttachmentsService {
 
   async prepare(userId: string, taskId: string, input: CreateTaskAttachmentInput) {
     await this.taskAccess.require(userId, taskId, { write: true });
-    this.requireStorage();
+    this.media.require();
     await this.rateLimit.consume(
       { name: 'task-media:user', limit: 30, windowSeconds: 3600 },
       userId,
     );
     const id = randomUUID();
-    const upload = await this.presign(id, input);
+    const upload = await this.media.presign(id, input);
     await this.db.insert(taskAttachments).values({ id, taskId, uploaderId: userId, ...input });
     return upload;
   }
@@ -120,11 +105,11 @@ export class TaskAttachmentsService {
     taskId: string,
     files: readonly FileInput[],
   ): Promise<PreparedUpload[]> {
-    if (!this.storage || files.length === 0) return [];
+    if (!this.media.enabled || files.length === 0) return [];
     const uploads: PreparedUpload[] = [];
     for (const file of files) {
       const id = randomUUID();
-      uploads.push(await this.presign(id, file));
+      uploads.push(await this.media.presign(id, file));
       await tx.insert(taskAttachments).values({
         id,
         taskId,
@@ -178,7 +163,7 @@ export class TaskAttachmentsService {
   /** The text of a completed Markdown attachment, for the rendered preview (0022 §5). */
   async markdown(userId: string, taskId: string, id: string): Promise<{ content: string }> {
     await this.taskAccess.require(userId, taskId);
-    const storage = this.requireStorage();
+    this.media.require();
     const [row] = await this.db
       .select()
       .from(taskAttachments)
@@ -195,103 +180,19 @@ export class TaskAttachmentsService {
         { path: 'id', message: 'Only Markdown files up to 256 KB can be previewed.' },
       ]);
     }
-    const object = await storage.client.send(
-      new GetObjectCommand({ Bucket: storage.bucket, Key: completedKey(id) }),
-    );
-    return { content: (await object.Body?.transformToString('utf-8')) ?? '' };
+    return { content: await this.media.readText(id) };
   }
 
   // ---------------------------------------------------------------- helpers
 
-  private async presign(id: string, file: FileInput): Promise<PreparedUpload> {
-    const storage = this.requireStorage();
-    const headers = { 'Content-Type': file.contentType, 'If-None-Match': '*' };
-    const url = await getSignedUrl(
-      storage.client,
-      new PutObjectCommand({
-        Bucket: storage.bucket,
-        Key: pendingKey(id),
-        ContentType: file.contentType,
-        ContentLength: file.size,
-        IfNoneMatch: '*',
-      }),
-      {
-        expiresIn: UPLOAD_SECONDS,
-        signableHeaders: new Set(['content-type', 'content-length', 'if-none-match']),
-      },
-    );
-    return { id, url, headers };
-  }
-
   /** Checks the staged object against the row, copies it to its final key and publishes it. */
   private async finalize(row: AttachmentRow) {
     if (row.completedAt) return { id: row.id };
-    const storage = this.requireStorage();
-    const source = pendingKey(row.id);
-    const object = await storage.client
-      .send(new HeadObjectCommand({ Bucket: storage.bucket, Key: source }))
-      .catch((error: unknown) => {
-        if (error instanceof Error && error.name === 'NotFound') {
-          throw AppException.validation([
-            { path: 'file', message: 'Upload the file before completing the attachment.' },
-          ]);
-        }
-        throw error;
-      });
-    if (
-      object.ContentLength !== row.size ||
-      object.ContentType !== row.contentType ||
-      !object.ETag
-    ) {
-      throw AppException.validation([
-        { path: 'file', message: 'The uploaded file does not match the attachment.' },
-      ]);
-    }
-
-    await storage.client.send(
-      new CopyObjectCommand({
-        Bucket: storage.bucket,
-        Key: completedKey(row.id),
-        CopySource: `${storage.bucket}/${source}`,
-        CopySourceIfMatch: object.ETag,
-        MetadataDirective: 'REPLACE',
-        ContentType: row.contentType,
-        CacheControl: 'private, no-store',
-      }),
-    );
+    await this.media.publish(row.id, row);
     await this.db
       .update(taskAttachments)
       .set({ completedAt: new Date() })
       .where(and(eq(taskAttachments.id, row.id), isNull(taskAttachments.completedAt)));
     return { id: row.id };
-  }
-
-  private async readUrl(id: string): Promise<string> {
-    const storage = this.requireStorage();
-    const key = completedKey(id);
-    if (storage.cdn) {
-      const expires = Math.floor(Date.now() / 1000) + READ_SECONDS;
-      const signature = createHmac('sha256', storage.cdn.secret)
-        .update(`${key}:${expires}`)
-        .digest('hex');
-      const signed = new URL(`/${key}`, storage.cdn.origin);
-      signed.search = new URLSearchParams({ expires: String(expires), signature }).toString();
-      return signed.href;
-    }
-    return getSignedUrl(
-      storage.client,
-      new GetObjectCommand({ Bucket: storage.bucket, Key: key }),
-      { expiresIn: READ_SECONDS },
-    );
-  }
-
-  private requireStorage() {
-    if (!this.storage)
-      throw new AppException(
-        HttpStatus.SERVICE_UNAVAILABLE,
-        ErrorCode.SERVICE_UNAVAILABLE,
-        'Media uploads are unavailable.',
-      );
-    return this.storage;
   }
 }

@@ -79,11 +79,12 @@ function MilestoneSection({
   );
 }
 
-/** The first line of the Markdown brief, as plain text, for the summary. */
+/** The first line of the Markdown brief that isn't a heading, as plain text, for the summary. */
 function excerpt(markdown: string | null) {
   const line = markdown
     ?.split('\n')
-    .map((l) => l.replace(/^[#>*\-\s]+|[*_`]/g, '').trim())
+    .filter((l) => !/^\s*#/.test(l))
+    .map((l) => l.replace(/^[>*\-\s]+|[*_`]/g, '').trim())
     .find(Boolean);
   return line ?? null;
 }
