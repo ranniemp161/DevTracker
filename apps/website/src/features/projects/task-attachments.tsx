@@ -12,7 +12,7 @@ import { AttachmentGrid } from './attachment-grid';
 import { useProject } from './project-context';
 
 export function TaskAttachments({ taskId }: { taskId: string }) {
-  return <Attachments path={`/tasks/${taskId}/attachments`} />;
+  return <Attachments path={`/tasks/${taskId}/attachments`} collapseWhenEmpty />;
 }
 
 /**
@@ -25,6 +25,7 @@ export function Attachments({
   emptyText = 'No attachments yet.',
   headingClassName = 'text-md font-semibold',
   removable = false,
+  collapseWhenEmpty = false,
 }: {
   path: string;
   title?: string;
@@ -32,6 +33,8 @@ export function Attachments({
   headingClassName?: string;
   /** Lets people who can upload also remove files. */
   removable?: boolean;
+  /** With no files, show only the Attach file button (task page, 0031 #6). */
+  collapseWhenEmpty?: boolean;
 }) {
   const query = useApiQuery<{ attachments: TaskAttachment[]; uploadsEnabled: boolean }>(path);
   const inputId = useId();
@@ -101,37 +104,29 @@ export function Attachments({
 
   const attachments = query.data?.attachments;
 
-  return (
-    <section aria-labelledby={`${inputId}-heading`} className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <h2 id={`${inputId}-heading`} className={headingClassName}>
-          {title}
-          {attachments?.length ? (
-            <span className="ml-1.5 text-sm font-normal text-fg-muted">{attachments.length}</span>
-          ) : null}
-        </h2>
-        {canUpload ? (
-          <div className="flex items-center">
-            {/* The real file input stays focusable; the label is its visible button. */}
-            <input
-              id={inputId}
-              type="file"
-              accept={[...TASK_MEDIA_TYPES, '.md', '.markdown'].join(',')}
-              aria-describedby={`${inputId}-hint`}
-              onChange={upload}
-              disabled={busy}
-              className="peer sr-only"
-            />
-            <label
-              htmlFor={inputId}
-              className="inline-flex h-7.5 cursor-pointer items-center gap-1.5 rounded-control border border-line-control bg-surface px-2.5 text-label font-medium text-fg transition-colors hover:bg-surface-sunken peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-disabled:cursor-default peer-disabled:opacity-60 pointer-coarse:h-11"
-            >
-              {busy ? <SpinnerIcon size={14} /> : <PaperclipIcon size={14} />}
-              {busy ? 'Uploading…' : 'Attach file'}
-            </label>
-          </div>
-        ) : null}
-      </div>
+  // The real file input stays focusable; the label is its visible button.
+  const uploadControl = (
+    <div className="flex items-center">
+      <input
+        id={inputId}
+        type="file"
+        accept={[...TASK_MEDIA_TYPES, '.md', '.markdown'].join(',')}
+        aria-describedby={`${inputId}-hint`}
+        onChange={upload}
+        disabled={busy}
+        className="peer sr-only"
+      />
+      <label
+        htmlFor={inputId}
+        className="inline-flex h-7.5 cursor-pointer items-center gap-1.5 rounded-control border border-line-control bg-surface px-2.5 text-label font-medium text-fg transition-colors hover:bg-surface-sunken peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-disabled:cursor-default peer-disabled:opacity-60 pointer-coarse:h-11"
+      >
+        {busy ? <SpinnerIcon size={14} /> : <PaperclipIcon size={14} />}
+        {busy ? 'Uploading…' : 'Attach file'}
+      </label>
+    </div>
+  );
+  const status = (
+    <>
       <p id={`${inputId}-hint`} className="sr-only">
         PNG, JPEG, GIF, WebP, MP4, WebM, MOV or Markdown (.md, .markdown), up to 50 MiB.
       </p>
@@ -143,6 +138,32 @@ export function Attachments({
           {error}
         </p>
       ) : null}
+    </>
+  );
+
+  // 0031 #6: an empty list collapses to its button (or to nothing for viewers who can't upload).
+  if (collapseWhenEmpty && attachments?.length === 0) {
+    if (!canUpload) return null;
+    return (
+      <div className="space-y-2">
+        {uploadControl}
+        {status}
+      </div>
+    );
+  }
+
+  return (
+    <section aria-labelledby={`${inputId}-heading`} className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <h2 id={`${inputId}-heading`} className={headingClassName}>
+          {title}
+          {attachments?.length ? (
+            <span className="ml-1.5 text-sm font-normal text-fg-muted">{attachments.length}</span>
+          ) : null}
+        </h2>
+        {canUpload ? uploadControl : null}
+      </div>
+      {status}
 
       {query.error ? (
         <p className="text-sm text-fg-muted">
