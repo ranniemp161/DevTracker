@@ -10,18 +10,22 @@ import { useApiQuery } from '@/lib/use-api-query';
 const isMarkdown = (a: TaskAttachment) => a.contentType === 'text/markdown';
 
 /**
- * A task's completed attachments: image thumbnails, file tiles, and Markdown files that open
- * as a rendered preview below the grid (decision record 0022 §5). Used on the task page and
- * in Triage.
+ * Completed attachments: image thumbnails, file tiles, and Markdown files that open as a
+ * rendered preview below the grid (decision record 0022 §5). Used on the task page, in Triage
+ * and on a milestone's brief (0030 §3).
  */
 export function AttachmentGrid({
-  taskId,
+  path,
   attachments,
   compact = false,
+  onRemove,
 }: {
-  taskId: string;
+  /** The attachments' API path, e.g. `/tasks/:id/attachments`. */
+  path: string;
   attachments: TaskAttachment[];
   compact?: boolean;
+  /** Shows a remove button on each file. */
+  onRemove?: (attachment: TaskAttachment) => void;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const open = attachments.find((a) => a.id === openId && isMarkdown(a)) ?? null;
@@ -56,7 +60,7 @@ export function AttachmentGrid({
             </span>
           );
           return (
-            <li key={attachment.id} className={compact ? 'w-36 min-w-0' : 'min-w-0'}>
+            <li key={attachment.id} className={`relative ${compact ? 'w-36 min-w-0' : 'min-w-0'}`}>
               {isMarkdown(attachment) ? (
                 <button
                   type="button"
@@ -78,29 +82,37 @@ export function AttachmentGrid({
                   {name}
                 </a>
               )}
+              {onRemove ? (
+                <button
+                  type="button"
+                  aria-label={`Remove ${attachment.name}`}
+                  onClick={() => onRemove(attachment)}
+                  className="absolute top-1.5 right-1.5 rounded-control bg-surface p-1 text-fg-muted shadow-raised hover:text-danger"
+                >
+                  <XIcon size={14} />
+                </button>
+              ) : null}
             </li>
           );
         })}
       </ul>
       {open ? (
-        <MarkdownPreview taskId={taskId} attachment={open} onClose={() => setOpenId(null)} />
+        <MarkdownPreview path={path} attachment={open} onClose={() => setOpenId(null)} />
       ) : null}
     </div>
   );
 }
 
 function MarkdownPreview({
-  taskId,
+  path,
   attachment,
   onClose,
 }: {
-  taskId: string;
+  path: string;
   attachment: TaskAttachment;
   onClose: () => void;
 }) {
-  const query = useApiQuery<{ content: string }>(
-    `/tasks/${taskId}/attachments/${attachment.id}/content`,
-  );
+  const query = useApiQuery<{ content: string }>(`${path}/${attachment.id}/content`);
   return (
     <section
       aria-label={`Preview of ${attachment.name}`}

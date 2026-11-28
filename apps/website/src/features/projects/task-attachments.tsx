@@ -3,6 +3,7 @@
 import type { TaskAttachment } from '@devtrack/types';
 import { createTaskAttachmentSchema, TASK_MEDIA_TYPES } from '@devtrack/validators';
 import { useId, useState, type ChangeEvent } from 'react';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { PaperclipIcon, SpinnerIcon } from '@/components/icons';
 import { Skeleton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
@@ -11,10 +12,45 @@ import { AttachmentGrid } from './attachment-grid';
 import { useProject } from './project-context';
 
 export function TaskAttachments({ taskId }: { taskId: string }) {
-  const path = `/tasks/${taskId}/attachments`;
+  return <Attachments path={`/tasks/${taskId}/attachments`} />;
+}
+
+/**
+ * Attached files with upload (browser → R2) and, where allowed, remove. The API says whether
+ * this viewer may upload (`uploadsEnabled`); tasks (0022) and milestone briefs (0030 §3).
+ */
+export function Attachments({
+  path,
+  title = 'Attachments',
+  emptyText = 'No attachments yet.',
+  headingClassName = 'text-md font-semibold',
+  removable = false,
+}: {
+  path: string;
+  title?: string;
+  emptyText?: string;
+  headingClassName?: string;
+  /** Lets people who can upload also remove files. */
+  removable?: boolean;
+}) {
   const query = useApiQuery<{ attachments: TaskAttachment[]; uploadsEnabled: boolean }>(path);
   const inputId = useId();
   const { readOnly } = useProject();
+  const [removing, setRemoving] = useState<TaskAttachment | null>(null);
+  const canUpload = !!query.data?.uploadsEnabled && !readOnly;
+
+  async function remove(attachment: TaskAttachment) {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`${path}/${attachment.id}`, { method: 'DELETE' });
+      query.reload();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not remove the file.');
+    } finally {
+      setBusy(false);
+    }
+  }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,13 +104,13 @@ export function TaskAttachments({ taskId }: { taskId: string }) {
   return (
     <section aria-labelledby={`${inputId}-heading`} className="space-y-3">
       <div className="flex items-center justify-between gap-3">
-        <h2 id={`${inputId}-heading`} className="text-md font-semibold">
-          Attachments
+        <h2 id={`${inputId}-heading`} className={headingClassName}>
+          {title}
           {attachments?.length ? (
             <span className="ml-1.5 text-sm font-normal text-fg-muted">{attachments.length}</span>
           ) : null}
         </h2>
-        {query.data?.uploadsEnabled && !readOnly ? (
+        {canUpload ? (
           <div className="flex items-center">
             {/* The real file input stays focusable; the label is its visible button. */}
             <input
@@ -118,10 +154,25 @@ export function TaskAttachments({ taskId }: { taskId: string }) {
       ) : !attachments ? (
         <Skeleton className="h-24" />
       ) : attachments.length ? (
-        <AttachmentGrid taskId={taskId} attachments={attachments} />
+        <AttachmentGrid
+          path={path}
+          attachments={attachments}
+          onRemove={removable && canUpload ? setRemoving : undefined}
+        />
       ) : (
-        <p className="text-sm text-fg-subtle">No attachments yet.</p>
+        <p className="text-sm text-fg-subtle">{emptyText}</p>
       )}
+      <ConfirmDialog
+        open={removing !== null}
+        title={`Remove ${removing?.name ?? 'this file'}?`}
+        confirmLabel="Remove"
+        onConfirm={() => {
+          const file = removing;
+          setRemoving(null);
+          if (file) void remove(file);
+        }}
+        onCancel={() => setRemoving(null)}
+      />
     </section>
   );
 }

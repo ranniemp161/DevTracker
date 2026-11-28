@@ -211,7 +211,11 @@ export function TriagePage() {
               )}
             </p>
             {r.task && r.attachments.length > 0 ? (
-              <AttachmentGrid taskId={r.task.id} attachments={r.attachments} compact />
+              <AttachmentGrid
+                path={`/tasks/${r.task.id}/attachments`}
+                attachments={r.attachments}
+                compact
+              />
             ) : null}
             {r.triagedBy && r.triagedAt ? (
               <p className="text-xs text-fg-muted">

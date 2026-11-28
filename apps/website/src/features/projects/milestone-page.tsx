@@ -22,6 +22,7 @@ import { MilestoneReleases } from './milestone-releases';
 import { MilestoneSignoff } from './milestone-signoff';
 import { MilestoneTasks } from './milestone-tasks';
 import { useProject } from './project-context';
+import { Attachments } from './task-attachments';
 import { useProjectTasks } from './use-project-tasks';
 
 /** 0030 §5: the milestone description holds a whole brief. */
@@ -87,6 +88,20 @@ export function MilestonePage() {
       <MilestoneHeader milestone={m} canManage={canManage} onChanged={query.reload} />
       <Panel title="Description">
         <MilestoneDescription milestone={m} canManage={canManage} onSaved={query.reload} />
+      </Panel>
+      <Panel>
+        {/* 0030 §3: screenshots, mockups, videos and Markdown specs; internal only. */}
+        <Attachments
+          path={`/milestones/${m.id}/attachments`}
+          title="Files"
+          headingClassName="text-label font-medium text-fg-secondary"
+          emptyText={
+            canManage
+              ? 'Add screenshots, mockups, videos or Markdown specs that explain the goal.'
+              : 'No files yet.'
+          }
+          removable
+        />
       </Panel>
       <Panel>
         <MilestoneCriteria milestone={m} canManage={canManage} onChanged={query.reload} />
