@@ -2,6 +2,12 @@ import { createDatabase } from '@devtrack/database';
 import { loadConfig } from './config.js';
 import { createRealtimeServer } from './server.js';
 
+/** CPU this process has used so far, in milliseconds. */
+const cpuMs = () => {
+  const { user, system } = process.cpuUsage();
+  return Math.round((user + system) / 1000);
+};
+
 // No dotenv: production values come from the project, tests inject an in-memory database.
 const config = loadConfig(process.env);
 const { db, pool } = createDatabase(config.DATABASE_URL, {
@@ -15,6 +21,22 @@ const realtime = await createRealtimeServer({
 }).catch(async () => {
   await pool.end();
   throw new Error('Realtime server initialization failed');
+});
+
+// Instance-level cost signals for the Vercel logs (no user data): how much CPU a new instance
+// spends before it can accept sockets, and whether later connections reuse a warm instance.
+console.log(JSON.stringify({ msg: 'realtime.instance_ready', cpuMs: cpuMs() }));
+let connections = 0;
+realtime.io.on('connection', () => {
+  connections++;
+  console.log(
+    JSON.stringify({
+      msg: 'realtime.connection',
+      instanceConnections: connections,
+      instanceUptimeS: Math.round(process.uptime()),
+      instanceCpuMs: cpuMs(),
+    }),
+  );
 });
 
 export default realtime.server;

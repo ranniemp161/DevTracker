@@ -1,7 +1,8 @@
-import { isAbsolute } from 'node:path';
 import { build } from 'esbuild';
 
-// Inline workspace code into one .mjs; Vercel must not rewrite it to CommonJS.
+// One self-contained, minified .mjs; Vercel must not rewrite it to CommonJS.
+// Third-party packages are bundled too: loading them from node_modules file by file cost
+// ~2 s of CPU on every new function instance, which Fluid bills as Active CPU.
 await build({
   entryPoints: ['src/runtime.ts'],
   outfile: 'dist/server.mjs',
@@ -9,18 +10,12 @@ await build({
   format: 'esm',
   platform: 'node',
   target: 'node24',
+  minify: true,
   sourcemap: true,
-  plugins: [
-    {
-      name: 'external-third-party',
-      setup(builder) {
-        builder.onResolve({ filter: /.*/ }, (args) => {
-          if (args.kind === 'entry-point') return;
-          const bare = !args.path.startsWith('.') && !isAbsolute(args.path);
-          if (bare && !args.path.startsWith('@devtrack/'))
-            return { path: args.path, external: true };
-        });
-      },
-    },
-  ],
+  // Optional native add-ons, loaded inside try/catch by ws, pg and @redis/client when installed.
+  external: ['bufferutil', 'utf-8-validate', 'pg-native', '@node-rs/xxhash'],
+  // Bundled CommonJS packages call require() for Node built-ins.
+  banner: {
+    js: "import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);",
+  },
 });
