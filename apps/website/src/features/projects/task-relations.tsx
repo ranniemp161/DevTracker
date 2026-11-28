@@ -47,6 +47,35 @@ export function TaskRelations({ taskId, onChanged }: { taskId: string; onChanged
 
   if (readOnly && relations?.length === 0) return null;
 
+  // 0031 #6: when empty, collapse to just the button — no heading or explanatory text.
+  const empty = relations !== undefined && relations.length === 0;
+  if (empty && !readOnly) {
+    return (
+      <div>
+        {error ? (
+          <p role="alert" className="text-sm text-danger">
+            {error}
+          </p>
+        ) : null}
+        <Button size="sm" variant="secondary" onClick={() => setPicking(true)}>
+          Link task
+        </Button>
+        {picking ? (
+          <LinkTaskDialog
+            taskId={taskId}
+            workspaceId={project.workspaceId}
+            linked={new Set()}
+            onClose={() => setPicking(false)}
+            onLinked={() => {
+              query.reload();
+              onChanged();
+            }}
+          />
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <section aria-labelledby={headingId} className="space-y-3">
       <div className="flex items-center justify-between gap-3">
@@ -68,11 +97,6 @@ export function TaskRelations({ taskId, onChanged }: { taskId: string; onChanged
         <p className="text-sm text-fg-muted">Could not load relations.</p>
       ) : !relations ? (
         <Skeleton className="h-10" />
-      ) : relations.length === 0 ? (
-        <p className="text-sm text-fg-subtle">
-          No linked tasks. Link one that blocks this task, that this task blocks, or that is
-          related.
-        </p>
       ) : (
         <div className="space-y-3">
           {GROUPS.map(({ kind, title }) => {

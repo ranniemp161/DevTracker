@@ -568,8 +568,11 @@ function TaskEditor({
           </div>
         </form>
 
-        {/* The rail's background spans the page; its content sticks and scrolls on its own. */}
-        <div className="min-w-0 border-t border-line bg-surface-sunken max-lg:order-last lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:border-t-0 lg:border-l">
+        {/* The rail's background spans the page; its content sticks and scrolls on its own.
+            0031 #9: on phones (max-lg) the rail sits right after the milestone card, before the
+            checklist and activity, so Timer / Pull requests are reachable without scrolling past
+            everything. On desktop the rail keeps its column position. */}
+        <div className="min-w-0 border-t border-line bg-surface-sunken lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:border-t-0 lg:border-l">
           <aside
             aria-label="Task context"
             className={`divide-y divide-line px-4 sm:px-6 lg:task-rail [&>*]:py-5 ${timer ? 'lg:task-rail-below-timer' : ''}`}

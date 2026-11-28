@@ -134,16 +134,18 @@ function MilestoneRow({ milestone: m, canManage }: { milestone: Milestone; canMa
   );
 }
 
+/**
+ * 0031 #8: a compact "New milestone" button that reveals a small name + due date form
+ * (no description). Creating navigates to the milestone's brief page.
+ */
 function CreateMilestone() {
   const { project } = useProject();
   const router = useRouter();
-  // Phones start with a button so the milestones themselves are on the first screen.
-  const [expanded, setExpanded] = useState(false);
+  const [open, setOpen] = useState(false);
   const form = useAuthForm(
     withoutBlanks(createMilestoneSchema),
     { name: '', description: '', dueDate: '' },
     async (values) => {
-      // 0030 §3: a new milestone opens on its own page, to write the brief.
       const { milestone } = await api<{ milestone: Milestone }>(
         `/projects/${project.id}/milestones`,
         { body: values },
@@ -151,55 +153,51 @@ function CreateMilestone() {
       router.push(`/projects/${project.id}/milestones/${milestone.id}`);
     },
   );
+
+  if (!open) {
+    return (
+      <Button variant="primary" icon={<PlusIcon size={15} />} onClick={() => setOpen(true)}>
+        New milestone
+      </Button>
+    );
+  }
+
   return (
-    <>
-      {expanded ? null : (
-        <Button className="sm:hidden" onClick={() => setExpanded(true)}>
-          <PlusIcon size={14} />
-          New milestone
-        </Button>
-      )}
-      <section
-        aria-label="New milestone"
-        className={`rounded-panel border border-line-control bg-surface p-5 shadow-raised sm:block ${expanded ? '' : 'hidden'}`}
-      >
-        <form
-          onSubmit={form.onSubmit}
-          noValidate
-          className="grid gap-3 sm:grid-cols-milestone-form sm:items-end"
-        >
+    <section
+      aria-label="New milestone"
+      className="rounded-panel border border-line-control bg-surface p-4 shadow-raised sm:p-5"
+    >
+      <form onSubmit={form.onSubmit} noValidate className="flex flex-wrap items-end gap-3">
+        <div className="min-w-0 flex-1 basis-48">
           <Field
             label="Name"
             name="name"
             value={form.values.name}
             onChange={form.onChange}
             error={form.fieldErrors.name}
+            autoFocus
           />
-          <Field
-            label="Description"
-            name="description"
-            value={form.values.description}
-            onChange={form.onChange}
-            error={form.fieldErrors.description}
-          />
-          <Field
-            label="Due date"
-            name="dueDate"
-            type="date"
-            value={form.values.dueDate}
-            onChange={form.onChange}
-            error={form.fieldErrors.dueDate}
-          />
-          <div className="w-28">
-            <SubmitButton pending={form.pending}>Add</SubmitButton>
-          </div>
-        </form>
-        {form.formError ? (
-          <div className="mt-3">
-            <Alert>{form.formError}</Alert>
-          </div>
-        ) : null}
-      </section>
-    </>
+        </div>
+        <Field
+          label="Due date"
+          name="dueDate"
+          type="date"
+          value={form.values.dueDate}
+          onChange={form.onChange}
+          error={form.fieldErrors.dueDate}
+        />
+        <div className="flex gap-2">
+          <SubmitButton pending={form.pending}>Add</SubmitButton>
+          <Button variant="ghost" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+        </div>
+      </form>
+      {form.formError ? (
+        <div className="mt-3">
+          <Alert>{form.formError}</Alert>
+        </div>
+      ) : null}
+    </section>
   );
 }

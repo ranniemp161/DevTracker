@@ -150,7 +150,7 @@ export function MilestoneCriteria({
             maxLength={500}
             placeholder="e.g. Users can reset their password by email"
             onChange={(e) => setText(e.target.value)}
-            className="block h-7.5 min-w-0 flex-1 rounded-control border border-line-control bg-surface px-2.5 text-label text-fg transition-colors placeholder:text-fg-subtle focus-visible:border-primary"
+            className="block h-7.5 min-w-0 flex-1 rounded-control border border-line-control bg-surface px-2.5 text-label text-fg transition-colors placeholder:text-fg-subtle focus-visible:border-primary pointer-coarse:h-11"
           />
           <Button
             type="submit"

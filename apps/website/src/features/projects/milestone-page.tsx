@@ -265,7 +265,7 @@ function MilestoneHeader({
                         }),
                       )
                     }
-                    className="h-7.5 rounded-control border border-line-control bg-surface px-2 text-label font-medium text-fg focus-visible:border-primary"
+                    className="h-7.5 rounded-control border border-line-control bg-surface px-2 text-label font-medium text-fg focus-visible:border-primary pointer-coarse:h-11"
                   >
                     {MILESTONE_STAGES.map((stage) => (
                       <option key={stage} value={stage}>
