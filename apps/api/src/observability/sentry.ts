@@ -28,13 +28,13 @@ export function scrubEvent(event: ErrorEvent): ErrorEvent {
 }
 
 /**
- * Error tracking (architecture §15, decision record 0008). Enabled only when `SENTRY_DSN` is
- * set. Errors only (no tracing), no personal data, and `scrubEvent` as a second line of defence.
+ * Error tracking (architecture §15, decision record 0008). Errors only: no tracing, no request
+ * sessions, no client reports, no personal data, and `scrubEvent` as a second line of defence.
+ * Exported for tests.
  */
-export function initSentry(config: AppConfig): void {
-  if (!config.sentry.dsn || enabled) return;
-  Sentry.init({
-    dsn: config.sentry.dsn,
+export function sentryOptions(config: AppConfig): Sentry.NodeOptions {
+  return {
+    dsn: config.sentry.dsn ?? undefined,
     environment: config.sentry.environment,
     release: config.sentry.release ?? undefined,
     // Collect no personal data: no cookies, bodies, query strings or user info (Sentry 11).
@@ -46,8 +46,18 @@ export function initSentry(config: AppConfig): void {
       httpHeaders: { deny: SENSITIVE_HEADERS },
     },
     tracesSampleRate: 0,
+    // On Vercel the SDK flushes after every response. With release-health sessions and client
+    // reports on, each flush made a request to Sentry, i.e. one per API request.
+    sendClientReports: false,
+    integrations: [Sentry.httpIntegration({ sessions: false })],
     beforeSend: scrubEvent,
-  });
+  };
+}
+
+/** Enabled only when `SENTRY_DSN` is set. */
+export function initSentry(config: AppConfig): void {
+  if (!config.sentry.dsn || enabled) return;
+  Sentry.init(sentryOptions(config));
   enabled = true;
 }
 
