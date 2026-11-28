@@ -16,9 +16,16 @@ Any change to `apps/website` UI **must** follow [`design/SPEC.md`](design/SPEC.m
 
 ## Checks
 
+Before every push, run exactly what CI runs (`.github/workflows/ci.yml`), in one go, so tasks run in parallel as they do on CI:
+
 ```
-pnpm format && pnpm lint && pnpm typecheck && pnpm --filter @devtrack/website build
+pnpm format && pnpm format:check && pnpm turbo run lint typecheck test build --force
 ```
+
+- `--force` skips Turbo's cache, so nothing passes only because an older run was cached.
+- After changing `packages/*`, the turbo run above rebuilds them; don't test the API against a stale `dist`.
+- Schema changes need a migration (CI runs `drizzle-kit check` and `generate`).
+- Don't push until it's green. If CI still fails, read its log, fix the cause (not the symptom), and add a guard so it can't recur.
 
 ## Agent skills
 

@@ -53,6 +53,15 @@ export class MilestonesController {
     return { milestone: await this.milestones.create(user.id, projectId, body) };
   }
 
+  /** 0030 §5: one milestone, for its page. */
+  @Get('milestones/:id')
+  async get(
+    @CurrentUser() user: User,
+    @Param('id', UuidParamPipe) id: string,
+  ): Promise<{ milestone: Milestone }> {
+    return { milestone: await this.milestones.get(user.id, id) };
+  }
+
   @Patch('milestones/:id')
   async update(
     @CurrentUser() user: User,

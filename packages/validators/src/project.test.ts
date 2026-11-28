@@ -87,6 +87,15 @@ describe('label and milestone schemas', () => {
     expect(updateMilestoneSchema.parse({ status: 'DELIVERED' })).toEqual({ status: 'DELIVERED' });
     expect(updateMilestoneSchema.safeParse({ status: 'COMPLETED' }).success).toBe(false);
   });
+
+  it('takes a milestone brief of up to 20,000 characters (0030 §5)', async () => {
+    const { updateMilestoneSchema } = await import('./project.js');
+    expect(updateMilestoneSchema.safeParse({ description: 'a'.repeat(20_000) }).success).toBe(true);
+    expect(updateMilestoneSchema.safeParse({ description: 'a'.repeat(20_001) }).success).toBe(
+      false,
+    );
+    expect(updateMilestoneSchema.parse({ description: '  ' }).description).toBeNull();
+  });
 });
 
 describe('milestone links and acceptance criteria', () => {

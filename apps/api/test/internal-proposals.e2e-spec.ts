@@ -460,3 +460,50 @@ describe('planning a delivery in one place (0029)', () => {
       .expect(400);
   });
 });
+
+describe('the milestone as a brief (0030)', () => {
+  it('members read one milestone; outsiders get 404; tasks go in assigned', async () => {
+    const { owner, lead, dev, project } = await setup();
+    await makeLead(owner, project, lead);
+    const brief = `# v1 Checkout\n\n${'a'.repeat(19_000)}`;
+    const v1 = (
+      await lead.browser
+        .post(`/api/v1/projects/${project}/milestones`)
+        .send({ name: 'v1 Checkout', description: brief })
+        .expect(201)
+    ).body.data.milestone;
+
+    // §5: GET /milestones/:id, for its page.
+    const read = (await dev.browser.get(`/api/v1/milestones/${v1.id}`).expect(200)).body.data
+      .milestone;
+    expect(read).toMatchObject({ id: v1.id, name: 'v1 Checkout', description: brief });
+    expect(read.taskCounts).toEqual({ total: 0, done: 0, addedAfterStart: 0 });
+    const outsider = await verifiedUser(t, 'outsider');
+    await outsider.browser.get(`/api/v1/milestones/${v1.id}`).expect(404);
+    await dev.browser.get('/api/v1/milestones/00000000-0000-4000-8000-000000000000').expect(404);
+
+    // §5: briefs up to 20,000 characters.
+    await lead.browser
+      .patch(`/api/v1/milestones/${v1.id}`)
+      .send({ description: 'b'.repeat(20_001) })
+      .expect(400);
+
+    // §3: Add task with Assign to: To do, assigned, and the assignee is told.
+    const task = (
+      await lead.browser
+        .post(`/api/v1/projects/${project}/tasks`)
+        .send({ title: 'Cart page', milestoneId: v1.id, assigneeIds: [dev.id] })
+        .expect(201)
+    ).body.data.task;
+    expect(task).toMatchObject({ status: 'TODO', milestoneId: v1.id });
+    expect(task.assignees.map((a: { id: string }) => a.id)).toEqual([dev.id]);
+    const told = (
+      (await dev.browser.get('/api/v1/notifications').expect(200)).body.data as { type: string }[]
+    ).filter((n) => n.type === 'TASK_ASSIGNED');
+    expect(told).toHaveLength(1);
+    expect(
+      (await dev.browser.get(`/api/v1/milestones/${v1.id}`).expect(200)).body.data.milestone
+        .taskCounts.total,
+    ).toBe(1);
+  });
+});

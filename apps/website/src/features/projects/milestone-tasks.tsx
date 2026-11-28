@@ -4,20 +4,22 @@ import type { Milestone, Task } from '@devtrack/types';
 import Link from 'next/link';
 import { useState, type FormEvent } from 'react';
 import { PlusIcon } from '@/components/icons';
-import { Avatar, Button, StatusDot } from '@/components/ui';
+import { Avatar, Badge, Button, StatusDot } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { TASK_STATUS_LABEL } from './labels';
+import { useProject } from './project-context';
 
 /**
- * 0029 §4: plan a delivery in one place. Lists the milestone's open tasks and, for people who
- * create tasks directly, adds new ones straight into it. With no status sent, a task in a
- * milestone starts in To do (0024 §4).
+ * The milestone's tasks (0030 §3): open first, then Done. People who create tasks directly add
+ * new ones straight into it, optionally assigned. With no status sent, a task in a milestone
+ * starts in To do (0024 §4); assigning notifies as usual.
  */
 export function MilestoneTasks({
   milestone: m,
   projectId,
   tasks,
   canAdd,
+  autoFocus = false,
   onAdded,
 }: {
   milestone: Milestone;
@@ -25,12 +27,17 @@ export function MilestoneTasks({
   /** The project's tasks, or null while they load. */
   tasks: Task[] | null;
   canAdd: boolean;
+  autoFocus?: boolean;
   onAdded: (task: Task) => void;
 }) {
+  const { members } = useProject();
   const [title, setTitle] = useState('');
+  const [assigneeId, setAssigneeId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const open = (tasks ?? []).filter((t) => t.milestoneId === m.id && t.status !== 'DONE');
+  const mine = (tasks ?? []).filter((t) => t.milestoneId === m.id);
+  const open = mine.filter((t) => t.status !== 'DONE');
+  const done = mine.filter((t) => t.status === 'DONE');
   // Delivered milestones take no new tasks (0025 §2).
   const adding = canAdd && m.status !== 'DELIVERED';
 
@@ -41,7 +48,11 @@ export function MilestoneTasks({
     setError(null);
     try {
       const { task } = await api<{ task: Task }>(`/projects/${projectId}/tasks`, {
-        body: { title: title.trim(), milestoneId: m.id },
+        body: {
+          title: title.trim(),
+          milestoneId: m.id,
+          ...(assigneeId ? { assigneeIds: [assigneeId] } : {}),
+        },
       });
       setTitle('');
       onAdded(task);
@@ -56,17 +67,25 @@ export function MilestoneTasks({
     }
   }
 
-  if (open.length === 0 && !adding) return null;
-
   return (
     <section aria-label={`${m.name} tasks`} className="mt-4 space-y-2">
       <h3 className="text-label font-medium text-fg-secondary">
-        Open tasks
-        {tasks ? <span className="font-normal text-fg-muted"> · {open.length}</span> : null}
+        Tasks
+        {tasks ? (
+          <span className="font-normal text-fg-muted">
+            {' '}
+            · {open.length} open{done.length > 0 ? `, ${done.length} done` : ''}
+          </span>
+        ) : null}
       </h3>
-      {open.length > 0 ? (
+      {tasks && mine.length === 0 ? (
+        <p className="text-sm text-fg-subtle">
+          {adding ? 'Break the delivery into tasks and hand them out.' : 'No tasks yet.'}
+        </p>
+      ) : null}
+      {mine.length > 0 ? (
         <ul className="space-y-1">
-          {open.map((t) => (
+          {[...open, ...done].map((t) => (
             <li key={t.id}>
               <Link
                 href={`/projects/${projectId}/tasks/${t.id}`}
@@ -75,17 +94,35 @@ export function MilestoneTasks({
                 <StatusDot status={t.status} />
                 <span className="sr-only">{TASK_STATUS_LABEL[t.status]}:</span>
                 <span className="shrink-0 text-xs text-fg-muted">{t.key}</span>
-                <span className="min-w-0 flex-1 truncate text-fg">{t.title}</span>
-                {t.assignees.slice(0, 3).map((a) => (
-                  <Avatar key={a.id} name={a.username} url={a.avatarUrl} seed={a.id} size="xs" />
-                ))}
+                <span
+                  className={`min-w-0 flex-1 truncate ${t.status === 'DONE' ? 'text-fg-muted line-through' : 'text-fg'}`}
+                >
+                  {t.title}
+                </span>
+                {/* 0025 §3: scope that joined once the milestone was Active. */}
+                {t.addedAfterStart ? <Badge tone="amber">Added after start</Badge> : null}
+                {t.assignees.length === 0 ? (
+                  <span className="text-xs text-fg-subtle">Unassigned</span>
+                ) : (
+                  t.assignees
+                    .slice(0, 3)
+                    .map((a) => (
+                      <Avatar
+                        key={a.id}
+                        name={a.username}
+                        url={a.avatarUrl}
+                        seed={a.id}
+                        size="xs"
+                      />
+                    ))
+                )}
               </Link>
             </li>
           ))}
         </ul>
       ) : null}
       {adding ? (
-        <form onSubmit={add} className="flex items-center gap-2">
+        <form onSubmit={add} className="flex flex-wrap items-center gap-2">
           <label htmlFor={`milestone-task-${m.id}`} className="sr-only">
             New task in {m.name}
           </label>
@@ -93,10 +130,27 @@ export function MilestoneTasks({
             id={`milestone-task-${m.id}`}
             value={title}
             maxLength={200}
+            autoFocus={autoFocus}
             placeholder="Add a task to this milestone"
             onChange={(e) => setTitle(e.target.value)}
-            className="block h-7.5 min-w-0 flex-1 rounded-control border border-line-control bg-surface px-2.5 text-label text-fg transition-colors placeholder:text-fg-subtle focus-visible:border-primary"
+            className="block h-7.5 min-w-0 flex-1 basis-56 rounded-control border border-line-control bg-surface px-2.5 text-label text-fg transition-colors placeholder:text-fg-subtle focus-visible:border-primary"
           />
+          <label htmlFor={`milestone-task-${m.id}-assignee`} className="sr-only">
+            Assign to
+          </label>
+          <select
+            id={`milestone-task-${m.id}-assignee`}
+            value={assigneeId}
+            onChange={(e) => setAssigneeId(e.target.value)}
+            className="h-7.5 max-w-48 rounded-control border border-line-control bg-surface px-2 text-label text-fg focus-visible:border-primary"
+          >
+            <option value="">Unassigned</option>
+            {members.map((member) => (
+              <option key={member.user.id} value={member.user.id}>
+                @{member.user.username}
+              </option>
+            ))}
+          </select>
           <Button
             type="submit"
             size="sm"

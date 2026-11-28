@@ -41,6 +41,7 @@ import { LabelChip } from './label-chip';
 import { useProject } from './project-context';
 import { filterTask, TaskFilterBar, useTaskFilters } from './task-filters';
 import { TaskStatusMenu } from './task-status-menu';
+import { NewTaskChooser } from './new-task-chooser';
 import { useProjectTasks } from './use-project-tasks';
 import { TaskLink } from '@/components/task-link';
 
@@ -72,16 +73,36 @@ export function Board() {
   // 0023 §3: with internal triage in effect, members propose, and proposals land in Backlog.
   const propose = project.viewerMustPropose;
   const newColumn: TaskStatus = propose ? 'BACKLOG' : 'TODO';
-  const addingIn = chosenColumn ?? (wantsNew ? newColumn : null);
+  // 0030 §2: New task first asks which delivery it's for; proposers go straight to Propose.
+  const [choosing, setChoosing] = useState(false);
+  // "No milestone (quick task)" from the chooser: the quick add without a milestone picker.
+  const [quick, setQuick] = useState(false);
+  const chooserOpen = !propose && (choosing || (wantsNew && chosenColumn === null));
+  const addingIn = chosenColumn ?? (wantsNew && propose ? newColumn : null);
   const statusFromMilestone = chosenColumn === null ? wantsNew : viaButton;
+  function clearNewParam() {
+    if (!wantsNew) return;
+    const rest = new URLSearchParams(searchParams.toString());
+    rest.delete('new');
+    router.replace(rest.size ? `?${rest}` : `/projects/${project.id}`, { scroll: false });
+  }
   function stopAdding() {
     setAddingIn(null);
     setViaButton(false);
-    if (wantsNew) {
-      const rest = new URLSearchParams(searchParams.toString());
-      rest.delete('new');
-      router.replace(rest.size ? `?${rest}` : `/projects/${project.id}`, { scroll: false });
-    }
+    setQuick(false);
+    clearNewParam();
+  }
+  function newTask() {
+    if (propose) startAdding(newColumn, true);
+    else setChoosing(true);
+  }
+  function closeChooser() {
+    setChoosing(false);
+    clearNewParam();
+  }
+  function quickTask() {
+    startAdding(newColumn, true);
+    setQuick(true);
   }
   const columnRefs = useRef(new Map<TaskStatus, HTMLElement>());
   const visibleColumn = useVisibleColumn(columnRefs, tasks !== null);
@@ -99,12 +120,13 @@ export function Board() {
   function startAdding(status: TaskStatus, fromButton = false) {
     setAddingIn(status);
     setViaButton(fromButton);
+    setQuick(false);
     showColumn(status);
   }
 
   // `N` new task in To do, `/` jumps to the task search (`?` lists all shortcuts).
   useShortcuts([
-    { key: 'n', run: () => !readOnly && startAdding(newColumn, true) },
+    { key: 'n', run: () => !readOnly && newTask() },
     {
       key: '/',
       run: () =>
@@ -183,15 +205,12 @@ export function Board() {
       <HeaderActions>
         <BoardProgress done={doneCount} total={tasks.length} />
         {readOnly ? null : (
-          <Button
-            variant="primary"
-            icon={<PlusIcon size={15} />}
-            onClick={() => startAdding(newColumn, true)}
-          >
+          <Button variant="primary" icon={<PlusIcon size={15} />} onClick={newTask}>
             {propose ? 'Propose task' : 'New task'}
           </Button>
         )}
       </HeaderActions>
+      {chooserOpen ? <NewTaskChooser onQuickTask={quickTask} onClose={closeChooser} /> : null}
       <div className="flex flex-wrap items-start justify-between gap-2 border-b border-line pb-3 lg:items-center lg:gap-3">
         <TaskFilterBar workspaceId={project.workspaceId} projectId={project.id} members={members} />
         <Button variant="ghost" size="sm" onClick={reload}>
@@ -282,6 +301,7 @@ export function Board() {
                       status={status}
                       statusFromMilestone={statusFromMilestone}
                       propose={propose}
+                      quick={quick}
                       onCancel={stopAdding}
                       onCreated={(t) => {
                         setTasks((c) => [t, ...(c ?? [])]);
@@ -520,12 +540,12 @@ const PROPOSAL_KINDS: { value: RequestKind; label: string }[] = [
  * (0023 §3) it also takes a type and a description, and goes to Triage as a Backlog task.
  */
 const UNSCHEDULED = 'unscheduled';
-const NEW_MILESTONE = 'new';
 
 function ColumnQuickAdd({
   status,
   statusFromMilestone,
   propose,
+  quick,
   onCreated,
   onCancel,
 }: {
@@ -533,6 +553,8 @@ function ColumnQuickAdd({
   /** Leave the status to the API: Backlog when unscheduled, To do in a milestone (0024 §4). */
   statusFromMilestone: boolean;
   propose: boolean;
+  /** "No milestone (quick task)" from New task (0030 §2): no milestone, no picker. */
+  quick: boolean;
   onCreated: (task: Task) => void;
   onCancel: () => void;
 }) {
@@ -541,26 +563,17 @@ function ColumnQuickAdd({
   const { project } = useProject();
   // 0024 §4: with triage required, leads and admins triage as they create, so they must choose
   // a milestone or Unscheduled. With triage off the choice is optional (0029 §3). Members who
-  // propose see no picker: the triager chooses.
-  const schedule = !propose;
+  // propose see no picker: the triager chooses. New milestones start from New task's chooser
+  // (0030 §2), which opens the milestone's page.
+  const schedule = !propose && !quick;
   const mustChoose = project.internalTriage && !propose;
-  // Leads and admins manage milestones (0023 §2), so they can create one on the spot (0029 §3).
-  const canCreateMilestone = project.viewerCanManage;
   const milestonesQuery = useApiQuery<Milestone[]>(
     schedule ? `/projects/${project.id}/milestones` : null,
   );
-  // A milestone made here before the task failed; kept so a retry doesn't make a second one.
-  const [madeHere, setMadeHere] = useState<Milestone | null>(null);
   // Delivered milestones take no new tasks (0025 §2).
-  const openMilestones = [
-    ...(madeHere && !milestonesQuery.data?.some((m) => m.id === madeHere.id) ? [madeHere] : []),
-    ...(milestonesQuery.data ?? []),
-  ].filter((m) => m.status !== 'DELIVERED');
-  const [milestone, setMilestone] = useState(mustChoose ? '' : UNSCHEDULED);
-  const [newMilestoneName, setNewMilestoneName] = useState('');
-  const choiceReady =
-    !schedule ||
-    (milestone !== '' && (milestone !== NEW_MILESTONE || newMilestoneName.trim().length > 0));
+  const openMilestones = (milestonesQuery.data ?? []).filter((m) => m.status !== 'DELIVERED');
+  const [milestone, setMilestone] = useState(mustChoose && !quick ? '' : UNSCHEDULED);
+  const choiceReady = !schedule || milestone !== '';
   const draftKey = `devtrack_task_draft_${project.id}`;
   const input = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState(() => {
@@ -599,17 +612,7 @@ function ColumnQuickAdd({
         });
         ({ task } = await api<{ task: Task }>(`/tasks/${created.task.id}`));
       } else {
-        let milestoneId = schedule && milestone !== UNSCHEDULED ? milestone : undefined;
-        if (milestone === NEW_MILESTONE) {
-          const created = await api<{ milestone: Milestone }>(
-            `/projects/${project.id}/milestones`,
-            { body: { name: newMilestoneName.trim() } },
-          );
-          setMadeHere(created.milestone);
-          setMilestone(created.milestone.id);
-          setNewMilestoneName('');
-          milestoneId = created.milestone.id;
-        }
+        const milestoneId = schedule && milestone !== UNSCHEDULED ? milestone : undefined;
         ({ task } = await api<{ task: Task }>(`/projects/${project.id}/tasks`, {
           body: {
             title,
@@ -687,33 +690,17 @@ function ColumnQuickAdd({
                 {m.name} · {MILESTONE_STAGE_LABEL[m.status]}
               </option>
             ))}
-            {canCreateMilestone ? <option value={NEW_MILESTONE}>New milestone…</option> : null}
             <option value={UNSCHEDULED}>{mustChoose ? 'Unscheduled' : 'No milestone'}</option>
           </select>
-          {milestone === NEW_MILESTONE ? (
-            <>
-              <label className="sr-only" htmlFor={`quick-add-${status}-milestone-name`}>
-                New milestone name
-              </label>
-              <input
-                id={`quick-add-${status}-milestone-name`}
-                value={newMilestoneName}
-                onChange={(e) => setNewMilestoneName(e.target.value)}
-                placeholder="New milestone name"
-                maxLength={100}
-                className="h-8 w-full rounded-control border pointer-coarse:h-11 border-line-control bg-surface px-2.5 text-sm placeholder:text-fg-subtle focus-visible:border-primary"
-              />
-              <p className="text-xs text-fg-muted">
-                Starts as Planned. Add a due date and acceptance criteria on the Milestones page.
-              </p>
-            </>
-          ) : null}
           {mustChoose && statusFromMilestone && milestone ? (
             <p className="text-xs text-fg-muted">
               {milestone === UNSCHEDULED ? 'Goes to Backlog.' : 'Goes to To do.'}
             </p>
           ) : null}
         </>
+      ) : null}
+      {quick && mustChoose && statusFromMilestone ? (
+        <p className="text-xs text-fg-muted">No milestone: goes to Backlog.</p>
       ) : null}
       {error ? (
         <p role="alert" className="text-xs text-danger">

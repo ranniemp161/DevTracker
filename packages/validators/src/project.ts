@@ -329,12 +329,20 @@ const milestoneName = z
   .min(1, { error: 'Milestone name is required.' })
   .max(100, { error: 'Milestone name must be at most 100 characters.' });
 
+/** 0030 §5: the milestone's brief, in Markdown; as long as a task description. */
+const milestoneDescription = z
+  .string()
+  .max(20_000, { error: 'Description must be at most 20,000 characters.' })
+  .transform((v) => (v.trim() === '' ? null : v))
+  .nullable()
+  .optional();
+
 /** 0025 §2: delivery stages. */
 export const milestoneStatusSchema = z.enum(['PLANNED', 'ACTIVE', 'CLIENT_REVIEW', 'DELIVERED']);
 
 export const createMilestoneSchema = z.object({
   name: milestoneName,
-  description: projectDescription,
+  description: milestoneDescription,
   dueDate: optionalDate,
   status: milestoneStatusSchema.optional(),
 });
@@ -343,7 +351,7 @@ export type CreateMilestoneInput = z.infer<typeof createMilestoneSchema>;
 export const updateMilestoneSchema = z
   .object({
     name: milestoneName.optional(),
-    description: projectDescription,
+    description: milestoneDescription,
     dueDate: optionalDate,
     status: milestoneStatusSchema.optional(),
   })
