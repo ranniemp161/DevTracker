@@ -97,3 +97,10 @@ export const ErrorCode = {
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
+
+/**
+ * The only API paths that read the client IP (per-IP rate limits on sign-in and public links).
+ * The website's proxy forwards the IP on exactly these paths; everywhere else it does not run,
+ * so the API would see the website's IP (decision record 0032).
+ */
+export const CLIENT_IP_PATH_PREFIXES = ['/api/v1/auth/', '/api/v1/public/'] as const;
