@@ -40,6 +40,7 @@ import { formatDate, MILESTONE_STAGE_LABEL, PRIORITY_RANK, TASK_STATUS_LABEL } f
 import { LabelChip } from './label-chip';
 import { useProject } from './project-context';
 import { filterTask, TaskFilterBar, useTaskFilters } from './task-filters';
+import { TaskMilestoneTag } from './task-milestone-tag';
 import { TaskStatusMenu } from './task-status-menu';
 import { NewTaskChooser } from './new-task-chooser';
 import { useProjectTasks } from './use-project-tasks';
@@ -475,6 +476,9 @@ const TaskCard = memo(function TaskCard({
       </TaskLink>
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
         <PriorityIcon priority={task.priority} />
+        {task.milestoneId ? (
+          <TaskMilestoneTag projectId={project.id} milestoneId={task.milestoneId} />
+        ) : null}
         {shownLabels.map((l) => (
           <LabelChip key={l.id} label={l} />
         ))}

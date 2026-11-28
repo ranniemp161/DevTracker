@@ -448,6 +448,12 @@ function MobileNavigation({
           active: pathname === base || pathname.startsWith(`${base}/tasks/`),
         },
         {
+          href: `${base}/milestones`,
+          label: 'Milestones',
+          icon: FlagIcon,
+          active: pathname.startsWith(`${base}/milestones`),
+        },
+        {
           href: `${base}/list`,
           label: 'List',
           icon: ListIcon,
@@ -459,12 +465,6 @@ function MobileNavigation({
           icon: ChatIcon,
           active: pathname === `${base}/chat`,
           unread,
-        },
-        {
-          href: `${base}/timesheet`,
-          label: 'Timesheet',
-          icon: CalendarIcon,
-          active: pathname === `${base}/timesheet`,
         },
       ]
     : [
@@ -543,7 +543,7 @@ function ProjectMoreLinks({
 }) {
   const base = `/projects/${project.id}`;
   const links = [
-    { href: `${base}/milestones`, label: 'Milestones', icon: FlagIcon },
+    { href: `${base}/timesheet`, label: 'Timesheet', icon: CalendarIcon },
     { href: `${base}/activity`, label: 'Activity', icon: ActivityIcon },
     ...(project.status === 'ARCHIVED' || !(project.viewerCanTriage || project.viewerMustPropose)
       ? []
