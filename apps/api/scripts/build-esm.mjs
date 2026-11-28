@@ -9,11 +9,15 @@
 //    treats them as project code), whose `export *` re-exports are lost ("does not provide an
 //    export named 'ErrorCode'").
 // So: SWC compiles src to ES modules with decorator metadata (Nest's dependency injection needs
-// it; esbuild cannot emit it), then esbuild bundles that output together with the @devtrack/*
-// packages into a single `.mjs` file. Third-party packages stay ordinary imports from
-// node_modules, which Vercel leaves alone. Type-checking stays with `nest build`.
+// it; esbuild cannot emit it), then esbuild bundles that output, the @devtrack/* packages and
+// the third-party packages into a single minified `.mjs` file. Type-checking stays with
+// `nest build`.
+//
+// Third-party packages are bundled too because loading them from node_modules file by file
+// cost ~6 s of CPU on every new function instance, which Fluid bills as Active CPU. Only native
+// add-ons and optional packages (loaded in try/catch when installed) stay external.
 import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
-import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { transformFile } from '@swc/core';
 import { build } from 'esbuild';
 
@@ -54,18 +58,7 @@ for await (const file of sources(srcDir)) {
   count++;
 }
 
-// 2. esbuild: bundle our code and the @devtrack/* packages; everything else stays external.
-const externalThirdParty = {
-  name: 'external-third-party',
-  setup(b) {
-    b.onResolve({ filter: /.*/ }, (args) => {
-      if (args.kind === 'entry-point') return undefined;
-      const isBare = !args.path.startsWith('.') && !isAbsolute(args.path);
-      if (isBare && !args.path.startsWith('@devtrack/')) return { path: args.path, external: true };
-      return undefined;
-    });
-  },
-};
+// 2. esbuild: bundle everything into one file.
 await build({
   entryPoints: [join(swcDir, 'bootstrap.mjs')],
   outfile: outFile,
@@ -75,7 +68,23 @@ await build({
   target: 'node24',
   sourcemap: true,
   keepNames: true,
+  minify: true,
   logLevel: 'warning',
-  plugins: [externalThirdParty],
+  external: [
+    // Native add-on: its loader picks the platform binary from node_modules at runtime.
+    '@node-rs/argon2',
+    // Optional packages, loaded in try/catch (or only when a feature is used) when installed.
+    '@nestjs/microservices',
+    '@nestjs/microservices/*',
+    'class-transformer',
+    'class-validator',
+    'bufferutil',
+    'utf-8-validate',
+    'pg-native',
+    '@node-rs/xxhash',
+  ],
+  banner: {
+    js: "import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);",
+  },
 });
 console.log(`build-esm: compiled ${count} files, bundled into ${relative(process.cwd(), outFile)}`);
