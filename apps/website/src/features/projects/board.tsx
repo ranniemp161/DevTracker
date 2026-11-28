@@ -43,6 +43,7 @@ import { filterTask, TaskFilterBar, useTaskFilters } from './task-filters';
 import { TaskMilestoneTag } from './task-milestone-tag';
 import { TaskStatusMenu } from './task-status-menu';
 import { NewTaskChooser } from './new-task-chooser';
+import { AssigneeSelect, useTaskAddedToast } from './task-adding';
 import { useProjectTasks } from './use-project-tasks';
 import { TaskLink } from '@/components/task-link';
 
@@ -136,6 +137,7 @@ export function Board() {
   ]);
 
   const toast = useToast();
+  const taskAdded = useTaskAddedToast();
   // Undo runs after later renders; it must see the board as it is then, not as it was.
   const tasksRef = useRef(tasks);
   useEffect(() => {
@@ -307,6 +309,7 @@ export function Board() {
                       onCreated={(t) => {
                         setTasks((c) => [t, ...(c ?? [])]);
                         stopAdding();
+                        taskAdded(t, { proposed: propose });
                       }}
                     />
                   ) : null}
@@ -588,6 +591,8 @@ function ColumnQuickAdd({
   });
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 0031 #12: hand it out as you add it, as on a milestone page. Proposers don't: the triager does.
+  const [assigneeId, setAssigneeId] = useState('');
 
   // The board scrolls the column into view itself; a focus scroll would cut that short.
   useEffect(() => input.current?.focus({ preventScroll: true }), []);
@@ -622,6 +627,7 @@ function ColumnQuickAdd({
             title,
             ...(mustChoose && statusFromMilestone ? {} : { status }),
             ...(milestoneId ? { milestoneId } : {}),
+            ...(assigneeId ? { assigneeIds: [assigneeId] } : {}),
           },
         }));
       }
@@ -703,6 +709,14 @@ function ColumnQuickAdd({
           ) : null}
         </>
       ) : null}
+      {propose ? null : (
+        <AssigneeSelect
+          id={`quick-add-${status}-assignee`}
+          value={assigneeId}
+          onChange={setAssigneeId}
+          className="h-8 w-full text-sm pointer-coarse:h-11"
+        />
+      )}
       {quick && mustChoose && statusFromMilestone ? (
         <p className="text-xs text-fg-muted">No milestone: goes to Backlog.</p>
       ) : null}

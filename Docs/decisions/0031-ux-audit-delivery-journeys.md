@@ -1,6 +1,6 @@
 # 0031 — UX audit: the delivery journeys after 0030
 
-- **Status:** Accepted (user answers, 2026-11-28)
+- **Status:** Accepted (user answers, 2026-11-28); built (PRs #164, #165, #166 and this one)
 - **Date:** 2026-11-28
 - **Scope:** Fixes from a browser audit of production (QA test project), desktop (1280px) and phone (390px)
 - **Builds on:** [0030](0030-milestone-brief-page.md) (milestone-first planning), design/SPEC.md
