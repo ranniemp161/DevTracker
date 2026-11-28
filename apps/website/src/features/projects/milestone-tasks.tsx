@@ -7,7 +7,7 @@ import { PlusIcon } from '@/components/icons';
 import { Avatar, Badge, Button, StatusDot } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { TASK_STATUS_LABEL } from './labels';
-import { useProject } from './project-context';
+import { AssigneeSelect, useTaskAddedToast } from './task-adding';
 
 /**
  * The milestone's tasks (0030 §3): open first, then Done. People who create tasks directly add
@@ -30,7 +30,7 @@ export function MilestoneTasks({
   autoFocus?: boolean;
   onAdded: (task: Task) => void;
 }) {
-  const { members } = useProject();
+  const taskAdded = useTaskAddedToast();
   const [title, setTitle] = useState('');
   const [assigneeId, setAssigneeId] = useState('');
   const [busy, setBusy] = useState(false);
@@ -56,6 +56,7 @@ export function MilestoneTasks({
       });
       setTitle('');
       onAdded(task);
+      taskAdded(task);
     } catch (err) {
       setError(
         err instanceof ApiError
@@ -133,24 +134,14 @@ export function MilestoneTasks({
             autoFocus={autoFocus}
             placeholder="Add a task to this milestone"
             onChange={(e) => setTitle(e.target.value)}
-            className="block h-7.5 min-w-0 flex-1 basis-56 rounded-control border border-line-control bg-surface px-2.5 text-label text-fg transition-colors placeholder:text-fg-subtle focus-visible:border-primary"
+            className="block h-7.5 min-w-0 flex-1 basis-56 rounded-control border border-line-control bg-surface px-2.5 text-label text-fg transition-colors placeholder:text-fg-subtle focus-visible:border-primary pointer-coarse:h-11"
           />
-          <label htmlFor={`milestone-task-${m.id}-assignee`} className="sr-only">
-            Assign to
-          </label>
-          <select
+          <AssigneeSelect
             id={`milestone-task-${m.id}-assignee`}
             value={assigneeId}
-            onChange={(e) => setAssigneeId(e.target.value)}
-            className="h-7.5 max-w-48 rounded-control border border-line-control bg-surface px-2 text-label text-fg focus-visible:border-primary"
-          >
-            <option value="">Unassigned</option>
-            {members.map((member) => (
-              <option key={member.user.id} value={member.user.id}>
-                @{member.user.username}
-              </option>
-            ))}
-          </select>
+            onChange={setAssigneeId}
+            className="h-7.5 max-w-48 pointer-coarse:h-11"
+          />
           <Button
             type="submit"
             size="sm"
